@@ -1,0 +1,6 @@
+Group,Name,Host,Port,Username,Password,SU User,SU Password
+Production,Web Server 1,192.168.1.10,22,admin,P@ssw0rd123,oracle,oracle123
+Production,Web Server 2,192.168.1.11,22,admin,P@ssw0rd123,oracle,oracle123
+Development,Dev Server,192.168.1.20,22,dev,P@ssw0rd123,,
+Staging,Staging Server,192.168.1.30,22,deploy,P@ssw0rd123,,
+Staging,Staging Server,192.168.1.30,22,deploy,P@ssw0rd123,,

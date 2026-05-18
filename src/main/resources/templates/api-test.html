@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test Tool - Web SSH Tool</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link href="/css/all.min.css" rel="stylesheet">
+    <!-- Vue 3 & Axios -->
+    <script src="/js/vue.global.prod.js"></script>
+    <script src="/js/axios.min.js"></script>
+    <!-- Custom CSS -->
+    <link href="/css/style.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #667eea;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --warning-color: #f59e0b;
+        }
+
+        html, body {
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        body {
+            background: #f5f7fa;
+        }
+
+        .api-test-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            padding-bottom: 40px;
+        }
+
+        .request-panel,
+        .response-panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .method-selector {
+            width: 120px;
+        }
+
+        .url-input {
+            flex: 1;
+            border-left: none;
+            border-right: none;
+        }
+
+        .send-btn {
+            min-width: 100px;
+            font-weight: 600;
+        }
+
+        .tab-nav {
+            border-bottom: 2px solid #e5e7eb;
+            margin-bottom: 20px;
+        }
+
+        .tab-nav button {
+            background: none;
+            border: none;
+            padding: 12px 24px;
+            color: #6b7280;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+
+        .tab-nav button.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        .tab-nav button:hover {
+            color: var(--primary-color);
+        }
+
+        .header-item,
+        .param-item {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .header-item input,
+        .param-item input {
+            flex: 1;
+        }
+
+        .remove-btn {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            border-radius: 6px;
+        }
+
+        .add-btn {
+            color: var(--primary-color);
+            background: none;
+            border: 1px dashed var(--primary-color);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .add-btn:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .response-status {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .status-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .response-time {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 500px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .history-item {
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .history-item:hover {
+            border-color: var(--primary-color);
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .method-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .method-get {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .method-post {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .method-put {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .method-delete {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .json-key {
+            color: #a78bfa;
+        }
+
+        .json-string {
+            color: #34d399;
+        }
+
+        .json-number {
+            color: #fbbf24;
+        }
+
+        .json-boolean {
+            color: #60a5fa;
+        }
+
+        .json-null {
+            color: #f87171;
+        }
+
+        /* 压测功能样式 */
+        .pressure-config {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .pressure-stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .pressure-stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .pressure-stat-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        .progress-section {
+            margin: 20px 0;
+        }
+
+        .progress-bar-custom {
+            height: 8px;
+            border-radius: 4px;
+            background: #e5e7eb;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), #34d399);
+            transition: width 0.3s ease;
+        }
+
+        .distribution-bar {
+            display: flex;
+            align-items: center;
+            margin: 4px 0;
+        }
+
+        .distribution-label {
+            width: 80px;
+            font-size: 12px;
+            color: #374151;
+            font-weight: 500;
+        }
+
+        .distribution-track {
+            flex: 1;
+            height: 20px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .distribution-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 6px;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            min-width: 30px;
+        }
+
+        .distribution-count {
+            width: 80px;
+            text-align: right;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .level-excellent { color: #10b981; }
+        .level-good { color: #f59e0b; }
+        .level-normal { color: #f97316; }
+        .level-poor { color: #ef4444; }
+
+        .level-badge {
+            display: inline-block;
+            padding: 6px 24px;
+            border-radius: 50px;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .level-badge-excellent { background: #10b981; color: white; }
+        .level-badge-good { background: #f59e0b; color: white; }
+        .level-badge-normal { background: #f97316; color: white; }
+        .level-badge-poor { background: #ef4444; color: white; }
+
+        .report-section {
+            background: white;
+            border-radius: 12px;
+            margin-top: 20px;
+            overflow-x: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .report-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 32px;
+            border-radius: 12px 12px 0 0;
+            text-align: center;
+        }
+
+        .report-body {
+            padding: 24px;
+            background: #f8fafc;
+            border-radius: 0 0 12px 12px;
+        }
+
+        .level-excellent { color: #10b981; }
+        .level-good { color: #f59e0b; }
+        .level-normal { color: #f97316; }
+        .level-poor { color: #ef4444; }
+
+        .conclusion-item {
+            padding: 12px 16px;
+            background: #f0fdf4;
+            border-left: 4px solid #10b981;
+            border-radius: 0 8px 8px 0;
+            margin: 8px 0;
+            color: #166534;
+            font-size: 14px;
+        }
+
+        .suggestion-item {
+            padding: 12px 16px;
+            background: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            border-radius: 0 8px 8px 0;
+            margin: 6px 0;
+            color: #92400e;
+            font-size: 14px;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            border: 1px solid #e5e7eb;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--primary-color);
+            line-height: 1.2;
+        }
+
+        .metric-label {
+            font-size: 13px;
+            color: #6b7280;
+            margin-top: 6px;
+        }
+
+        .rating-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .rating-excellent {
+            background: #10b981;
+            color: white;
+        }
+
+        .rating-good {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .rating-normal {
+            background: #f97316;
+            color: white;
+        }
+
+        .rating-poor {
+            background: #ef4444;
+            color: white;
+        }
+
+        .distribution-bar {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .distribution-label {
+            width: 90px;
+            font-size: 13px;
+            color: #374151;
+            font-weight: 500;
+        }
+
+        .distribution-track {
+            flex: 1;
+            height: 24px;
+            background: #f3f4f6;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .distribution-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 6px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            min-width: 40px;
+        }
+
+        .distribution-count {
+            width: 100px;
+            text-align: right;
+            font-size: 13px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app" class="api-test-container">
+        <!-- Header -->
+        <header class="app-header mb-4">
+            <a href="/" class="brand">
+                <i class="fas fa-home"></i>
+            </a>
+            <h4 class="mb-0 fw-bold">
+                <i class="fas fa-vial text-primary me-2"></i>{{ t('api.brand') }}
+            </h4>
+            <button class="btn btn-outline-danger btn-sm" @click="goBack">
+                <i class="fas fa-arrow-left me-1"></i>{{ t('api.backToHome') }}
+            </button>
+        </header>
+
+        <!-- Main Tabs -->
+        <div class="tab-nav mb-4" style="border-bottom: 2px solid #e5e7eb;">
+            <button :class="{ active: mainTab === 'request' }" @click="mainTab = 'request'">
+                <i class="fas fa-paper-plane me-1"></i>{{ t('api.apiTest') }}
+            </button>
+            <button :class="{ active: mainTab === 'pressure' }" @click="mainTab = 'pressure'">
+                <i class="fas fa-tachometer-alt me-1"></i>{{ t('api.pressureTest') }}
+            </button>
+        </div>
+
+        <!-- API Request Tab -->
+        <div v-show="mainTab === 'request'">
+            <!-- Request Panel -->
+        <div class="request-panel">
+            <div class="input-group mb-3">
+                <select class="form-select method-selector" v-model="request.method">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+                <input type="text" class="form-control url-input"
+                    :placeholder="t('api.urlPlaceholder')" v-model="request.url"
+                    @keyup.enter="sendRequest">
+                <button class="btn btn-primary send-btn" @click="sendRequest" :disabled="!request.url || loading">
+                    <span v-if="loading">
+                        <i class="fas fa-spinner fa-spin me-1"></i>{{ t('api.sending') }}
+                    </span>
+                    <span v-else>
+                        <i class="fas fa-paper-plane me-1"></i>{{ t('api.send') }}
+                    </span>
+                </button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tab-nav">
+                <button :class="{ active: activeTab === 'params' }" @click="activeTab = 'params'">
+                    <i class="fas fa-list me-1"></i>{{ t('api.queryParams') }}
+                </button>
+                <button :class="{ active: activeTab === 'headers' }" @click="activeTab = 'headers'">
+                    <i class="fas fa-heading me-1"></i>Headers
+                </button>
+                <button :class="{ active: activeTab === 'body' }" @click="activeTab = 'body'"
+                    v-if="request.method !== 'GET'">
+                    <i class="fas fa-file-code me-1"></i>Body
+                </button>
+            </div>
+
+            <!-- Params Tab -->
+            <div v-show="activeTab === 'params'">
+                <div v-for="(param, index) in request.params" :key="'param-' + index" class="param-item">
+                    <input type="text" class="form-control" placeholder="Key" v-model="param.key">
+                    <input type="text" class="form-control" placeholder="Value" v-model="param.value">
+                    <button class="btn btn-outline-danger remove-btn" @click="removeParam(index)">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <button class="add-btn" @click="addParam">
+                    <i class="fas fa-plus me-1"></i>{{ t('api.addParam') }}
+                </button>
+            </div>
+
+            <!-- Headers Tab -->
+            <div v-show="activeTab === 'headers'">
+                <div v-for="(header, index) in request.headers" :key="'header-' + index" class="header-item">
+                    <input type="text" class="form-control" placeholder="Header Name" v-model="header.key">
+                    <input type="text" class="form-control" placeholder="Header Value" v-model="header.value">
+                    <button class="btn btn-outline-danger remove-btn" @click="removeHeader(index)">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <button class="add-btn" @click="addHeader">
+                    <i class="fas fa-plus me-1"></i>{{ t('api.addHeader') }}
+                </button>
+            </div>
+
+            <!-- Body Tab -->
+            <div v-show="activeTab === 'body' && request.method !== 'GET'">
+                <textarea class="form-control" rows="10"
+                    :placeholder="t('api.bodyPlaceholder')"
+                    v-model="request.body" style="font-family: 'Courier New', monospace;"></textarea>
+            </div>
+        </div>
+
+        <!-- Response Panel -->
+        <div class="response-panel" v-if="response">
+            <h5 class="mb-3 fw-bold">
+                <i class="fas fa-arrow-down me-2"></i>{{ t('api.responseResult') }}
+            </h5>
+
+            <div class="response-status">
+                <span class="status-badge"
+                    :class="response.statusCode >= 200 && response.statusCode < 300 ? 'status-success' : 'status-error'">
+                    {{ response.statusCode }} {{ response.statusText }}
+                </span>
+                <span class="response-time">
+                    <i class="fas fa-clock me-1"></i>{{ response.responseTime }} ms
+                </span>
+                <button class="btn btn-sm btn-outline-primary ms-auto" @click="copyResponse">
+                    <i class="fas fa-copy me-1"></i>{{ t('api.copyResponse') }}
+                </button>
+            </div>
+
+            <div class="tab-nav">
+                <button :class="{ active: responseTab === 'body' }" @click="responseTab = 'body'">
+                    <i class="fas fa-file-code me-1"></i>Body
+                </button>
+                <button :class="{ active: responseTab === 'headers' }" @click="responseTab = 'headers'">
+                    <i class="fas fa-heading me-1"></i>Headers
+                </button>
+            </div>
+
+            <div v-show="responseTab === 'body'">
+                <div class="code-block" v-html="formattedBody"></div>
+            </div>
+
+            <div v-show="responseTab === 'headers'">
+                <div class="code-block">{{ formatHeaders(response.headers) }}</div>
+            </div>
+        </div>
+
+        <!-- History Panel -->
+        <div class="response-panel" v-if="history.length > 0">
+            <h5 class="mb-3 fw-bold">
+                <i class="fas fa-history me-2"></i>{{ t('api.requestHistory') }}
+                <button class="btn btn-sm btn-outline-danger float-end" @click="clearHistory">
+                    <i class="fas fa-trash me-1"></i>{{ t('api.clear') }}
+                </button>
+            </h5>
+            <div v-for="(item, index) in history" :key="'history-' + index" class="history-item"
+                @click="loadHistory(item)">
+                <span class="method-badge" :class="'method-' + item.method.toLowerCase()">{{ item.method }}</span>
+                <span class="text-truncate d-inline-block" style="max-width: 80%;">{{ item.url }}</span>
+            </div>
+        </div>
+        </div>
+
+        <!-- Pressure Test Tab -->
+        <div v-show="mainTab === 'pressure'">
+            <!-- Pressure Config -->
+            <div class="request-panel">
+                <h5 class="mb-3 fw-bold">
+                    <i class="fas fa-cog me-2"></i>{{ t('api.pressureConfig') }}
+                </h5>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('api.requestMethod') }}</label>
+                            <select class="form-select" v-model="pressureConfig.method">
+                                <option value="GET">GET</option>
+                                <option value="POST">POST</option>
+                                <option value="PUT">PUT</option>
+                                <option value="DELETE">DELETE</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('api.concurrency') }}</label>
+                            <input type="number" class="form-control" v-model.number="pressureConfig.concurrency" min="1" max="100">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">{{ t('api.targetUrl') }}</label>
+                    <input type="text" class="form-control" v-model="pressureConfig.url"
+                        :placeholder="t('api.targetUrlPlaceholder')">
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('api.testMode') }}</label>
+                            <select class="form-select" v-model="pressureConfig.testMode">
+                                <option value="requests">{{ t('api.byRequests') }}</option>
+                                <option value="duration">{{ t('api.byDuration') }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3" v-if="pressureConfig.testMode === 'requests'">
+                            <label class="form-label">{{ t('api.totalRequests') }}</label>
+                            <input type="number" class="form-control" v-model.number="pressureConfig.totalRequests" min="1">
+                        </div>
+                        <div class="mb-3" v-else>
+                            <label class="form-label">{{ t('api.durationSeconds') }}</label>
+                            <input type="number" class="form-control" v-model.number="pressureConfig.durationSeconds" min="1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('api.qpsLimit') }}</label>
+                            <input type="number" class="form-control" v-model.number="pressureConfig.qpsLimit" min="0">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('api.requestDelay') }}</label>
+                            <input type="number" class="form-control" v-model.number="pressureConfig.delayMs" min="0">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Headers -->
+                <div class="mb-3">
+                    <label class="form-label">
+                        <i class="fas fa-heading me-1"></i>{{ t('api.requestHeaders') }}
+                    </label>
+                    <div v-for="(header, index) in pressureConfig.headers" :key="'ph-' + index" class="header-item">
+                        <input type="text" class="form-control" placeholder="Header Name" v-model="header.key">
+                        <input type="text" class="form-control" placeholder="Header Value" v-model="header.value">
+                        <button class="btn btn-outline-danger remove-btn" @click="removePressureHeader(index)">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <button class="add-btn" @click="addPressureHeader">
+                        <i class="fas fa-plus me-1"></i>{{ t('api.addHeader') }}
+                    </button>
+                </div>
+
+                <!-- Body (for POST/PUT) -->
+                <div class="mb-3" v-if="pressureConfig.method === 'POST' || pressureConfig.method === 'PUT'">
+                    <label class="form-label">
+                        <i class="fas fa-file-code me-1"></i>{{ t('api.requestBody') }}
+                    </label>
+                    <textarea class="form-control" rows="4" v-model="pressureConfig.body"
+                        :placeholder="t('api.requestBodyPlaceholder')" style="font-family: 'Courier New', monospace;"></textarea>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button class="btn btn-danger" @click="startPressureTest" :disabled="pressureRunning || !pressureConfig.url">
+                        <i class="fas fa-play me-1"></i>{{ pressureRunning ? t('api.pressureTesting') : t('api.startTest') }}
+                    </button>
+                    <button class="btn btn-secondary" @click="stopPressureTest" :disabled="!pressureRunning">
+                        <i class="fas fa-stop me-1"></i>{{ t('api.stop') }}
+                    </button>
+                    <button class="btn btn-outline-primary" @click="copyUrlFromRequest" :disabled="!request.url">
+                        <i class="fas fa-copy me-1"></i>{{ t('api.copyCurrentUrl') }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Pressure Progress -->
+            <div class="response-panel" v-if="pressureRunning || pressureResult">
+                <h5 class="mb-3 fw-bold">
+                    <i class="fas fa-chart-line me-2"></i>{{ t('api.pressureProgress') }}
+                    <span class="badge bg-primary ms-2" v-if="pressureRunning">{{ t('api.running') }}</span>
+                    <span class="badge bg-success ms-2" v-else>{{ t('api.completed') }}</span>
+                </h5>
+
+                <!-- Progress Bar -->
+                <div class="progress-section" v-if="pressureRunning">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>{{ t('api.progress') }}</span>
+                        <span>{{ pressureProgress.completed }} / {{ pressureProgress.total > 0 ? pressureProgress.total : '∞' }}</span>
+                    </div>
+                    <div class="progress-bar-custom">
+                        <div class="progress-bar-fill" :style="{ width: pressureProgress.percent + '%' }"></div>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-2">
+                        <div class="pressure-stat-card">
+                            <div class="pressure-stat-value">{{ pressureProgress.successRate.toFixed(1) }}%</div>
+                            <div class="pressure-stat-label">{{ t('api.successRate') }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="pressure-stat-card">
+                            <div class="pressure-stat-value">{{ pressureProgress.completed }}</div>
+                            <div class="pressure-stat-label">{{ t('api.finished') }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="pressure-stat-card">
+                            <div class="pressure-stat-value">{{ pressureProgress.qps.toFixed(1) }}</div>
+                            <div class="pressure-stat-label">QPS</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="pressure-stat-card">
+                            <div class="pressure-stat-value">{{ pressureProgress.avgTime.toFixed(0) }}ms</div>
+                            <div class="pressure-stat-label">{{ t('api.avgTime') }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="pressure-stat-card">
+                            <div class="pressure-stat-value">{{ pressureProgress.minTime }}ms</div>
+                            <div class="pressure-stat-label">{{ t('api.minTime') }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="pressure-stat-card">
+                            <div class="pressure-stat-value">{{ pressureProgress.maxTime }}ms</div>
+                            <div class="pressure-stat-label">{{ t('api.maxTime') }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Percentiles -->
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="pressure-stat-card">
+                            <div class="pressure-stat-value">TP90: {{ pressureProgress.tp90 }}ms</div>
+                            <div class="pressure-stat-label">{{ t('api.90percentile') }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="pressure-stat-card">
+                            <div class="pressure-stat-value">TP95: {{ pressureProgress.tp95 }}ms</div>
+                            <div class="pressure-stat-label">{{ t('api.95percentile') }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="pressure-stat-card">
+                            <div class="pressure-stat-value">TP99: {{ pressureProgress.tp99 }}ms</div>
+                            <div class="pressure-stat-label">{{ t('api.99percentile') }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pressure Report -->
+            <div class="report-section" v-if="pressureResult && !pressureRunning">
+                <!-- Report Header (purple gradient) -->
+                <div class="report-header">
+                    <h4 class="mb-3">
+                        <i class="fas fa-file-alt me-2"></i>{{ t('api.pressureReport') }}
+                    </h4>
+                    <div class="level-badge" :class="getLevelBadgeClass(pressureResult.analysis.overallLevel)">
+                        {{ pressureResult.analysis.overallLevel }}
+                    </div>
+                    <div class="opacity-75 mt-2">{{ t('api.overallRating') }}</div>
+                </div>
+
+                <!-- Report Body (light gray) -->
+                <div class="report-body">
+                    <!-- Rating Badges -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <div class="metric-card">
+                                <div class="metric-label mb-2">{{ t('api.performanceRating') }}</div>
+                                <span class="rating-badge" :class="getRatingClass(pressureResult.analysis.performanceLevel)">
+                                    {{ pressureResult.analysis.performanceLevel }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="metric-card">
+                                <div class="metric-label mb-2">{{ t('api.stabilityRating') }}</div>
+                                <span class="rating-badge" :class="getRatingClass(pressureResult.analysis.stabilityLevel)">
+                                    {{ pressureResult.analysis.stabilityLevel }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="metric-card d-flex flex-column justify-content-center">
+                                <div class="metric-label mb-2">{{ t('api.actualQps') }}</div>
+                                <div class="metric-value">{{ pressureResult.metrics.qps.toFixed(1) }} <span style="font-size:14px;font-weight:400;color:#6b7280;">req/s</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Response Time Distribution -->
+                    <h5 class="mb-3 text-dark fw-bold">
+                        <i class="fas fa-chart-bar me-2 text-primary"></i>{{ t('api.responseTimeDistribution') }}
+                    </h5>
+                    <div class="card mb-4" v-if="pressureResult.metrics.responseTimeDistribution">
+                        <div class="card-body">
+                            <div v-for="(count, label) in pressureResult.metrics.responseTimeDistribution" :key="label" class="distribution-bar">
+                                <span class="distribution-label">{{ label }}</span>
+                                <div class="distribution-track">
+                                    <div class="distribution-fill" :style="{ width: Math.max(getDistributionPercent(count), count > 0 ? 10 : 0) + '%' }">
+                                        {{ count > 0 ? count : '' }}
+                                    </div>
+                                </div>
+                                <span class="distribution-count">{{ count }} {{ t('api.times') }} ({{ getDistributionPercent(count).toFixed(1) }}%)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Conclusions -->
+                    <h5 class="mb-3 text-dark fw-bold">
+                        <i class="fas fa-check-circle me-2 text-success"></i>{{ t('api.analysisConclusion') }}
+                    </h5>
+                    <div class="conclusion-item" v-for="(conclusion, idx) in pressureResult.analysis.conclusions" :key="idx">
+                        {{ conclusion }}
+                    </div>
+
+                    <!-- Suggestions -->
+                    <h5 class="mb-3 mt-4 text-dark fw-bold">
+                        <i class="fas fa-lightbulb me-2 text-warning"></i>{{ t('api.optimizationSuggestions') }}
+                    </h5>
+                    <div class="suggestion-item" v-for="(suggestion, idx) in pressureResult.analysis.suggestions" :key="idx">
+                        {{ suggestion }}
+                    </div>
+
+                    <!-- Export Buttons -->
+                    <div class="d-flex gap-3 justify-content-center mt-4">
+                        <button class="btn btn-success" @click="exportReport('excel')">
+                            <i class="fas fa-file-excel me-2"></i>{{ t('api.exportExcel') }}
+                        </button>
+                        <button class="btn btn-outline-secondary" @click="resetPressureTest">
+                            <i class="fas fa-redo me-2"></i>{{ t('api.retest') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        var apiLocaleMessages = {};
+        async function loadApiLocaleMessages(locale) {
+            try {
+                var res = await fetch('/js/locale/' + locale + '.json');
+                if (!res.ok) throw new Error('Failed to load locale');
+                apiLocaleMessages = await res.json();
+            } catch (e) {
+                console.error('Failed to load locale:', e);
+            }
+        }
+        loadApiLocaleMessages(localStorage.getItem('locale') || 'en');
+
+        var enApiTexts = {
+            'api.brand': 'API Test Tool',
+            'api.backToHome': 'Back to Home',
+            'api.apiTest': 'API Test',
+            'api.pressureTest': 'Pressure Test',
+            'api.urlPlaceholder': 'Enter API URL, e.g. https://api.example.com/users',
+            'api.sending': 'Sending...',
+            'api.send': 'Send',
+            'api.queryParams': 'Query Params',
+            'api.addParam': 'Add Param',
+            'api.addHeader': 'Add Header',
+            'api.bodyPlaceholder': 'Enter JSON request body, e.g.:\n{\n  "name": "John",\n  "age": 25\n}',
+            'api.responseResult': 'Response Result',
+            'api.copyResponse': 'Copy Response',
+            'api.requestHistory': 'Request History',
+            'api.clear': 'Clear',
+            'api.pressureConfig': 'Pressure Test Config',
+            'api.requestMethod': 'Request Method',
+            'api.concurrency': 'Concurrency (1-100)',
+            'api.targetUrl': 'Target URL',
+            'api.targetUrlPlaceholder': 'Enter pressure test target URL, e.g. https://api.example.com/users',
+            'api.testMode': 'Test Mode',
+            'api.byRequests': 'By Request Count',
+            'api.byDuration': 'By Duration',
+            'api.totalRequests': 'Total Requests',
+            'api.durationSeconds': 'Duration (seconds)',
+            'api.qpsLimit': 'QPS Limit (0=unlimited)',
+            'api.requestDelay': 'Request Delay (ms, 0=no delay)',
+            'api.requestHeaders': 'Request Headers',
+            'api.requestBody': 'Request Body',
+            'api.requestBodyPlaceholder': 'Enter JSON request body',
+            'api.pressureTesting': 'Testing...',
+            'api.startTest': 'Start Test',
+            'api.stop': 'Stop',
+            'api.copyCurrentUrl': 'Copy Current URL',
+            'api.pressureProgress': 'Pressure Test Progress',
+            'api.running': 'Running',
+            'api.completed': 'Completed',
+            'api.progress': 'Progress',
+            'api.successRate': 'Success Rate',
+            'api.finished': 'Finished',
+            'api.avgTime': 'Avg Time',
+            'api.minTime': 'Min Time',
+            'api.maxTime': 'Max Time',
+            'api.90percentile': '90% requests completed within this time',
+            'api.95percentile': '95% requests completed within this time',
+            'api.99percentile': '99% requests completed within this time',
+            'api.pressureReport': 'Pressure Test Report',
+            'api.overallRating': 'Overall Rating',
+            'api.performanceRating': 'Performance Rating',
+            'api.stabilityRating': 'Stability Rating',
+            'api.actualQps': 'Actual QPS',
+            'api.responseTimeDistribution': 'Response Time Distribution',
+            'api.analysisConclusion': 'Analysis Conclusions',
+            'api.optimizationSuggestions': 'Optimization Suggestions',
+            'api.exportExcel': 'Export Excel',
+            'api.retest': 'Retest',
+            'api.copyFailed': 'Failed to copy to clipboard',
+            'api.confirmClearHistory': 'Are you sure you want to clear history?',
+            'api.pleaseEnterUrl': 'Please enter target URL',
+            'api.wsConnectionFailed': 'WebSocket connection failed, please refresh and retry',
+            'api.pressureTestStarted': 'Pressure test started',
+            'api.startFailed': 'Failed to start',
+            'api.startTestFailed': 'Failed to start test',
+            'api.noReportToExport': 'No report to export',
+            'api.requestFailed': 'Request failed',
+            'api.pressureTestError': 'Pressure test error',
+            'api.times': 'times',
+            'api.overallRating': 'Overall Rating',
+            'api.performanceRating': 'Performance Rating',
+            'api.stabilityRating': 'Stability Rating',
+            'api.actualQps': 'Actual QPS',
+            'api.responseTimeDistribution': 'Response Time Distribution',
+            'api.analysisConclusion': 'Analysis Conclusions',
+            'api.optimizationSuggestions': 'Optimization Suggestions',
+            'api.exportExcel': 'Export Excel',
+            'api.retest': 'Retest',
+            'api.copyFailed': 'Failed to copy to clipboard',
+            'api.confirmClearHistory': 'Are you sure you want to clear history?',
+            'api.pleaseEnterUrl': 'Please enter target URL',
+            'api.wsConnectionFailed': 'WebSocket connection failed, please refresh and retry',
+            'api.pressureTestStarted': 'Pressure test started',
+            'api.startFailed': 'Failed to start',
+            'api.startTestFailed': 'Failed to start test',
+            'api.noReportToExport': 'No report to export'
+        };
+
+        var zhApiTexts = {
+            'api.brand': 'API 调测工具',
+            'api.backToHome': '返回首页',
+            'api.apiTest': 'API 调测',
+            'api.pressureTest': '接口压测',
+            'api.urlPlaceholder': '输入 API URL，例如：https://api.example.com/users',
+            'api.sending': '发送中...',
+            'api.send': '发送',
+            'api.queryParams': 'Query 参数',
+            'api.addParam': '添加参数',
+            'api.addHeader': '添加 Header',
+            'api.bodyPlaceholder': '输入 JSON 格式的请求体，例如：\n{\n  "name": "张三",\n  "age": 25\n}',
+            'api.responseResult': '响应结果',
+            'api.copyResponse': '复制响应',
+            'api.requestHistory': '请求历史',
+            'api.clear': '清空',
+            'api.pressureConfig': '压测配置',
+            'api.requestMethod': '请求方法',
+            'api.concurrency': '并发数 (1-100)',
+            'api.targetUrl': '目标 URL',
+            'api.targetUrlPlaceholder': '输入压测目标 URL，如 https://api.example.com/users',
+            'api.testMode': '测试模式',
+            'api.byRequests': '按请求数',
+            'api.byDuration': '按时长',
+            'api.totalRequests': '总请求数',
+            'api.durationSeconds': '持续时间 (秒)',
+            'api.qpsLimit': 'QPS 限制 (0=不限制)',
+            'api.requestDelay': '请求延迟 (ms, 0=不延迟)',
+            'api.requestHeaders': '请求 Headers',
+            'api.requestBody': '请求体',
+            'api.requestBodyPlaceholder': '输入 JSON 格式请求体',
+            'api.pressureTesting': '压测中...',
+            'api.startTest': '开始压测',
+            'api.stop': '停止',
+            'api.copyCurrentUrl': '复制当前URL',
+            'api.pressureProgress': '压测进度',
+            'api.running': '运行中',
+            'api.completed': '已完成',
+            'api.progress': '进度',
+            'api.successRate': '成功率',
+            'api.finished': '已完成',
+            'api.avgTime': '平均耗时',
+            'api.minTime': '最小耗时',
+            'api.maxTime': '最大耗时',
+            'api.90percentile': '90% 请求在此时间内完成',
+            'api.95percentile': '95% 请求在此时间内完成',
+            'api.99percentile': '99% 请求在此时间内完成',
+            'api.pressureReport': '压测报告',
+            'api.overallRating': '综合评级',
+            'api.performanceRating': '性能评级',
+            'api.stabilityRating': '稳定性评级',
+            'api.actualQps': '实际 QPS',
+            'api.responseTimeDistribution': '响应时间分布',
+            'api.analysisConclusion': '分析结论',
+            'api.optimizationSuggestions': '优化建议',
+            'api.exportExcel': '导出 Excel',
+            'api.retest': '重新测试',
+            'api.copyFailed': '复制失败',
+            'api.confirmClearHistory': '确定要清空历史记录吗？',
+            'api.pleaseEnterUrl': '请输入目标 URL',
+            'api.wsConnectionFailed': 'WebSocket 连接失败，请刷新重试',
+            'api.pressureTestStarted': '压测任务已启动',
+            'api.startFailed': '启动失败',
+            'api.startTestFailed': '启动压测失败',
+            'api.noReportToExport': '没有可导出的报告',
+            'api.requestFailed': '请求失败',
+            'api.pressureTestError': '压测出错',
+            'api.times': '次'
+        };
+
+        var apiAllTexts = { 'en': enApiTexts, 'zh_CN': zhApiTexts };
+
+        createApp({
+            data() {
+                return {
+                    locale: localStorage.getItem('locale') || 'en',
+                    mainTab: 'request',  // 'request' or 'pressure'
+                    request: {
+                        method: 'GET',
+                        url: '',
+                        params: [],
+                        headers: [
+                            { key: 'Content-Type', value: 'application/json' }
+                        ],
+                        body: ''
+                    },
+                    response: null,
+                    loading: false,
+                    activeTab: 'params',
+                    responseTab: 'body',
+                    history: [],
+                    csrfToken: null,
+                    
+                    // 压测相关数据
+                    pressureConfig: {
+                        method: 'GET',
+                        url: '',
+                        headers: [
+                            { key: 'Content-Type', value: 'application/json' }
+                        ],
+                        body: '',
+                        testMode: 'requests',
+                        totalRequests: 100,
+                        durationSeconds: 30,
+                        concurrency: 10,
+                        qpsLimit: 0,
+                        delayMs: 0
+                    },
+                    pressureRunning: false,
+                    pressureResult: null,
+                    pressureProgress: {
+                        completed: 0,
+                        total: 0,
+                        percent: 0,
+                        successRate: 0,
+                        qps: 0,
+                        avgTime: 0,
+                        minTime: 0,
+                        maxTime: 0,
+                        tp90: 0,
+                        tp95: 0,
+                        tp99: 0
+                    },
+                        wsSessionId: null,  // WebSocket 真实 sessionId
+                    ws: null
+                }
+            },
+            computed: {
+                formattedBody() {
+                    if (!this.response || !this.response.body) return '';
+                    try {
+                        const json = JSON.parse(this.response.body);
+                        return this.syntaxHighlight(JSON.stringify(json, null, 2));
+                    } catch (e) {
+                        return this.escapeHtml(this.response.body);
+                    }
+                }
+            },
+            mounted() {
+                // Configure CSRF interceptor
+                this.setupCsrfInterceptor();
+                // Get CSRF Token
+                this.getCsrfToken();
+
+                this.loadHistoryFromStorage();
+                this.updateTitle();
+            },
+            methods: {
+                t: function(key) {
+                    var merged = Object.assign({}, apiAllTexts[this.locale] || apiAllTexts['en'], apiLocaleMessages);
+                    return merged[key] || key.split('.').pop();
+                },
+                updateTitle: function() {
+                    var merged = Object.assign({}, apiAllTexts[this.locale] || apiAllTexts['en'], apiLocaleMessages);
+                    document.title = (merged['api.brand'] || 'API Test Tool') + ' - Web Tool';
+                },
+                setLanguage: function(locale) {
+                    this.locale = locale;
+                    localStorage.setItem('locale', locale);
+                    loadApiLocaleMessages(locale);
+                    this.updateTitle();
+                },
+                // 配置axios CSRF拦截器
+                setupCsrfInterceptor() {
+                    axios.interceptors.request.use(config => {
+                        // 如果是POST/PUT/DELETE/PATCH请求，添加CSRF Token
+                        const modifyingMethods = ['post', 'put', 'delete', 'patch'];
+                        if (config.method && modifyingMethods.includes(config.method.toLowerCase())) {
+                            if (this.csrfToken) {
+                                config.headers['X-CSRF-Token'] = this.csrfToken;
+                            }
+                        }
+                        return config;
+                    }, error => {
+                        return Promise.reject(error);
+                    });
+
+                    // 响应拦截器：如果Token过期，自动刷新
+                    axios.interceptors.response.use(
+                        response => response,
+                        async error => {
+                            if (error.response && error.response.status === 403) {
+                                const errorMsg = error.response.data?.message || '';
+                                // 如果是CSRF Token过期，尝试刷新Token
+                                if (errorMsg.includes('CSRF') || errorMsg.includes('Token')) {
+                                    console.log('CSRF Token无效，重新获取...');
+                                    await this.getCsrfToken();
+                                    // 重试原请求
+                                    const config = error.config;
+                                    if (this.csrfToken) {
+                                        config.headers['X-CSRF-Token'] = this.csrfToken;
+                                    }
+                                    return axios.request(config);
+                                }
+                            }
+                            return Promise.reject(error);
+                        }
+                    );
+                },
+                // 获取CSRF Token
+                async getCsrfToken() {
+                    try {
+                        const res = await axios.get('/api/csrf/token');
+                        if (res.data && res.data.success) {
+                            this.csrfToken = res.data.token;
+                            console.log('CSRF Token已获取');
+                        } else {
+                            console.warn('CSRF Token获取失败');
+                        }
+                    } catch (e) {
+                        console.error('获取CSRF Token异常:', e);
+                    }
+                },
+                async sendRequest() {
+                    if (!this.request.url) return;
+
+                    this.loading = true;
+                    this.response = null;
+
+                    try {
+                        // 构建完整 URL（包含 query 参数）
+                        let url = this.request.url;
+                        const params = this.request.params.filter(p => p.key && p.value);
+                        if (params.length > 0) {
+                            const queryString = params.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join('&');
+                            url += (url.includes('?') ? '&' : '?') + queryString;
+                        }
+
+                        // 构建 headers
+                        const headers = {};
+                        this.request.headers.filter(h => h.key && h.value).forEach(h => {
+                            headers[h.key] = h.value;
+                        });
+
+                        // 发送请求
+                        const res = await axios.post('/api/test/proxy', {
+                            method: this.request.method,
+                            url: url,
+                            headers: headers,
+                            body: this.request.body
+                        });
+
+                        this.response = res.data;
+
+                        // 保存到历史记录
+                        this.saveToHistory();
+
+                    } catch (error) {
+                        this.response = {
+                            statusCode: 0,
+                            statusText: 'Error',
+                            body: this.t('api.requestFailed') + ': ' + error.message,
+                            responseTime: 0,
+                            headers: {}
+                        };
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                addParam() {
+                    this.request.params.push({ key: '', value: '' });
+                },
+                removeParam(index) {
+                    this.request.params.splice(index, 1);
+                },
+                addHeader() {
+                    this.request.headers.push({ key: '', value: '' });
+                },
+                removeHeader(index) {
+                    this.request.headers.splice(index, 1);
+                },
+                syntaxHighlight(json) {
+                    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                        let cls = 'json-number';
+                        if (/^"/.test(match)) {
+                            if (/:$/.test(match)) {
+                                cls = 'json-key';
+                            } else {
+                                cls = 'json-string';
+                            }
+                        } else if (/true|false/.test(match)) {
+                            cls = 'json-boolean';
+                        } else if (/null/.test(match)) {
+                            cls = 'json-null';
+                        }
+                        return '<span class="' + cls + '">' + match + '</span>';
+                    });
+                },
+                escapeHtml(text) {
+                    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                },
+                formatHeaders(headers) {
+                    if (!headers) return '';
+                    return Object.entries(headers).map(([key, value]) => `${key}: ${value}`).join('\n');
+                },
+                copyResponse() {
+                    const text = this.response.body;
+                    navigator.clipboard.writeText(text).then(() => {
+                        alert(this.t('api.copyFailed'));
+                    });
+                },
+                saveToHistory() {
+                    const historyItem = {
+                        method: this.request.method,
+                        url: this.request.url,
+                        timestamp: new Date().toISOString()
+                    };
+                    this.history.unshift(historyItem);
+                    if (this.history.length > 10) {
+                        this.history = this.history.slice(0, 10);
+                    }
+                    localStorage.setItem('apiTestHistory', JSON.stringify(this.history));
+                },
+                loadHistoryFromStorage() {
+                    const stored = localStorage.getItem('apiTestHistory');
+                    if (stored) {
+                        this.history = JSON.parse(stored);
+                    }
+                },
+                loadHistory(item) {
+                    this.request.method = item.method;
+                    this.request.url = item.url;
+                },
+                clearHistory() {
+                    if (confirm(this.t('api.confirmClearHistory'))) {
+                        this.history = [];
+                        localStorage.removeItem('apiTestHistory');
+                    }
+                },
+                goBack() {
+                    window.location.href = '/';
+                },
+
+                // ========== 压测相关方法 ==========
+
+                // 添加压测 Header
+                addPressureHeader() {
+                    this.pressureConfig.headers.push({ key: '', value: '' });
+                },
+                removePressureHeader(index) {
+                    this.pressureConfig.headers.splice(index, 1);
+                },
+
+                // 复制当前URL到压测配置
+                copyUrlFromRequest() {
+                    this.pressureConfig.url = this.request.url;
+                    this.pressureConfig.method = this.request.method;
+                    this.pressureConfig.body = this.request.body;
+                    // 复制 headers
+                    const validHeaders = this.request.headers.filter(h => h.key && h.value);
+                    if (validHeaders.length > 0) {
+                        this.pressureConfig.headers = validHeaders.map(h => ({ key: h.key, value: h.value }));
+                    }
+                },
+
+                // 连接 WebSocket
+                connectWebSocket() {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = protocol + '//' + window.location.host + '/ws/pressure';
+
+                    this.ws = new WebSocket(wsUrl);
+
+                    this.ws.onopen = () => {
+                        console.log('压测 WebSocket 已连接');
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        try {
+                            const msg = JSON.parse(event.data);
+                            // 如果是连接成功消息，保存真实的 sessionId
+                            if (msg.type === 'connected' && msg.data && msg.data.sessionId) {
+                                this.wsSessionId = msg.data.sessionId;
+                                console.log('已获取 WebSocket sessionId:', this.wsSessionId);
+                            }
+                            this.handleWsMessage(msg);
+                        } catch (e) {
+                            console.error('解析 WebSocket 消息失败', e);
+                        }
+                    };
+
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket 错误', error);
+                    };
+
+                    this.ws.onclose = () => {
+                        console.log('压测 WebSocket 已断开');
+                    };
+                },
+
+                // 处理 WebSocket 消息
+                handleWsMessage(msg) {
+                    switch (msg.type) {
+                        case 'progress':
+                            this.updatePressureProgress(msg.data);
+                            break;
+                        case 'complete':
+                            this.pressureRunning = false;
+                            this.pressureResult = msg.data;
+                            break;
+                        case 'error':
+                            this.pressureRunning = false;
+                            alert(this.t('api.pressureTestError') + ': ' + msg.message);
+                            break;
+                        case 'connected':
+                            console.log('WebSocket 连接成功');
+                            break;
+                    }
+                },
+
+                // 更新压测进度
+                updatePressureProgress(data) {
+                    this.pressureProgress.completed = data.completed;
+                    this.pressureProgress.total = data.total;
+                    this.pressureProgress.percent = data.total > 0 ? (data.completed / data.total * 100) : 0;
+
+                    if (data.metrics) {
+                        this.pressureProgress.successRate = data.metrics.successRate || 0;
+                        this.pressureProgress.qps = data.metrics.qps || 0;
+                        this.pressureProgress.avgTime = data.metrics.avgResponseTime || 0;
+                        this.pressureProgress.minTime = data.metrics.minResponseTime || 0;
+                        this.pressureProgress.maxTime = data.metrics.maxResponseTime || 0;
+                        this.pressureProgress.tp90 = data.metrics.tp90 || 0;
+                        this.pressureProgress.tp95 = data.metrics.tp95 || 0;
+                        this.pressureProgress.tp99 = data.metrics.tp99 || 0;
+                    }
+                },
+
+                // 开始压测
+                async startPressureTest() {
+                    if (!this.pressureConfig.url) {
+                        alert(this.t('api.pleaseEnterUrl'));
+                        return;
+                    }
+
+                    // 连接 WebSocket
+                    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+                        this.connectWebSocket();
+                        // 等待连接建立并获取 sessionId
+                        let waitCount = 0;
+                        while (!this.wsSessionId && waitCount < 20) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            waitCount++;
+                        }
+                        if (!this.wsSessionId) {
+                            alert(this.t('api.wsConnectionFailed'));
+                            return;
+                        }
+                    }
+
+                    this.pressureRunning = true;
+                    this.pressureResult = null;
+                    this.pressureProgress = {
+                        completed: 0, total: 0, percent: 0,
+                        successRate: 0, qps: 0, avgTime: 0,
+                        minTime: 0, maxTime: 0, tp90: 0, tp95: 0, tp99: 0
+                    };
+
+                    // 构建 headers
+                    const headers = {};
+                    this.pressureConfig.headers.filter(h => h.key && h.value).forEach(h => {
+                        headers[h.key] = h.value;
+                    });
+
+                    // 构建请求
+                    const req = {
+                        method: this.pressureConfig.method,
+                        url: this.pressureConfig.url,
+                        headers: headers,
+                        body: this.pressureConfig.body,
+                        concurrency: this.pressureConfig.concurrency,
+                        qpsLimit: this.pressureConfig.qpsLimit,
+                        delayMs: this.pressureConfig.delayMs,
+                        sessionId: this.wsSessionId
+                    };
+
+                    // 根据模式设置请求数或时长
+                    if (this.pressureConfig.testMode === 'requests') {
+                        req.totalRequests = this.pressureConfig.totalRequests;
+                    } else {
+                        req.durationSeconds = this.pressureConfig.durationSeconds;
+                    }
+
+                    try {
+                        const res = await axios.post('/api/test/pressure/start', req);
+                        if (res.data.success) {
+                            console.log(this.t('api.pressureTestStarted'));
+                        } else {
+                            this.pressureRunning = false;
+                            alert(this.t('api.startFailed') + ': ' + res.data.message);
+                        }
+                    } catch (error) {
+                        this.pressureRunning = false;
+                        alert(this.t('api.startTestFailed') + ': ' + error.message);
+                    }
+                },
+
+                // 停止压测
+                async stopPressureTest() {
+                    try {
+                        await axios.post('/api/test/pressure/stop', {
+                            sessionId: this.wsSessionId
+                        });
+                        this.pressureRunning = false;
+                    } catch (error) {
+                        console.error('停止压测失败', error);
+                    }
+                },
+
+                // 导出报告
+                async exportReport(format) {
+                    if (!this.pressureResult) {
+                        alert(this.t('api.noReportToExport'));
+                        return;
+                    }
+
+                    const result = this.pressureResult;
+
+                    // 构建表单提交
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/api/test/pressure/export/' + format;
+                    form.style.display = 'none';
+
+                    const addField = (name, value) => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = name;
+                        input.value = value;
+                        form.appendChild(input);
+                    };
+
+                    // 添加配置信息
+                    addField('url', result.config?.url || '');
+                    addField('method', result.config?.method || 'GET');
+                    addField('concurrency', result.config?.concurrency || 10);
+                    addField('durationSeconds', result.summary?.durationSeconds || 0);
+
+                    // 添加摘要信息
+                    addField('startTime', result.summary?.startTime || '');
+                    addField('endTime', result.summary?.endTime || '');
+                    addField('completedRequests', result.summary?.completedRequests || 0);
+
+                    // 添加性能指标
+                    const m = result.metrics || {};
+                    addField('successCount', m.successCount || 0);
+                    addField('failCount', m.failCount || 0);
+                    addField('successRate', m.successRate || 0);
+                    addField('failRate', m.failRate || 0);
+                    addField('avgResponseTime', m.avgResponseTime || 0);
+                    addField('minResponseTime', m.minResponseTime || 0);
+                    addField('maxResponseTime', m.maxResponseTime || 0);
+                    addField('tp90', m.tp90 || 0);
+                    addField('tp95', m.tp95 || 0);
+                    addField('tp99', m.tp99 || 0);
+                    addField('qps', m.qps || 0);
+
+                    // 添加分析结论（JSON格式）
+                    if (result.analysis) {
+                        addField('analysisJson', JSON.stringify(result.analysis));
+                    }
+
+                    // 添加响应时间分布
+                    if (m.responseTimeDistribution) {
+                        addField('responseTimeDistribution', JSON.stringify(m.responseTimeDistribution));
+                    }
+
+                    document.body.appendChild(form);
+                    form.submit();
+                    document.body.removeChild(form);
+                },
+
+                // 重置压测
+                resetPressureTest() {
+                    this.pressureResult = null;
+                    this.pressureProgress = {
+                        completed: 0, total: 0, percent: 0,
+                        successRate: 0, qps: 0, avgTime: 0,
+                        minTime: 0, maxTime: 0, tp90: 0, tp95: 0, tp99: 0
+                    };
+                },
+
+                // 获取评级样式类
+                getLevelClass(level) {
+                    const map = {
+                        '优秀': 'level-excellent',
+                        '良好': 'level-good',
+                        '一般': 'level-normal',
+                        '差': 'level-poor'
+                    };
+                    return map[level] || '';
+                },
+
+                // 获取综合评级徽章背景类
+                getLevelBadgeClass(level) {
+                    const map = {
+                        '优秀': 'level-badge-excellent',
+                        '良好': 'level-badge-good',
+                        '一般': 'level-badge-normal',
+                        '差': 'level-badge-poor'
+                    };
+                    return map[level] || '';
+                },
+
+                // 获取评级徽章类
+                getRatingClass(level) {
+                    const map = {
+                        '优秀': 'rating-excellent',
+                        '良好': 'rating-good',
+                        '一般': 'rating-normal',
+                        '差': 'rating-poor'
+                    };
+                    return map[level] || '';
+                },
+
+                // 计算分布百分比
+                getDistributionPercent(count) {
+                    if (!this.pressureResult || !this.pressureResult.metrics) return 0;
+                    const total = this.pressureResult.summary?.completedRequests || 1;
+                    return (count / total * 100);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>

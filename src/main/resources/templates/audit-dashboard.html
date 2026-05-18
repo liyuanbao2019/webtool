@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Dashboard</title>
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/css/all.min.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet">
+    <script src="/js/vue.global.prod.js"></script>
+    <script src="/js/axios.min.js"></script>
+    <style>
+        :root {
+            --workspace-primary: #6366f1;
+            --workspace-bg: #f8fafc;
+            --workspace-header: #ffffff;
+            --workspace-border: #e5e7eb;
+            --workspace-text-main: #1f2937;
+            --workspace-text-sub: #64748b;
+            --workspace-footer: #1e293b;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--workspace-bg);
+            color: var(--workspace-text-main);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .audit-shell {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .audit-header {
+            height: 64px;
+            border-bottom: 1px solid var(--workspace-border);
+            background: var(--workspace-header);
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+            padding: 0 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            z-index: 20;
+        }
+
+        .audit-brand {
+            display: inline-flex;
+            align-items: center;
+            gap: .625rem;
+            text-decoration: none;
+            color: var(--workspace-text-main);
+        }
+
+        .audit-brand-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: .625rem;
+            background: var(--workspace-primary);
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
+        }
+
+        .audit-brand-icon svg { width: 18px; height: 18px; fill: currentColor; }
+
+        .audit-brand-title {
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .audit-main {
+            flex: 1;
+            padding: 1.25rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* ── Stat Cards ── */
+        .stat-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: .75rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .stat-card {
+            background: #fff;
+            border: 1px solid var(--workspace-border);
+            border-radius: .55rem;
+            padding: .85rem 1rem;
+            box-shadow: 0 1px 5px rgba(15, 23, 42, 0.05);
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+        }
+
+        .stat-card-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: .5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+
+        .stat-card-icon.ssh { background: #eef2ff; color: #4f46e5; }
+        .stat-card-icon.ssh-fail { background: #fef2f2; color: #dc2626; }
+        .stat-card-icon.sql { background: #ecfdf5; color: #059669; }
+        .stat-card-icon.sql-fail { background: #fff7ed; color: #ea580c; }
+        .stat-card-icon.user { background: #f0f9ff; color: #0284c7; }
+        .stat-card-icon.cmd { background: #fdf4ff; color: #9333ea; }
+
+        .stat-card-info { flex: 1; min-width: 0; }
+
+        .stat-card-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: #0f172a;
+        }
+
+        .stat-card-label {
+            font-size: .75rem;
+            color: var(--workspace-text-sub);
+            font-weight: 500;
+        }
+
+        /* ── Tabs ── */
+        .audit-tabs {
+            display: flex;
+            gap: .25rem;
+            background: #f1f5f9;
+            border-radius: .5rem;
+            padding: .2rem;
+            margin-bottom: 1rem;
+            width: fit-content;
+        }
+
+        .audit-tab {
+            padding: .35rem .85rem;
+            border: none;
+            background: transparent;
+            border-radius: .35rem;
+            font-size: .85rem;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .audit-tab:hover { color: var(--workspace-primary); }
+
+        .audit-tab.active {
+            background: #fff;
+            color: var(--workspace-primary);
+            box-shadow: 0 1px 3px rgba(0,0,0,.1);
+        }
+
+        /* ── Filter Bar ── */
+        .filter-bar {
+            background: #fff;
+            border: 1px solid var(--workspace-border);
+            border-radius: .55rem;
+            padding: .75rem 1rem;
+            margin-bottom: .75rem;
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-bar .form-control,
+        .filter-bar .form-select {
+            font-size: .85rem;
+            padding: .3rem .6rem;
+            border-radius: .4rem;
+        }
+
+        .filter-label {
+            font-size: .8rem;
+            font-weight: 600;
+            color: #64748b;
+            white-space: nowrap;
+        }
+
+        .filter-divider {
+            width: 1px;
+            height: 24px;
+            background: #e2e8f0;
+        }
+
+        .btn-filter {
+            padding: .3rem .75rem;
+            font-size: .82rem;
+            border-radius: .4rem;
+            font-weight: 600;
+        }
+
+        /* ── Log Table ── */
+        .log-table-wrap {
+            background: #fff;
+            border: 1px solid var(--workspace-border);
+            border-radius: .55rem;
+            overflow: hidden;
+            box-shadow: 0 1px 5px rgba(15, 23, 42, 0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-table-scroll {
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .83rem;
+        }
+
+        .log-table thead th {
+            background: #f8fafc;
+            padding: .6rem .75rem;
+            font-weight: 700;
+            color: #475569;
+            font-size: .78rem;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            border-bottom: 1px solid var(--workspace-border);
+            white-space: nowrap;
+        }
+
+        .log-table tbody tr {
+            border-bottom: 1px solid #f1f5f9;
+            transition: background .15s;
+        }
+
+        .log-table tbody tr:hover { background: #f8fafc; }
+
+        .log-table tbody tr:last-child { border-bottom: none; }
+
+        .log-table td {
+            padding: .55rem .75rem;
+            vertical-align: middle;
+        }
+
+        .badge-status {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            padding: .18rem .5rem;
+            border-radius: 999px;
+            font-size: .72rem;
+            font-weight: 700;
+        }
+
+        .badge-success { background: #dcfce7; color: #15803d; }
+        .badge-failure { background: #fee2e2; color: #b91c1c; }
+        .badge-info { background: #dbeafe; color: #1d4ed8; }
+
+        .log-type-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .2rem;
+            padding: .18rem .5rem;
+            border-radius: .35rem;
+            font-size: .72rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .log-type-pill.ssh-connect { background: #eef2ff; color: #4338ca; }
+        .log-type-pill.ssh-disconnect { background: #f1f5f9; color: #475569; }
+        .log-type-pill.ssh-cmd { background: #fef9c3; color: #a16207; }
+        .log-type-pill.sql-exec { background: #ecfdf5; color: #065f46; }
+
+        .mono { font-family: Consolas, Monaco, 'Courier New', monospace; }
+
+        .log-sql-preview {
+            max-width: 280px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: Consolas, Monaco, monospace;
+            font-size: .78rem;
+            color: #475569;
+        }
+
+        .log-action-btn {
+            border: none;
+            background: transparent;
+            color: var(--workspace-primary);
+            cursor: pointer;
+            padding: .2rem .4rem;
+            border-radius: .3rem;
+            font-size: .78rem;
+            transition: background .15s;
+        }
+
+        .log-action-btn:hover { background: #eef2ff; }
+
+        /* ── Pagination ── */
+        .pagination-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: .6rem 1rem;
+            border-top: 1px solid var(--workspace-border);
+            background: #f8fafc;
+        }
+
+        .pagination-info {
+            font-size: .78rem;
+            color: #64748b;
+        }
+
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+        .pagination-controls .btn {
+            padding: .25rem .55rem;
+            font-size: .78rem;
+            border-radius: .35rem;
+        }
+
+        /* ── Detail Modal ── */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 1rem;
+        }
+
+        .modal-box {
+            background: #fff;
+            border-radius: .75rem;
+            width: 100%;
+            max-width: 720px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px rgba(0,0,0,.25);
+        }
+
+        .modal-box-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--workspace-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-box-header h5 {
+            margin: 0;
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .modal-box-body { padding: 1.25rem; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: .6rem .75rem;
+            margin-bottom: 1rem;
+        }
+
+        .detail-field {
+            display: flex;
+            flex-direction: column;
+            gap: .15rem;
+        }
+
+        .detail-field.full { grid-column: 1 / -1; }
+
+        .detail-field-label {
+            font-size: .7rem;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .detail-field-value {
+            font-size: .85rem;
+            color: #1f2937;
+            word-break: break-all;
+        }
+
+        .detail-field-value.mono {
+            font-family: Consolas, Monaco, monospace;
+            font-size: .8rem;
+            background: #f8fafc;
+            padding: .4rem .6rem;
+            border-radius: .35rem;
+            border: 1px solid #e2e8f0;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        /* ── Empty State ── */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #94a3b8;
+        }
+
+        .empty-state i { font-size: 2.5rem; margin-bottom: .5rem; display: block; }
+        .empty-state p { margin: 0; font-size: .9rem; }
+
+        /* ── Refresh button ── */
+        .refresh-btn {
+            border: none;
+            background: transparent;
+            color: #64748b;
+            cursor: pointer;
+            padding: .3rem .5rem;
+            border-radius: .4rem;
+            font-size: .82rem;
+            transition: all .2s;
+        }
+
+        .refresh-btn:hover { background: #eef2ff; color: var(--workspace-primary); }
+        .refresh-btn i { margin-right: .25rem; }
+
+        /* ── Last-updated ── */
+        .last-updated {
+            font-size: .72rem;
+            color: #94a3b8;
+            margin-left: auto;
+        }
+
+        @media (max-width: 768px) {
+            .detail-grid { grid-template-columns: 1fr; }
+            .stat-cards { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .lang-switcher {
+            display: flex;
+            gap: 2px;
+            background: #f1f5f9;
+            border-radius: .4rem;
+            padding: 2px;
+        }
+        .lang-btn {
+            border: none;
+            background: transparent;
+            color: #94a3b8;
+            padding: 4px 10px;
+            border-radius: .3rem;
+            font-size: .75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+        .lang-btn:hover { color: #6366f1; }
+        .lang-btn.active {
+            background: #fff;
+            color: #6366f1;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app" class="audit-shell">
+        <!-- Header -->
+        <header class="audit-header">
+                <a href="/" class="audit-brand">
+                <span class="audit-brand-icon"><svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5L12 1zm0 2.18l7 3.12v5.7c0 4.47-3.07 8.64-7 9.82-3.93-1.18-7-5.35-7-9.82V6.3l7-3.12zm-1 5.82v6h2v-6h-2zm0 8v2h2v-2h-2z"/></svg></span>
+                <span class="audit-brand-title">{{ t('audit.brand') }}</span>
+            </a>
+            <div class="lang-switcher" style="margin-left: auto; margin-right: 8px;">
+                <button class="lang-btn" :class="{active: locale === 'en'}" @click="setLanguage('en')">EN</button>
+                <button class="lang-btn" :class="{active: locale === 'zh_CN'}" @click="setLanguage('zh_CN')">中文</button>
+            </div>
+            <button class="refresh-btn" @click="loadAll">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                {{ t('audit.refresh') }}
+            </button>
+            <a href="/" class="refresh-btn" style="text-decoration:none" :title="t('audit.backToHome')">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                {{ t('audit.backToHome') }}
+            </a>
+            <span class="last-updated" v-if="lastUpdated">{{ t('audit.lastUpdated') }} {{ lastUpdated }}</span>
+        </header>
+
+        <main class="audit-main">
+            <!-- Stat Cards (always shown, not tied to active tab) -->
+            <div class="stat-cards">
+                <div class="stat-card">
+                    <div class="stat-card-icon ssh"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M20 6H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 6H8v2H6v-2H4v-2h2V8h2v2h2v2zm6 0h-2v2h2v2h-2v-2h-2v2h-2v-4h2v2h2v-2z"/></svg></div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value">{{ stats.ssh.totalConnections || 0 }}</div>
+                        <div class="stat-card-label">{{ t('audit.sshTotalConnections') }}</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon ssh-fail"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31A7.902 7.902 0 0112 20zm6.31-3.1L7.1 5.69A7.902 7.902 0 0112 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9zM12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/></svg></div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value">{{ stats.ssh.failedConnections || 0 }}</div>
+                        <div class="stat-card-label">{{ t('audit.sshFailedConnections') }}</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon sql"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 3C7.58 3 4 4.79 4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7c0-2.21-3.58-4-8-4zm6 11c0 1.86-3.58 3-8 3s-8-1.14-8-3v-2.23c1.61.87 3.72 1.42 6 1.61V17c0 .37.23.7.56.84 2.35.97 4.54 1.79 6.44 1.79s4.09-.82 6.44-1.79c.33-.14.56-.47.56-.84v-.84c2.28-.19 4.39-.74 6-1.61V17zM9 10c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm3 2c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm3 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/></svg></div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value">{{ stats.sql.totalExecutions || 0 }}</div>
+                        <div class="stat-card-label">{{ t('audit.sqlTotalExecutions') }}</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon sql-fail"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg></div>
+                    <div class="stat-card-info">
+                        <div class="stat-card-value">{{ stats.sql.failedExecutions || 0 }}</div>
+                        <div class="stat-card-label">{{ t('audit.sqlFailedExecutions') }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="audit-tabs">
+                <button class="audit-tab" :class="{ active: activeTab === 'ssh' }" @click="switchTab('ssh')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align:-2px;margin-right:4px"><path d="M20 6H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-9 6H8v2h3v2H8v2H6v-2h3v-2h3V8z"/></svg>{{ t('audit.sshLoginAudit') }}
+                </button>
+                <button class="audit-tab" :class="{ active: activeTab === 'ssh-cmd' }" @click="switchTab('ssh-cmd')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align:-2px;margin-right:4px"><path d="M20 5H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>{{ t('audit.sshCommandAudit') }}
+                </button>
+                <button class="audit-tab" :class="{ active: activeTab === 'sql' }" @click="switchTab('sql')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align:-2px;margin-right:4px"><path d="M12 3C7.58 3 4 4.79 4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7c0-2.21-3.58-4-8-4zm6 11c0 1.86-3.58 3-8 3s-8-1.14-8-3v-2.23c1.61.87 3.72 1.42 6 1.61V17c0 .37.23.7.56.84 2.35.97 4.54 1.79 6.44 1.79s4.09-.82 6.44-1.79c.33-.14.56-.47.56-.84v-.84c2.28-.19 4.39-.74 6-1.61V17z"/></svg>{{ t('audit.sqlExecutionAudit') }}
+                </button>
+            </div>
+
+            <!-- Filter Bar -->
+            <div class="filter-bar">
+                <span class="filter-label"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="vertical-align:-2px;margin-right:4px"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>{{ t('audit.filter') }}</span>
+                <select class="form-select" style="width:130px" v-model="filters.username">
+                    <option value="">{{ t('audit.allUsers') }}</option>
+                    <option v-for="u in configUsernames" :key="u" :value="u">{{ u }}</option>
+                </select>
+                <input type="text" class="form-control" style="width:160px"
+                    :placeholder="t('audit.targetHost')" v-model="filters.host" v-if="activeTab !== 'sql'">
+                <input type="text" class="form-control" style="width:160px"
+                    :placeholder="t('audit.dataSource')" v-model="filters.datasource" v-if="activeTab === 'sql'">
+                <select class="form-select" style="width:110px" v-model="filters.status" v-if="activeTab === 'ssh' || activeTab === 'sql'">
+                    <option value="">{{ t('audit.allStatus') }}</option>
+                    <option value="SUCCESS">{{ t('audit.success') }}</option>
+                    <option value="FAILURE">{{ t('audit.failure') }}</option>
+                </select>
+                <div class="filter-divider"></div>
+                <span class="filter-label" style="margin-left:2px">{{ t('audit.startTime') }}</span>
+                <input type="datetime-local" class="form-control" style="width:200px" v-model="filters.startTime">
+                <span class="filter-label">{{ t('audit.endTime') }}</span>
+                <input type="datetime-local" class="form-control" style="width:200px" v-model="filters.endTime">
+                <div class="filter-divider"></div>
+                <button class="btn btn-primary btn-filter" @click="applyFilters">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align:-2px;margin-right:3px"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg> {{ t('audit.search') }}
+                </button>
+                <button class="btn btn-light btn-filter" @click="clearFilters">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align:-2px;margin-right:3px"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> {{ t('audit.reset') }}
+                </button>
+            </div>
+
+            <!-- SSH Log Table -->
+            <div class="log-table-wrap" v-if="activeTab === 'ssh'" style="max-height:calc(100vh - 320px)">
+                <div class="log-table-scroll" style="max-height:calc(100vh - 370px);overflow-y:auto">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>{{ t('audit.type') }}</th>
+                            <th>{{ t('audit.time') }}</th>
+                            <th>{{ t('audit.user') }}</th>
+                            <th>{{ t('audit.targetServer') }}</th>
+                            <th>{{ t('audit.session') }}</th>
+                            <th>{{ t('audit.status') }}</th>
+                            <th>{{ t('audit.action') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody v-if="sshLogs.length > 0">
+                        <tr v-for="(log, idx) in sshLogs" :key="idx">
+                            <td>
+                                <span class="log-type-pill" :class="log.type === 'SSH_CONNECTION' ? 'ssh-connect' : 'ssh-disconnect'">
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M16 6V2H8v4H3v18h18V6h-5zm-6 6H9v-2h1v-1H9V7h1V6zm7 8h-2v-2h1.5c.55 0 1-.45 1-1s-.45-1-1-1h-1.5v-1H17v-1h-1v-1h-1v2h1v1h-1.5v1H14v2h2v1h1v-3z"/></svg>
+                                    {{ t('audit.connect') }}
+                                </span>
+                            </td>
+                            <td class="mono" style="font-size:.78rem;color:#64748b;white-space:nowrap">{{ fmtTime(log.timestamp) }}</td>
+                            <td><strong>{{ log.username }}</strong></td>
+                            <td class="mono">{{ log.targetHost }}<span style="color:#94a3b8">:{{ log.targetPort }}</span></td>
+                            <td class="mono" style="font-size:.72rem;color:#94a3b8">{{ log.sessionId }}</td>
+                            <td>
+                                <span class="badge-status" :class="log.status === 'SUCCESS' ? 'badge-success' : 'badge-failure'">
+                                    <svg v-if="log.status === 'SUCCESS'" viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                    <svg v-else viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                                    {{ log.status === 'SUCCESS' ? t('audit.success') : t('audit.failure') }}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="log-action-btn" @click="showDetail(log)" :title="t('audit.viewDetail')">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                </div>
+                <div class="empty-state" v-if="sshLogs.length === 0 && !loading">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="#cbd5e1"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5-7l-3 3.72L9 13l-3 4h12l-4-5z"/></svg>
+                    <p>{{ t('audit.noSshLogs') }}</p>
+                </div>
+                <!-- Pagination -->
+                <div class="pagination-bar" v-if="sshTotal > pageSize">
+                    <span class="pagination-info">{{ t('audit.total') }} {{ sshTotal }} {{ t('audit.rows') }}, {{ t('audit.current') }} {{ sshOffset + 1 }}-{{ Math.min(sshOffset + pageSize, sshTotal) }}</span>
+                    <div class="pagination-controls">
+                        <button class="btn btn-light btn-sm" :disabled="sshOffset === 0" @click="changePage(-1)">{{ t('audit.prevPage') }}</button>
+                        <button class="btn btn-light btn-sm" :disabled="sshOffset + pageSize >= sshTotal" @click="changePage(1)">{{ t('audit.nextPage') }}</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SSH Command Table -->
+            <div class="log-table-wrap" v-if="activeTab === 'ssh-cmd'" style="max-height:calc(100vh - 320px)">
+                <div class="log-table-scroll" style="max-height:calc(100vh - 370px);overflow-y:auto">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>{{ t('audit.time') }}</th>
+                            <th>{{ t('audit.user') }}</th>
+                            <th>{{ t('audit.targetHost') }}</th>
+                            <th>{{ t('audit.session') }}</th>
+                            <th>{{ t('audit.command') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody v-if="sshCmds.length > 0">
+                        <tr v-for="(cmd, idx) in sshCmds" :key="idx">
+                            <td class="mono" style="font-size:.78rem;color:#64748b;white-space:nowrap">{{ fmtTime(cmd.timestamp) }}</td>
+                            <td><strong>{{ cmd.username }}</strong></td>
+                            <td class="mono">{{ cmd.targetHost }}</td>
+                            <td class="mono" style="font-size:.72rem;color:#94a3b8">{{ cmd.sessionId }}</td>
+                            <td class="log-sql-preview" :title="cmd.rawLine">{{ cmd.rawLine }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                </div>
+                <div class="empty-state" v-if="sshCmds.length === 0 && !loading">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="#cbd5e1"><path d="M20 5H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>
+                    <p>{{ t('audit.noSshCmds') }}</p>
+                </div>
+                <div class="pagination-bar" v-if="cmdTotal > cmdPageSize">
+                    <span class="pagination-info">{{ t('audit.total') }} {{ cmdTotal }} {{ t('audit.rows') }}</span>
+                    <div class="pagination-controls">
+                        <button class="btn btn-light btn-sm" :disabled="cmdOffset === 0" @click="changeCmdPage(-1)">{{ t('audit.prevPage') }}</button>
+                        <button class="btn btn-light btn-sm" :disabled="cmdOffset + cmdPageSize >= cmdTotal" @click="changeCmdPage(1)">{{ t('audit.nextPage') }}</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SQL Log Table -->
+            <div class="log-table-wrap" v-if="activeTab === 'sql'" style="max-height:calc(100vh - 320px)">
+                <div class="log-table-scroll" style="max-height:calc(100vh - 370px);overflow-y:auto">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>{{ t('audit.time') }}</th>
+                            <th>{{ t('audit.user') }}</th>
+                            <th>{{ t('audit.dataSource') }}</th>
+                            <th>{{ t('audit.status') }}</th>
+                            <th>{{ t('audit.executionTime') }}</th>
+                            <th>{{ t('audit.affectedRows') }}</th>
+                            <th>{{ t('audit.sqlPreview') }}</th>
+                            <th>{{ t('audit.action') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody v-if="sqlLogs.length > 0">
+                        <tr v-for="(log, idx) in sqlLogs" :key="idx">
+                            <td class="mono" style="font-size:.78rem;color:#64748b;white-space:nowrap">{{ fmtTime(log.timestamp) }}</td>
+                            <td><strong>{{ log.username }}</strong></td>
+                            <td class="mono" style="font-size:.78rem">{{ log.datasourceName }}</td>
+                            <td>
+                                <span class="badge-status" :class="log.status === 'SUCCESS' ? 'badge-success' : 'badge-failure'">
+                                    <svg v-if="log.status === 'SUCCESS'" viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                    <svg v-else viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                                    {{ log.status === 'SUCCESS' ? t('audit.success') : t('audit.failure') }}
+                                </span>
+                            </td>
+                            <td class="mono" style="font-size:.78rem">{{ log.executionTimeMs }}ms</td>
+                            <td class="mono" style="font-size:.78rem">{{ log.affectedRows ?? '-' }}</td>
+                            <td class="log-sql-preview" :title="log.sql">{{ log.sql }}</td>
+                            <td>
+                                <button class="log-action-btn" @click="showSqlDetail(log)" :title="t('audit.viewDetail')">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                </div>
+                <div class="empty-state" v-if="sqlLogs.length === 0 && !loading">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="#cbd5e1"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5-7l-3 3.72L9 13l-3 4h12l-4-5z"/></svg>
+                    <p>{{ t('audit.noSqlLogs') }}</p>
+                </div>
+                <div class="pagination-bar" v-if="sqlTotal > sqlPageSize">
+                    <span class="pagination-info">{{ t('audit.total') }} {{ sqlTotal }} {{ t('audit.rows') }}</span>
+                    <div class="pagination-controls">
+                        <button class="btn btn-light btn-sm" :disabled="sqlOffset === 0" @click="changeSqlPage(-1)">{{ t('audit.prevPage') }}</button>
+                        <button class="btn btn-light btn-sm" :disabled="sqlOffset + sqlPageSize >= sqlTotal" @click="changeSqlPage(1)">{{ t('audit.nextPage') }}</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Detail Modal -->
+        <div class="modal-overlay" v-if="detail" @click.self="detail = null">
+            <div class="modal-box">
+                <div class="modal-box-header">
+                    <h5><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="vertical-align:-3px;margin-right:6px"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>{{ t('audit.logDetail') }}</h5>
+                    <button class="btn-close" @click="detail = null"></button>
+                </div>
+                <div class="modal-box-body">
+                    <div class="detail-grid">
+                        <div class="detail-field">
+                            <span class="detail-field-label">{{ t('audit.type') }}</span>
+                            <span class="detail-field-value">{{ detail.type }}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">{{ t('audit.status') }}</span>
+                            <span class="detail-field-value">
+                                <span class="badge-status" :class="detail.status === 'SUCCESS' ? 'badge-success' : 'badge-failure'">
+                                    <svg v-if="detail.status === 'SUCCESS'" viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                    <svg v-else viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                                    {{ detail.status === 'SUCCESS' ? t('audit.success') : t('audit.failure') }}
+                                </span>
+                            </span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">{{ t('audit.operationUser') }}</span>
+                            <span class="detail-field-value">{{ detail.username }}</span>
+                        </div>
+                        <div class="detail-field">
+                            <span class="detail-field-label">{{ t('audit.operationTime') }}</span>
+                            <span class="detail-field-value mono">{{ fmtTime(detail.timestamp) }}</span>
+                        </div>
+                        <div class="detail-field" v-if="detail.targetHost">
+                            <span class="detail-field-label">{{ t('audit.targetHost2') }}</span>
+                            <span class="detail-field-value mono">{{ detail.targetHost }}:{{ detail.targetPort }}</span>
+                        </div>
+                        <div class="detail-field" v-if="detail.targetUser">
+                            <span class="detail-field-label">{{ t('audit.targetUser') }}</span>
+                            <span class="detail-field-value">{{ detail.targetUser }}</span>
+                        </div>
+                        <div class="detail-field" v-if="detail.sessionId">
+                            <span class="detail-field-label">{{ t('audit.sessionId') }}</span>
+                            <span class="detail-field-value mono">{{ detail.sessionId }}</span>
+                        </div>
+                        <div class="detail-field" v-if="detail.datasourceName">
+                            <span class="detail-field-label">{{ t('audit.dataSource2') }}</span>
+                            <span class="detail-field-value mono">{{ detail.datasourceName }}</span>
+                        </div>
+                        <div class="detail-field" v-if="detail.connectionTimeMs">
+                            <span class="detail-field-label">{{ t('audit.connectionDuration') }}</span>
+                            <span class="detail-field-value">{{ fmtDuration(detail.connectionTimeMs) }}</span>
+                        </div>
+                        <div class="detail-field" v-if="detail.executionTimeMs">
+                            <span class="detail-field-label">{{ t('audit.executionTime') }}</span>
+                            <span class="detail-field-value">{{ detail.executionTimeMs }} ms</span>
+                        </div>
+                        <div class="detail-field" v-if="detail.affectedRows != null">
+                            <span class="detail-field-label">{{ t('audit.affectedRows') }}</span>
+                            <span class="detail-field-value">{{ detail.affectedRows }}</span>
+                        </div>
+                        <div class="detail-field" v-if="detail.errorMessage">
+                            <span class="detail-field-label">{{ t('audit.errorMessage') }}</span>
+                            <span class="detail-field-value" style="color:#dc2626">{{ detail.errorMessage }}</span>
+                        </div>
+                        <div class="detail-field full" v-if="detail.sql">
+                            <span class="detail-field-label">{{ t('audit.sqlStatement') }}</span>
+                            <pre class="detail-field-value mono">{{ detail.sql }}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const { createApp } = Vue;
+
+        var enAuditTexts = {
+            'audit.brand': 'Audit Dashboard',
+            'audit.refresh': 'Refresh',
+            'audit.backToHome': 'Back to Home',
+            'audit.lastUpdated': 'Last updated:',
+            'audit.sshTotalConnections': 'SSH Total Connections',
+            'audit.sshFailedConnections': 'SSH Failed Connections',
+            'audit.sqlTotalExecutions': 'SQL Total Executions',
+            'audit.sqlFailedExecutions': 'SQL Failed Executions',
+            'audit.sshLoginAudit': 'SSH Login Audit',
+            'audit.sshCommandAudit': 'SSH Command Audit',
+            'audit.sqlExecutionAudit': 'SQL Execution Audit',
+            'audit.filter': 'Filter',
+            'audit.allUsers': 'All Users',
+            'audit.targetHost': 'Target Host',
+            'audit.dataSource': 'Data Source',
+            'audit.allStatus': 'All Status',
+            'audit.success': 'Success',
+            'audit.failure': 'Failure',
+            'audit.search': 'Search',
+            'audit.reset': 'Reset',
+            'audit.type': 'Type',
+            'audit.time': 'Time',
+            'audit.user': 'User',
+            'audit.targetServer': 'Target Server',
+            'audit.session': 'Session',
+            'audit.status': 'Status',
+            'audit.action': 'Action',
+            'audit.connect': 'Connect',
+            'audit.viewDetail': 'View Detail',
+            'audit.noSshLogs': 'No SSH connection records',
+            'audit.noSshCmds': 'No SSH command records',
+            'audit.noSqlLogs': 'No SQL execution records',
+            'audit.total': 'Total',
+            'audit.current': 'Current',
+            'audit.prevPage': 'Prev',
+            'audit.nextPage': 'Next',
+            'audit.command': 'Command',
+            'audit.executionTime': 'Execution Time',
+            'audit.affectedRows': 'Affected Rows',
+            'audit.sqlPreview': 'SQL Preview',
+            'audit.logDetail': 'Log Detail',
+            'audit.operationUser': 'Operator',
+            'audit.operationTime': 'Operation Time',
+            'audit.targetHost2': 'Target Host',
+            'audit.targetUser': 'Target User',
+            'audit.sessionId': 'Session ID',
+            'audit.dataSource2': 'Data Source',
+            'audit.connectionDuration': 'Connection Duration',
+            'audit.errorMessage': 'Error Message',
+            'audit.sqlStatement': 'SQL Statement',
+            'audit.loadConfigFailed': 'Failed to load config',
+            'audit.loadStatsFailed': 'Failed to load statistics',
+            'audit.loadSshLogsFailed': 'Failed to load SSH logs',
+            'audit.loadSshCmdsFailed': 'Failed to load SSH commands',
+            'audit.loadSqlLogsFailed': 'Failed to load SQL logs',
+            'audit.rows': 'records',
+            'audit.startTime': 'Start Time',
+            'audit.endTime': 'End Time'
+        };
+
+        var zhAuditTexts = {
+            'audit.brand': '审计看板',
+            'audit.refresh': '刷新',
+            'audit.backToHome': '返回首页',
+            'audit.lastUpdated': '最后更新:',
+            'audit.sshTotalConnections': 'SSH 连接总数',
+            'audit.sshFailedConnections': 'SSH 连接失败',
+            'audit.sqlTotalExecutions': 'SQL 执行总数',
+            'audit.sqlFailedExecutions': 'SQL 执行失败',
+            'audit.sshLoginAudit': 'SSH 登录审计',
+            'audit.sshCommandAudit': 'SSH 命令审计',
+            'audit.sqlExecutionAudit': 'SQL 执行审计',
+            'audit.filter': '筛选',
+            'audit.allUsers': '全部用户',
+            'audit.targetHost': '目标主机',
+            'audit.dataSource': '数据源',
+            'audit.allStatus': '全部状态',
+            'audit.success': '成功',
+            'audit.failure': '失败',
+            'audit.search': '查询',
+            'audit.reset': '重置',
+            'audit.type': '类型',
+            'audit.time': '时间',
+            'audit.user': '用户',
+            'audit.targetServer': '目标服务器',
+            'audit.session': '会话',
+            'audit.status': '状态',
+            'audit.action': '操作',
+            'audit.connect': '连接',
+            'audit.viewDetail': '查看详情',
+            'audit.noSshLogs': '暂无 SSH 连接记录',
+            'audit.noSshCmds': '暂无 SSH 命令记录',
+            'audit.noSqlLogs': '暂无 SQL 执行记录',
+            'audit.total': '共',
+            'audit.current': '当前',
+            'audit.prevPage': '上一页',
+            'audit.nextPage': '下一页',
+            'audit.command': '命令',
+            'audit.executionTime': '耗时',
+            'audit.affectedRows': '影响行数',
+            'audit.sqlPreview': 'SQL 预览',
+            'audit.logDetail': '日志详情',
+            'audit.operationUser': '操作用户',
+            'audit.operationTime': '操作时间',
+            'audit.targetHost2': '目标主机',
+            'audit.targetUser': '目标用户',
+            'audit.sessionId': '会话ID',
+            'audit.dataSource2': '数据源',
+            'audit.connectionDuration': '连接时长',
+            'audit.errorMessage': '错误信息',
+            'audit.sqlStatement': 'SQL 语句',
+            'audit.loadConfigFailed': '加载配置失败',
+            'audit.loadStatsFailed': '加载统计失败',
+            'audit.loadSshLogsFailed': '加载SSH日志失败',
+            'audit.loadSshCmdsFailed': '加载SSH命令失败',
+            'audit.loadSqlLogsFailed': '加载SQL日志失败',
+            'audit.rows': '条',
+            'audit.startTime': '开始时间',
+            'audit.endTime': '结束时间'
+        };
+
+        var auditLocaleMessages = {};
+        async function loadAuditLocaleMessages(locale) {
+            try {
+                var res = await fetch('/js/locale/' + locale + '.json');
+                if (!res.ok) throw new Error('Failed to load locale');
+                auditLocaleMessages = await res.json();
+            } catch (e) {
+                console.error('Failed to load locale:', e);
+            }
+        }
+        loadAuditLocaleMessages(localStorage.getItem('locale') || 'en');
+
+        var auditAllTexts = { 'en': enAuditTexts, 'zh_CN': zhAuditTexts };
+
+        createApp({
+            data() {
+                return {
+                    locale: localStorage.getItem('locale') || 'en',
+                    activeTab: 'ssh',
+                    loading: false,
+                    lastUpdated: '',
+                    configUsernames: [],
+                    stats: {
+                        ssh: {},
+                        sql: {},
+                        users: []
+                    },
+                    // SSH
+                    sshLogs: [],
+                    sshTotal: 0,
+                    sshOffset: 0,
+                    pageSize: 30,
+                    // SSH Commands
+                    sshCmds: [],
+                    cmdTotal: 0,
+                    cmdOffset: 0,
+                    cmdPageSize: 50,
+                    // SQL
+                    sqlLogs: [],
+                    sqlTotal: 0,
+                    sqlOffset: 0,
+                    sqlPageSize: 30,
+                    // Filter
+                    filters: {
+                        username: '',
+                        host: '',
+                        datasource: '',
+                        status: '',
+                        startTime: '',
+                        endTime: ''
+                    },
+                    detail: null
+                };
+            },
+            mounted() {
+                this.loadConfig();
+                this.loadAll();
+                this.updateTitle();
+            },
+            methods: {
+                t: function(key) {
+                    var merged = Object.assign({}, auditAllTexts[this.locale] || auditAllTexts['en'], auditLocaleMessages);
+                    return merged[key] || key.split('.').pop();
+                },
+                updateTitle: function() {
+                    var merged = Object.assign({}, auditAllTexts[this.locale] || auditAllTexts['en'], auditLocaleMessages);
+                    document.title = (merged['audit.brand'] || 'Audit Dashboard') + ' - Web Tool';
+                },
+                setLanguage: function(locale) {
+                    this.locale = locale;
+                    localStorage.setItem('locale', locale);
+                    loadAuditLocaleMessages(locale);
+                    this.updateTitle();
+                },
+                async loadConfig() {
+                    try {
+                        const res = await axios.get('/api/audit/config');
+                        this.configUsernames = res.data.usernames || [];
+                    } catch (e) {
+                        console.error(this.t('audit.loadConfigFailed'), e);
+                    }
+                },
+                async loadAll() {
+                    await Promise.all([
+                        this.loadStats(),
+                        this.loadSshLogs(),
+                        this.loadSshCommands(),
+                        this.loadSqlLogs()
+                    ]);
+                    this.lastUpdated = new Date().toLocaleTimeString('zh-CN');
+                },
+                async loadStats() {
+                    try {
+                        const res = await axios.get('/api/audit/overview');
+                        this.stats = res.data;
+                    } catch (e) {
+                        console.error(this.t('audit.loadStatsFailed'), e);
+                    }
+                },
+                async loadSshLogs() {
+                    this.loading = true;
+                    try {
+                        const params = { limit: this.pageSize, offset: this.sshOffset };
+                        if (this.filters.username) params.username = this.filters.username;
+                        if (this.filters.host) params.host = this.filters.host;
+                        if (this.filters.status) params.status = this.filters.status;
+                        if (this.filters.startTime) params.startTime = this.filters.startTime;
+                        if (this.filters.endTime) params.endTime = this.filters.endTime;
+                        const res = await axios.get('/api/audit/ssh', { params });
+                        this.sshLogs = res.data.data || [];
+                        this.sshTotal = res.data.total || 0;
+                    } catch (e) {
+                        console.error(this.t('audit.loadSshLogsFailed'), e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                async loadSshCommands() {
+                    this.loading = true;
+                    try {
+                        const params = { limit: this.cmdPageSize, offset: this.cmdOffset };
+                        if (this.filters.username) params.username = this.filters.username;
+                        if (this.filters.host) params.host = this.filters.host;
+                        if (this.filters.startTime) params.startTime = this.filters.startTime;
+                        if (this.filters.endTime) params.endTime = this.filters.endTime;
+                        const res = await axios.get('/api/audit/ssh/commands', { params });
+                        this.sshCmds = res.data.data || [];
+                        this.cmdTotal = res.data.total || 0;
+                    } catch (e) {
+                        console.error(this.t('audit.loadSshCmdsFailed'), e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                async loadSqlLogs() {
+                    this.loading = true;
+                    try {
+                        const params = { limit: this.sqlPageSize, offset: this.sqlOffset };
+                        if (this.filters.username) params.username = this.filters.username;
+                        if (this.filters.datasource) params.datasource = this.filters.datasource;
+                        if (this.filters.status) params.status = this.filters.status;
+                        if (this.filters.startTime) params.startTime = this.filters.startTime;
+                        if (this.filters.endTime) params.endTime = this.filters.endTime;
+                        const res = await axios.get('/api/audit/sql', { params });
+                        this.sqlLogs = res.data.data || [];
+                        this.sqlTotal = res.data.total || 0;
+                    } catch (e) {
+                        console.error(this.t('audit.loadSqlLogsFailed'), e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                switchTab(tab) {
+                    this.activeTab = tab;
+                },
+                applyFilters() {
+                    if (this.activeTab === 'ssh') {
+                        this.sshOffset = 0;
+                        this.loadSshLogs();
+                    } else if (this.activeTab === 'ssh-cmd') {
+                        this.cmdOffset = 0;
+                        this.loadSshCommands();
+                    } else {
+                        this.sqlOffset = 0;
+                        this.loadSqlLogs();
+                    }
+                },
+                clearFilters() {
+                    this.filters = { username: '', host: '', datasource: '', status: '', startTime: '', endTime: '' };
+                    this.sshOffset = 0;
+                    this.cmdOffset = 0;
+                    this.sqlOffset = 0;
+                    this.applyFilters();
+                },
+                changePage(dir) {
+                    this.sshOffset = Math.max(0, this.sshOffset + dir * this.pageSize);
+                    this.loadSshLogs();
+                },
+                changeCmdPage(dir) {
+                    this.cmdOffset = Math.max(0, this.cmdOffset + dir * this.cmdPageSize);
+                    this.loadSshCommands();
+                },
+                changeSqlPage(dir) {
+                    this.sqlOffset = Math.max(0, this.sqlOffset + dir * this.sqlPageSize);
+                    this.loadSqlLogs();
+                },
+                showDetail(log) { this.detail = log; },
+                showSqlDetail(log) { this.detail = log; },
+                fmtTime(ts) {
+                    if (!ts) return '-';
+                    return ts.replace('T', ' ').substring(0, 19);
+                },
+                fmtDuration(ms) {
+                    if (!ms) return '-';
+                    const s = Math.floor(ms / 1000);
+                    const h = Math.floor(s / 3600);
+                    const m = Math.floor((s % 3600) / 60);
+                    const sec = s % 60;
+                    let r = '';
+                    if (h > 0) r += h + 'h ';
+                    if (m > 0) r += m + 'm ';
+                    r += sec + 's';
+                    return r;
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>

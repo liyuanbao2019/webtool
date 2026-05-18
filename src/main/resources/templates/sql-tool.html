@@ -1,0 +1,3851 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 禁用浏览器缓存 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>SQL Executor</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link href="/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="/css/style.css" rel="stylesheet">
+    <!-- Vue 3 & Axios -->
+    <script src="/js/vue.global.prod.js"></script>
+    <script src="/js/axios.min.js"></script>
+    <!-- CryptoJS for AES decryption -->
+    <script src="/js/crypto-js.min.js"></script>
+    <!-- CodeMirror 5 -->
+    <link href="/css/codemirror/codemirror.min.css" rel="stylesheet">
+    <link href="/css/codemirror/dracula.min.css" rel="stylesheet">
+    <link href="/css/codemirror/show-hint.min.css" rel="stylesheet">
+    <script src="/js/codemirror/codemirror.min.js"></script>
+    <script src="/js/codemirror/sql.min.js"></script>
+    <script src="/js/codemirror/show-hint.min.js"></script>
+    <script src="/js/codemirror/sql-hint.min.js"></script>
+    <script src="/js/sql-formatter.min.js"></script>
+    <style>
+        :root {
+            --base-font-size: 14px;
+        }
+
+        body {
+            background-color: #f4f6f9;
+            height: 100vh;
+            height: 100dvh; /* 现代浏览器动态高度，防止底部工具栏遮挡 */
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #app {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .sql-header {
+            height: 36px;
+            background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            justify-content: space-between;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            z-index: 10;
+        }
+
+        .sql-header h5 {
+            font-size: calc(var(--base-font-size) * 1.1) !important;
+            margin: 0;
+        }
+
+        .sql-header .form-select,
+        .sql-header .input-group-text,
+        .sql-header .btn {
+            font-size: var(--base-font-size) !important;
+            padding: 2px 8px !important;
+            height: 24px !important;
+            min-height: 24px !important;
+            line-height: 1 !important;
+        }
+
+        .main-layout {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            min-height: 0; /* 关键修复：防止 Flex 子元素被内容撑出滚动边界 */
+        }
+
+        /* Sidebar History */
+        .history-sidebar {
+            width: 250px;
+            min-height: 0;
+            background: #fff;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+        }
+
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .object-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .object-item {
+            padding: 4px 10px;
+            border-bottom: 1px solid #f5f5f5;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: var(--base-font-size);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .object-item:hover {
+            background-color: #e8f4f8;
+        }
+
+        .accordion-button {
+            font-size: var(--base-font-size);
+            padding: 6px 12px;
+        }
+
+        .accordion-button:not(.collapsed) {
+            background-color: #f8f9fa;
+            color: #212529;
+        }
+
+        .history-item .meta {
+            font-size: calc(var(--base-font-size) * 0.9);
+            color: #999;
+            margin-top: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .accordion-button:focus {
+            box-shadow: none;
+            border-color: transparent;
+        }
+
+        .accordion-item {
+            border: none;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        /* 侧栏中部：对象列表可滚动，底部工具区固定 */
+        .history-sidebar-scroll {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
+        .sidebar-common-tools {
+            flex-shrink: 0;
+            border-top: 1px solid #e0e0e0;
+            background: #fafbfc;
+            padding: 8px 8px 10px;
+        }
+
+        .sidebar-common-tools-head {
+            margin-bottom: 7px;
+        }
+
+        .sidebar-common-tools-title {
+            font-size: calc(var(--base-font-size) * 0.75);
+            font-weight: 600;
+            color: #6c757d;
+            letter-spacing: 0.03em;
+        }
+
+        /* 3 列小方块卡片 */
+        .sidebar-tools-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+
+        .sidebar-tool-card {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 8px 4px 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            background: #fff;
+            transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+        }
+
+        .sidebar-tool-card:hover:not(:disabled) {
+            border-color: #0d6efd;
+            background: #e8f4fc;
+            box-shadow: 0 1px 4px rgba(13, 110, 253, 0.12);
+        }
+
+        .sidebar-tool-card:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .sidebar-tool-card-icon {
+            font-size: 1rem;
+            color: #0d6efd;
+            line-height: 1;
+        }
+
+        .sidebar-tool-card-label {
+            font-size: 0.62rem;
+            color: #495057;
+            line-height: 1.25;
+            text-align: center;
+            word-break: break-all;
+        }
+
+        .sidebar-tool-card-badge {
+            font-size: 0.55rem;
+            padding: 1px 3px;
+            border-radius: 3px;
+            background: #e7f1ff;
+            color: #0d6efd;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        /* Sidebar toggle button */
+        .sidebar-toggle-btn {
+            position: fixed;
+            left: 15px;
+            top: 80px;
+            z-index: 100;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+        }
+
+        .sidebar-toggle-btn:hover {
+            background: #0d6efd;
+            color: white;
+            box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+            transform: translateY(-2px);
+        }
+
+        /* Editor Area */
+        .editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 6px;
+            gap: 6px;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .input-area {
+            height: 260px;
+            flex-shrink: 0;
+            /* Default height */
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            position: relative;
+            /* For resize handle */
+        }
+
+        .resize-handle {
+            height: 8px;
+            background: #f1f3f5;
+            cursor: row-resize;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.2s;
+            flex-shrink: 0;
+            /* 防止被压缩 */
+        }
+
+        .resize-handle:hover,
+        .resize-handle.active {
+            background: #e9ecef;
+        }
+
+        .resize-handle::after {
+            content: "";
+            width: 30px;
+            height: 4px;
+            background: #ced4da;
+            border-radius: 2px;
+        }
+
+        /* CodeMirror Customization */
+        .CodeMirror {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: var(--base-font-size);
+            border-radius: 8px 8px 0 0;
+            line-height: 1.4;
+        }
+
+        .toolbar {
+            padding: 4px 10px;
+            background: #f8f9fa;
+            border-top: 1px solid #eee;
+            border-radius: 0 0 8px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sql-tabs {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 6px;
+            border-bottom: 1px solid #eee;
+            background: #fafbfc;
+            overflow-x: auto;
+            flex-shrink: 0;
+            height: 28px;
+        }
+
+        .sql-tab-item {
+            display: inline-flex;
+            align-items: center;
+            max-width: 180px;
+            padding: 1px 6px;
+            border: 1px solid #d9dce1;
+            border-radius: 4px;
+            background: #fff;
+            color: #495057;
+            cursor: pointer;
+            font-size: var(--base-font-size);
+            gap: 4px;
+            user-select: none;
+            height: 22px;
+        }
+
+        .sql-tab-item.active {
+            background: #e8f0fe;
+            border-color: #86b7fe;
+            color: #0d6efd;
+            font-weight: 600;
+        }
+
+        .sql-tab-title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .sql-tab-close {
+            border: none;
+            background: transparent;
+            color: #6c757d;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .sql-tab-add {
+            min-width: 24px;
+            height: 22px;
+            border-radius: 4px;
+            padding: 0;
+            font-size: var(--base-font-size);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .toolbar .btn {
+            font-size: var(--base-font-size) !important;
+            padding: 2px 8px !important;
+            height: 24px !important;
+            line-height: 1 !important;
+        }
+
+        .toolbar .text-muted {
+            font-size: calc(var(--base-font-size) * 0.9) !important;
+        }
+
+        /* Result Area */
+        .result-area {
+            flex: 1;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .result-header {
+            padding: 4px 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            font-size: var(--base-font-size);
+            background: #fcfcfc;
+            flex-shrink: 0;
+        }
+
+        .table-container {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            min-height: 0;
+            /* 移除 max-height 让表格完全撑满 result-area 的剩余部分并在此处滚动 */
+        }
+
+        .result-table {
+            font-size: var(--base-font-size);
+            margin-bottom: 0;
+            width: 100%;
+        }
+
+        .result-table th {
+            font-weight: 600;
+            background-color: #f8f9fa;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            padding: 6px 8px;
+            color: #495057;
+            white-space: nowrap;
+        }
+
+        .result-table td {
+            padding: 4px 8px;
+            border-bottom: 1px solid #eee;
+            white-space: nowrap;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #adb5bd;
+        }
+
+        /* Utilities */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: calc(var(--base-font-size) * 0.9);
+            font-weight: 500;
+        }
+
+        .status-badge.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #aaa;
+        }
+
+        .result-footer {
+            padding: 10px 15px 20px 15px; /* 增加底部 padding 防止浏览器底部遮挡 */
+            border-top: 1px solid #eee;
+            background: #fbfbfb;
+            display: flex;
+            flex-wrap: wrap; /* 允许换行，避免挤压时撑出屏幕外 */
+            gap: 10px;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+
+        /* Context Menu */
+        .context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            min-width: 150px;
+            padding: 4px 0;
+        }
+
+        .context-menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .context-menu-item:hover {
+            background-color: #f0f0f0;
+        }
+
+        .context-menu-item i {
+            width: 16px;
+        }
+        .sql-header .lang-switcher {
+            display: flex;
+            gap: 2px;
+            background: #f0f0f0;
+            border-radius: .3rem;
+            padding: 2px;
+        }
+
+        .sql-header .lang-btn {
+            border: none;
+            background: transparent;
+            color: #666;
+            padding: 3px 8px;
+            border-radius: .25rem;
+            font-size: .72rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+
+        .sql-header .lang-btn:hover {
+            color: #0d6efd;
+        }
+
+        .sql-header .lang-btn.active {
+            background: #fff;
+            color: #0d6efd;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="sql-header">
+            <div class="d-flex align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fas fa-database text-primary"></i>
+                    <h5 class="mb-0 fw-bold text-dark">SQL Executor</h5>
+                </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-3">
+                <!-- Language Switcher -->
+                <div class="lang-switcher">
+                    <button class="lang-btn" :class="{active: locale === 'en'}" @click="setLanguage('en')">EN</button>
+                    <button class="lang-btn" :class="{active: locale === 'zh_CN'}" @click="setLanguage('zh_CN')">{{ t('sql.langZh') }}</button>
+                </div>
+                <!-- Font Size Settings -->
+                <div class="d-flex align-items-center gap-1 border-end pe-3">
+                    <button class="btn btn-outline-secondary" @click="baseFontSize = Math.max(10, baseFontSize - 1)"
+                        :title="t('sql.zoomOut')">A-</button>
+                    <span class="text-secondary mx-1"
+                        style="font-size: 13px; min-width: 20px; text-align: center; line-height: 1;">{{ baseFontSize
+                        }}</span>
+                    <button class="btn btn-outline-secondary" @click="baseFontSize = Math.min(24, baseFontSize + 1)"
+                        :title="t('sql.zoomIn')">A+</button>
+                </div>
+
+                <div class="input-group" style="width: 200px;">
+                    <label class="input-group-text bg-light"><i class="fas fa-server"></i></label>
+                    <select class="form-select" v-model="selectedDataSourceIdx" @change="fetchDatabaseType">
+                        <option v-for="ds in dataSources" :key="ds.index" :value="ds.index">
+                            {{ ds.name }} ({{ ds.username }})
+                        </option>
+                    </select>
+                </div>
+                <button class="btn btn-outline-secondary" @click="testConnection">
+                    <i class="fas fa-plug"></i> {{ t('sql.testConnection') }}
+                </button>
+            </div>
+        </header>
+
+        <div class="main-layout">
+            <!-- Database Objects Sidebar -->
+            <div class="history-sidebar"
+                :style="{ transform: showSidebar ? 'translateX(0)' : 'translateX(-100%)', width: showSidebar ? '280px' : '0' }">
+
+                <!-- Search Box -->
+                <div class="p-1 border-bottom bg-light d-flex align-items-center gap-1">
+                    <div class="input-group flex-grow-1">
+                        <button class="btn btn-outline-secondary"
+                            style="font-size: 0.7rem; padding: 2px 6px; height: 24px;" type="button"
+                            @click="forceReloadObjects" :title="t('sql.refresh')">
+                            <i class="fas fa-search"></i>
+                        </button>
+                        <input type="text" class="form-control"
+                            style="font-size: 0.75rem; padding: 2px 6px; height: 24px;" :placeholder="t('sql.searchObjects')"
+                            v-model="objectSearch" @keyup.enter="forceReloadObjects">
+                    </div>
+
+                    <button class="btn btn-outline-secondary" style="font-size: 0.7rem; padding: 2px 6px; height: 24px;"
+                        @click="showSidebar = false" :title="t('sql.hideObjectBrowser')">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                </div>
+
+                <!-- Accordion for Database Objects（可滚动区域） -->
+                <div class="history-sidebar-scroll">
+                <div class="accordion accordion-flush" id="dbObjectsAccordion">
+
+                    <!-- Tables -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                @click="loadDatabaseObjects('tables')" data-bs-toggle="collapse"
+                                data-bs-target="#collapseTables">
+                                <i class="fas fa-table me-2"></i>{{ t('sql.tables') }} <span v-if="loadedObjects.tables">({{
+                                    filteredObjects('tables').length }})</span>
+                            </button>
+                        </h2>
+                        <div id="collapseTables" class="accordion-collapse collapse"
+                            data-bs-parent="#dbObjectsAccordion">
+                            <div class="accordion-body p-0">
+                                <div v-if="loadingObjects.tables" class="text-center p-3 text-muted">
+                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                </div>
+                                <div v-else-if="filteredObjects('tables').length === 0"
+                                    class="text-center p-3 text-muted small">
+                                    {{ t('sql.noData') }}
+                                </div>
+                                <div v-else class="object-list">
+                                    <div v-for="obj in filteredObjects('tables')" :key="obj.name" class="object-item"
+                                        @click="handleObjectClick('tables', obj.name)"
+                                        @contextmenu.prevent="showContextMenu($event, obj.name)" :title="obj.name">
+                                        <i class="fas fa-table text-primary me-2"></i>{{ obj.name }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Views -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                @click="loadDatabaseObjects('views')" data-bs-toggle="collapse"
+                                data-bs-target="#collapseViews">
+                                <i class="fas fa-eye me-2"></i>{{ t('sql.views') }} <span v-if="loadedObjects.views">({{
+                                    filteredObjects('views').length }})</span>
+                            </button>
+                        </h2>
+                        <div id="collapseViews" class="accordion-collapse collapse"
+                            data-bs-parent="#dbObjectsAccordion">
+                            <div class="accordion-body p-0">
+                                <div v-if="loadingObjects.views" class="text-center p-3 text-muted">
+                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                </div>
+                                <div v-else-if="filteredObjects('views').length === 0"
+                                    class="text-center p-3 text-muted small">
+                                    {{ t('sql.noData') }}
+                                </div>
+                                <div v-else class="object-list">
+                                    <div v-for="obj in filteredObjects('views')" :key="obj.name" class="object-item"
+                                        @click="handleObjectClick('views', obj.name)" :title="obj.name">
+                                        <i class="fas fa-eye text-info me-2"></i>{{ obj.name }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Indexes -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                @click="loadDatabaseObjects('indexes')" data-bs-toggle="collapse"
+                                data-bs-target="#collapseIndexes">
+                                <i class="fas fa-sort-amount-down me-2"></i>{{ t('sql.indexes') }} <span v-if="loadedObjects.indexes">({{
+                                    filteredObjects('indexes').length }})</span>
+                            </button>
+                        </h2>
+                        <div id="collapseIndexes" class="accordion-collapse collapse"
+                            data-bs-parent="#dbObjectsAccordion">
+                            <div class="accordion-body p-0">
+                                <div v-if="loadingObjects.indexes" class="text-center p-3 text-muted">
+                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                </div>
+                                <div v-else-if="filteredObjects('indexes').length === 0"
+                                    class="text-center p-3 text-muted small">
+                                    {{ t('sql.noData') }}
+                                </div>
+                                <div v-else class="object-list">
+                                    <div v-for="obj in filteredObjects('indexes')" :key="obj.name" class="object-item"
+                                        @click="handleObjectClick('indexes', obj.name)" :title="obj.name">
+                                        <i class="fas fa-sort-amount-down text-warning me-2"></i>{{ obj.name }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Procedures/Functions -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                @click="loadDatabaseObjects('procedures')" data-bs-toggle="collapse"
+                                data-bs-target="#collapseProcedures">
+                                <i class="fas fa-code me-2"></i>{{ t('sql.procedures') }} <span v-if="loadedObjects.procedures">({{
+                                    filteredObjects('procedures').length }})</span>
+                            </button>
+                        </h2>
+                        <div id="collapseProcedures" class="accordion-collapse collapse"
+                            data-bs-parent="#dbObjectsAccordion">
+                            <div class="accordion-body p-0">
+                                <div v-if="loadingObjects.procedures" class="text-center p-3 text-muted">
+                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                </div>
+                                <div v-else-if="filteredObjects('procedures').length === 0"
+                                    class="text-center p-3 text-muted small">
+                                    {{ t('sql.noData') }}
+                                </div>
+                                <div v-else class="object-list">
+                                    <div v-for="obj in filteredObjects('procedures')" :key="obj.name"
+                                        class="object-item" @click="handleObjectClick('procedures', obj.name)"
+                                        :title="obj.name">
+                                        <i class="fas fa-code text-success me-2"></i>{{ obj.name }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Triggers -->
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                @click="loadDatabaseObjects('triggers')" data-bs-toggle="collapse"
+                                data-bs-target="#collapseTriggers">
+                                <i class="fas fa-bolt me-2"></i>{{ t('sql.triggers') }} <span v-if="loadedObjects.triggers">({{
+                                    filteredObjects('triggers').length }})</span>
+                            </button>
+                        </h2>
+                        <div id="collapseTriggers" class="accordion-collapse collapse"
+                            data-bs-parent="#dbObjectsAccordion">
+                            <div class="accordion-body p-0">
+                                <div v-if="loadingObjects.triggers" class="text-center p-3 text-muted">
+                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                </div>
+                                <div v-else-if="filteredObjects('triggers').length === 0"
+                                    class="text-center p-3 text-muted small">
+                                    {{ t('sql.noData') }}
+                                </div>
+                                <div v-else class="object-list">
+                                    <div v-for="obj in filteredObjects('triggers')" :key="obj.name" class="object-item"
+                                        @click="handleObjectClick('triggers', obj.name)" :title="obj.name">
+                                        <i class="fas fa-bolt text-danger me-2"></i>{{ obj.name }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sequences (Only for Oracle and DM) -->
+                    <div class="accordion-item" v-if="currentDbType !== 'MYSQL'">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                @click="loadDatabaseObjects('sequences')" data-bs-toggle="collapse"
+                                data-bs-target="#collapseSequences">
+                                <i class="fas fa-list-ol me-2"></i>{{ t('sql.sequences') }} <span v-if="loadedObjects.sequences">({{
+                                    filteredObjects('sequences').length }})</span>
+                            </button>
+                        </h2>
+                        <div id="collapseSequences" class="accordion-collapse collapse"
+                            data-bs-parent="#dbObjectsAccordion">
+                            <div class="accordion-body p-0">
+                                <div v-if="loadingObjects.sequences" class="text-center p-3 text-muted">
+                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                </div>
+                                <div v-else-if="filteredObjects('sequences').length === 0"
+                                    class="text-center p-3 text-muted small">
+                                    {{ t('sql.noData') }}
+                                </div>
+                                <div v-else class="object-list">
+                                    <div v-for="obj in filteredObjects('sequences')" :key="obj.name" class="object-item"
+                                        @click="handleObjectClick('sequences', obj.name)" :title="obj.name">
+                                        <i class="fas fa-list-ol text-secondary me-2"></i>{{ obj.name }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                </div>
+
+                <!-- 数据库管理 / 常用工具（3列小卡片，仅前端占位） -->
+                <div class="sidebar-common-tools">
+                    <div class="sidebar-common-tools-head">
+                        <div class="sidebar-common-tools-title">{{ t('sql.commonTools') }}</div>
+                    </div>
+                    <div class="sidebar-tools-grid">
+                        <button type="button" class="sidebar-tool-card"
+                            v-for="tool in commonTools"
+                            :key="tool.id"
+                            :disabled="selectedDataSourceIdx === null || (tool.requireOracle && !isOracleDb)"
+                            :title="t(tool.descKey)"
+                            @click="onCommonTool(tool)">
+                            <span class="sidebar-tool-card-icon"><i :class="tool.icon"></i></span>
+                            <span class="sidebar-tool-card-label">{{ t(tool.labelKey) }}</span>
+                            <span v-if="tool.requireOracle" class="sidebar-tool-card-badge">Oracle</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="editor-container">
+                <!-- Toggle Sidebar Button (when collapsed) -->
+                <button class="sidebar-toggle-btn" v-if="!showSidebar" @click="showSidebar = true" :title="t('sql.showObjectBrowser')">
+                    <i class="fas fa-list"></i>
+                </button>
+
+                <!-- Toggle Sidebar Button (when expanded) - inside sidebar -->
+
+                <!-- Input Area -->
+                <div class="input-area" :style="{ height: inputAreaHeight + 'px' }">
+                    <div class="sql-tabs">
+                        <div v-for="tab in tabs" :key="tab.id" class="sql-tab-item"
+                            :class="{ active: tab.id === activeTabId }" @click="switchTab(tab.id)"
+                            :title="tab.title + (tab.sql ? ' ' + t('sql.hasContent') : '')">
+                            <span class="sql-tab-title" @dblclick.stop="renameTab(tab)">{{ tab.title }}</span>
+                            <button class="sql-tab-close" @click.stop="closeTab(tab.id)" :title="t('sql.closeTab')">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <button class="btn btn-outline-primary btn-sm sql-tab-add" @click="newTab" :title="t('sql.newTab')">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <textarea ref="sqlEditor" :placeholder="t('sql.placeholder')"></textarea>
+                    <div class="toolbar">
+                        <div class="small text-muted">
+                            <span class="me-3"><i class="far fa-keyboard me-1"></i>{{ t('sql.executeTip') }}</span>
+                            <span class="me-3"><i class="fas fa-magic me-1"></i>{{ t('sql.autocompleteTip') }}</span>
+                            <span v-if="lastExecutionTime" class="text-success">
+                                <i class="fas fa-clock me-1"></i>{{ t('sql.executionTime') }} {{ lastExecutionTime }}ms
+                            </span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary btn-sm px-4" @click="executeSql"
+                                :disabled="!sql.trim() || loading">
+                                <i class="fas fa-play me-1" v-if="!loading"></i>
+                                <span v-else class="spinner-border spinner-border-sm me-1"></span>
+                                {{ t('sql.execute') }}
+                            </button>
+                            <button class="btn btn-info btn-sm px-3" @click="explainPlan"
+                                :disabled="!sql.trim() || loading" :title="t('sql.explainPlan')">
+                                <i class="fas fa-project-diagram me-1"></i>
+                                {{ t('sql.explainPlan') }}
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm px-3" @click="formatSql"
+                                :disabled="!sql.trim() || loading">
+                                <i class="fas fa-align-left me-1"></i>
+                                {{ t('sql.format') }}
+                            </button>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            <button class="btn btn-outline-primary btn-sm px-3" @click="openSqlTemplateModal">
+                                <i class="fas fa-list-check me-1"></i>
+                                {{ t('sql.template') }}
+                            </button>
+                            <button class="btn btn-light btn-sm" @click="sql = ''">{{ t('sql.clear') }}</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resize Handle -->
+                <div class="resize-handle" @mousedown="startResize"></div>
+
+                <!-- Result Area -->
+                <div class="result-area">
+                    <div class="loading-overlay" v-if="loading">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary mb-2" role="status"></div>
+                            <div class="text-secondary small">{{ t('sql.executing') }}</div>
+                        </div>
+                    </div>
+
+                    <div class="result-header">
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            <i class="fas fa-table text-secondary"></i>
+                            <span>{{ t('sql.result') }}</span>
+                            <span class="badge bg-secondary ms-2" v-if="currentResult">{{ currentResult.rowCount }}
+                                {{ t('sql.rows') }}</span>
+                        </div>
+
+                        <!-- Batch Result Tabs (左侧可滚动) -->
+                        <div class="mx-3 d-flex align-items-center flex-grow-1"
+                            style="overflow-x: auto; gap: 5px; min-width: 0;"
+                            v-if="result && result.batch && result.multiResults && result.multiResults.length > 0">
+                            <button v-for="(res, idx) in result.multiResults" :key="idx" class="btn text-nowrap"
+                                :class="activeResultTabIndex === idx ? 'btn-primary' : 'btn-outline-secondary'"
+                                :style="{ fontSize: 'var(--base-font-size)', padding: '2px 8px', height: 'auto' }"
+                                @click="activeResultTabIndex = idx" :title="res.sql">
+                                <i class="fas" :class="res.success ? 'fa-check text-success' : 'fa-times text-danger'"
+                                    v-if="!res.columns" :style="{ fontSize: 'var(--base-font-size)', marginRight: '3px' }"></i>
+                                <i class="fas fa-table text-primary" v-else
+                                    :style="{ fontSize: 'var(--base-font-size)', marginRight: '3px' }"></i>
+                                {{ t('sql.resultNum') }} {{ idx + 1 }}
+                            </button>
+                        </div>
+
+                        <!-- Batch: View Toggle + Export (右侧固定) -->
+                        <div class="d-flex align-items-center flex-shrink-0 gap-2"
+                            v-if="result && result.batch && result.multiResults && result.multiResults.length > 0">
+                            <div class="d-flex align-items-center gap-2"
+                                v-if="currentResult && currentResult.success && currentResult.columns">
+                                <button class="btn btn-link btn-sm text-decoration-none"
+                                    :class="textViewMode ? 'text-secondary' : 'text-primary fw-bold'"
+                                    @click="textViewMode = false" :title="t('sql.tableView')">
+                                    <i class="fas fa-table"></i> {{ t('sql.tableView') }}
+                                </button>
+                                <span class="text-muted">|</span>
+                                <button class="btn btn-link btn-sm text-decoration-none"
+                                    :class="textViewMode ? 'text-primary fw-bold' : 'text-secondary'"
+                                    @click="textViewMode = true" :title="t('sql.textView')">
+                                    <i class="fas fa-file-alt"></i> {{ t('sql.textView') }}
+                                </button>
+                            </div>
+                            <div class="dropdown" v-if="currentResult && currentResult.success">
+                                <button class="btn btn-link btn-sm text-primary text-decoration-none dropdown-toggle"
+                                    type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-download me-1"></i>{{ t('sql.export') }}
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportCsv">{{ t('sql.exportCsv') }}</a></li>
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportExcel">{{ t('sql.exportExcel') }}</a></li>
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportInsertSql">{{ t('sql.exportSql') }}</a></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Single query: view toggle + export (右侧固定) -->
+                        <div class="d-flex align-items-center flex-shrink-0 gap-2"
+                            v-if="!(result && result.batch && result.multiResults && result.multiResults.length > 0)">
+                            <div class="d-flex align-items-center gap-2"
+                                v-if="currentResult && currentResult.success && currentResult.columns">
+                                <button class="btn btn-link btn-sm text-decoration-none"
+                                    :class="textViewMode ? 'text-secondary' : 'text-primary fw-bold'"
+                                    @click="textViewMode = false" :title="t('sql.tableView')">
+                                    <i class="fas fa-table"></i> {{ t('sql.tableView') }}
+                                </button>
+                                <span class="text-muted">|</span>
+                                <button class="btn btn-link btn-sm text-decoration-none"
+                                    :class="textViewMode ? 'text-primary fw-bold' : 'text-secondary'"
+                                    @click="textViewMode = true" :title="t('sql.textView')">
+                                    <i class="fas fa-file-alt"></i> {{ t('sql.textView') }}
+                                </button>
+                            </div>
+
+                            <div class="dropdown" v-if="currentResult && currentResult.success">
+                                <button class="btn btn-link btn-sm text-primary text-decoration-none dropdown-toggle"
+                                    type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-download me-1"></i>{{ t('sql.export') }}
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportCsv">{{ t('sql.exportCsv') }}</a></li>
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportExcel">{{ t('sql.exportExcel') }}</a></li>
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportInsertSql">{{ t('sql.exportSql') }}</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-container">
+                        <!-- 表格视图 -->
+                        <table class="table table-hover result-table"
+                            v-if="currentResult && currentResult.success && currentResult.columns && !textViewMode">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">#</th>
+                                    <th v-for="col in currentResult.columns" :key="col">{{ col }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(row, idx) in paginatedRows" :key="idx">
+                                    <td class="text-muted">{{ (pagination.currentPage - 1) * pagination.pageSize + idx +
+                                        1 }}</td>
+                                    <td v-for="col in currentResult.columns" :key="col" :title="row[col]">
+                                        {{ formatCellValue(row[col]) }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <!-- 文本视图（Tab分隔，便于复制） -->
+                        <div v-if="currentResult && currentResult.success && currentResult.columns && textViewMode"
+                            class="p-2">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="text-muted small">{{ t('sql.textViewTip') }}</span>
+                            </div>
+                            <textarea class="form-control font-monospace" rows="15" readonly
+                                :value="textViewContent" :style="{ fontSize: 'var(--base-font-size)', resize: 'vertical', minHeight: '200px', whiteSpace: 'pre', overflowX: 'auto' }"
+                                @click="$event.target.select()"></textarea>
+                        </div>
+
+                        <!-- Update/Delete/Insert Result -->
+                        <div v-else-if="currentResult && currentResult.success && !currentResult.columns"
+                            class="p-5 text-center">
+                            <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                            <h5>{{ t('sql.success') }}</h5>
+                            <p class="text-secondary">
+                                {{ currentResult.sqlType }} {{ t('sql.affectedRows') }} <span class="fw-bold text-dark">{{
+                                    currentResult.affectedRows
+                                    }}</span> {{ t('sql.rows') }}
+                            </p>
+                        </div>
+
+                        <!-- Error Result -->
+                        <div v-else-if="currentResult && !currentResult.success" class="p-4">
+                            <div class="alert alert-danger">
+                                <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>{{ t('sql.error') }}</h6>
+                                <hr>
+                                <pre class="mb-0" style="white-space: pre-wrap;">{{ currentResult.errorMessage }}</pre>
+                            </div>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div v-else class="empty-state">
+                            <i class="fas fa-code text-light fa-4x mb-3" style="color: #e0e0e0 !important;"></i>
+                            <p>{{ t('sql.inputSqlTip') }}</p>
+                        </div>
+                    </div>
+
+                    <div class="result-footer"
+                        v-if="currentResult && currentResult.success && currentResult.rows && currentResult.rows.length > 0">
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="text-muted">
+                                {{ t('sql.showing') }} {{ pageStart }} {{ t('sql.to') }} {{ pageEnd }} {{ t('sql.of') }}
+                                <strong>{{ totalRowsText }}</strong> {{ t('sql.rows') }}
+                                <span v-if="effectiveServerPaging" class="badge bg-primary ms-1" style="font-size:0.7em;">{{ t('sql.serverSidePaging') }}</span>
+                            </span>
+                            <select class="form-select form-select-sm" style="width: auto;"
+                                v-model="pagination.pageSize"
+                                @change="() => { pagination.currentPage = 1; if (needsServerPagingRefetch) executeSqlInternal(lastExecutedSql, lastDatasourceIdx, null, 1, pagination.pageSize); }">
+                                <option v-for="size in pagination.pageSizeOptions" :key="size" :value="size">{{ size }}
+                                    {{ t('sql.rowsPerPage') }}</option>
+                            </select>
+                        </div>
+                        <nav>
+                            <ul class="pagination pagination-sm mb-0">
+                                <li class="page-item" :class="{ disabled: currentPageNum === 1 }">
+                                    <button class="page-link" @click="changePage(1)"><i
+                                            class="fas fa-angle-double-left"></i></button>
+                                </li>
+                                <li class="page-item" :class="{ disabled: currentPageNum === 1 }">
+                                    <button class="page-link" @click="changePage(currentPageNum - 1)"><i
+                                            class="fas fa-angle-left"></i></button>
+                                </li>
+                                <li class="page-item disabled">
+                                    <span class="page-link text-dark">{{ currentPageNum }} / {{ totalPages
+                                        }}</span>
+                                </li>
+                                <li class="page-item" :class="{ disabled: currentPageNum === totalPages }">
+                                    <button class="page-link" @click="changePage(currentPageNum + 1)"><i
+                                            class="fas fa-angle-right"></i></button>
+                                </li>
+                                <li class="page-item" :class="{ disabled: currentPageNum === totalPages }">
+                                    <button class="page-link" @click="changePage(totalPages)"><i
+                                            class="fas fa-angle-double-right"></i></button>
+                                </li>
+                            </ul>
+                        </nav>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dangerous SQL Confirmation Modal -->
+        <div class="modal fade" id="dangerousSqlModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"
+                style="max-width: min(980px, 94vw); max-height: 92vh;">
+                <div class="modal-content border-danger shadow" style="max-height: 92vh;">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-exclamation-triangle me-2"></i>{{ t('sql.dangerConfirm') }}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @click="cancelDangerousSql"></button>
+                    </div>
+                    <div class="modal-body fs-5" style="max-height: calc(92vh - 190px); overflow: auto;">
+                        <div class="alert alert-warning">
+                            <strong><i class="fas fa-server me-1"></i>{{ t('sql.operating') }}</strong>
+                            {{ t('sql.executingHighRisk') }} <strong class="text-danger">"{{ currentDatabaseName }}"</strong>
+                        </div>
+                        <div class="p-4 bg-dark text-danger fw-bold rounded my-3 text-center shadow-inner"
+                            style="font-size: 1.25rem; word-break: break-all; letter-spacing: 1px; max-height: 42vh; overflow: auto; white-space: pre-wrap; text-align: left;">
+                            {{ pendingSql }}
+                        </div>
+                        <div v-if="dangerousSqlReason" class="text-secondary small text-center mb-3">
+                            ({{ t('sql.blockedReason') }}: {{ dangerousSqlReason }})
+                        </div>
+                        <div class="text-center text-danger mb-2">
+                            <i class="fas fa-skull-crossbones fa-2x mb-2"></i>
+                            <h5 class="fw-bold mb-0">{{ t('sql.mayCauseDamage') }}</h5>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light justify-content-center"
+                        style="position: sticky; bottom: 0; z-index: 2; flex-wrap: wrap; gap: .5rem;">
+                        <button type="button" class="btn btn-secondary btn-lg me-3 px-4"
+                            @click="cancelDangerousSql">{{ t('sql.cancelExecute') }}</button>
+                        <button type="button" class="btn btn-danger btn-lg px-4" @click="confirmDangerousSql"
+                            :disabled="generatingToken">
+                            <span v-if="generatingToken" class="spinner-border spinner-border-sm me-1"></span>
+                            <i class="fas fa-check me-2" v-else></i>{{ t('sql.confirmExecute') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showSqlTemplateModal" class="modal d-block" style="background: rgba(0,0,0,0.5)"
+            @click.self="closeSqlTemplateModal">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-list-check me-2 text-primary"></i>{{ t('sql.sqlTemplateLib') }}
+                        </h5>
+                        <button type="button" class="btn-close" @click="closeSqlTemplateModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-8">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="text" class="form-control" v-model="sqlTemplateSearch"
+                                        :placeholder="t('sql.searchTemplate')">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <select class="form-select form-select-sm" v-model="sqlTemplateCategory">
+                                    <option value="">{{ t('sql.allCategories') }}</option>
+                                    <option v-for="category in sqlTemplateCategories" :key="category" :value="category">
+                                        {{ category }}
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="dbTypeSwitch"
+                                v-model="onlyCurrentDbTemplates">
+                            <label class="form-check-label" for="dbTypeSwitch">
+                                {{ t('sql.onlyCurrentDbType') }}: {{ currentDbType }})
+                            </label>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">{{ t('sql.selectTemplate') }}</label>
+                            <select class="form-select" v-model="selectedSqlTemplateId">
+                                <option disabled value="">{{ t('sql.selectTemplate') }}</option>
+                                <option v-for="tpl in filteredSqlTemplates" :key="tpl.id" :value="tpl.id">
+                                    [{{ t(tpl.categoryKey) }}][{{ (tpl.dbTypes || ['ORACLE','DM','MYSQL']).join('/') }}] {{
+                                    t(tpl.nameKey) }} - {{ t(tpl.descKey) }}
+                                </option>
+                            </select>
+                            <div v-if="filteredSqlTemplates.length === 0" class="form-text text-danger">
+                                {{ t('sql.templateNotFound') }}
+                            </div>
+                        </div>
+                        <div v-if="selectedSqlTemplate" class="mb-3">
+                            <div class="small text-muted mb-2">{{ t('sql.templateDescription') }}</div>
+                            <div class="bg-light border rounded p-2 small">{{ t(selectedSqlTemplate.descKey) }}</div>
+                        </div>
+                        <div v-if="sqlTemplateVariables.length > 0" class="mb-3">
+                            <label class="form-label fw-bold">{{ t('sql.templateParams') }}</label>
+                            <div class="row g-2">
+                                <div class="col-md-6" v-for="name in sqlTemplateVariables" :key="name">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text">${{ '{' + name + '}' }}</span>
+                                        <input class="form-control" v-model="sqlTemplateParams[name]"
+                                            :placeholder="t('sql.enterParam') + ' ' + name">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="selectedSqlTemplate">
+                            <div class="small text-muted mb-2">{{ t('sql.sqlPreview') }}</div>
+                            <pre class="bg-dark text-light rounded p-3 mb-0"
+                                style="max-height: 320px; white-space: pre-wrap;">{{ renderedSqlTemplate }}</pre>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" @click="closeSqlTemplateModal">{{ t('sql.cancel') }}</button>
+                        <button type="button" class="btn btn-outline-secondary" @click="copySqlTemplate"
+                            :disabled="!renderedSqlTemplate">
+                            <i class="fas fa-copy me-1"></i>{{ t('sql.copy') }}
+                        </button>
+                        <button type="button" class="btn btn-primary" @click="insertSqlTemplate"
+                            :disabled="!renderedSqlTemplate">
+                            <i class="fas fa-pen me-1"></i>{{ t('sql.overwrite') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast 通知容器 -->
+        <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+            <div class="toast" ref="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header"
+                    :class="toastType === 'success' ? 'bg-success text-white' : 'bg-danger text-white'">
+                    <i class="fas" :class="toastType === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'"
+                        style="margin-right: 8px;"></i>
+                    <strong class="me-auto">{{ toastTitle }}</strong>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+                </div>
+                <div class="toast-body">
+                    {{ toastMessage }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Context Menu -->
+        <div v-if="contextMenu.show" class="context-menu"
+            :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click="hideContextMenu">
+            <div class="context-menu-item" @click="viewTableStructure">
+                <i class="fas fa-table"></i>
+                <span>{{ t('sql.viewTableStructure') }}</span>
+            </div>
+        </div>
+
+        <!-- Table Structure Modal -->
+        <!-- 解锁库表弹窗 -->
+        <div class="modal fade" id="unlockTableModal" tabindex="-1" ref="unlockTableModal">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: min(900px, 94vw);">
+                <div class="modal-content">
+                    <div class="modal-header" style="background:#0d6efd;color:#fff;">
+                        <h5 class="modal-title"><i class="fas fa-unlock-alt me-2"></i>{{ t('sql.unlockTables') }}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" style="max-height: calc(92vh - 130px); overflow-y: auto;">
+                        <div v-if="lockData.loading" class="text-center py-5">
+                            <div class="spinner-border text-primary mb-2"></div>
+                            <div class="text-muted small">{{ t('sql.queryingLockInfo') }}</div>
+                        </div>
+                        <div v-else-if="lockData.error">
+                            <div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{{ lockData.error }}</div>
+                        </div>
+                        <div v-else>
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <span class="small text-muted">{{ t('sql.currentDatasource') }}<strong>{{ currentDatabaseName }}</strong></span>
+                                <button class="btn btn-outline-primary btn-sm" @click="fetchLockedObjects" :disabled="lockData.loading">
+                                    <i class="fas fa-redo me-1"></i>{{ t('sql.refresh') }}
+                                </button>
+                            </div>
+                            <div v-if="lockData.rows.length === 0" class="text-center py-4 text-muted">
+                                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                                <div>{{ t('sql.noBlockingLocks') }}</div>
+                            </div>
+                            <div v-else class="table-responsive">
+                                <table class="table table-bordered table-hover table-sm mb-0" style="font-size: 0.78rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width:40px;">#</th>
+                                            <th>{{ t('sql.objectName') }}</th>
+                                            <th>{{ t('sql.machine') }}</th>
+                                            <th>{{ t('sql.sid') }}</th>
+                                            <th>{{ t('sql.serial') }}</th>
+                                            <th>{{ t('sql.user') }}</th>
+                                            <th>{{ t('sql.program') }}</th>
+                                            <th>{{ t('sql.status') }}</th>
+                                            <th>{{ t('sql.lockDuration') }}</th>
+                                            <th>{{ t('sql.loginTime') }}</th>
+                                            <th style="width:70px;">{{ t('sql.action') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(row, idx) in lockData.rows" :key="idx">
+                                            <td class="text-muted">{{ idx + 1 }}</td>
+                                            <td><span class="badge bg-primary">{{ row.OBJECT_NAME }}</span></td>
+                                            <td>{{ row.MACHINE }}</td>
+                                            <td><code>{{ row.SID }}</code></td>
+                                            <td><code>{{ row.SERIAL_NUM }}</code></td>
+                                            <td>{{ row.USERNAME }}</td>
+                                            <td class="text-truncate" style="max-width:100px;" :title="row.PROGRAM">{{ row.PROGRAM }}</td>
+                                            <td><span :class="row.STATUS === 'ACTIVE' ? 'text-danger' : 'text-muted'">{{ row.STATUS }}</span></td>
+                                            <td><span :class="row.LOCK_DURATION_SECONDS > 300 ? 'text-danger fw-bold' : 'text-warning'">{{ formatLockDuration(row.LOCK_DURATION_SECONDS) }}</span></td>
+                                            <td>{{ row.LOGON_TIME }}</td>
+                                            <td>
+                                                <button class="btn btn-danger btn-sm py-0 px-1" style="font-size:0.7rem;"
+                                                    :disabled="lockData.unlocking === idx"
+                                                    @click="doUnlock(row, idx)"
+                                                    :title="t('sql.terminateSession')">
+                                                    <span v-if="lockData.unlocking === idx" class="spinner-border spinner-border-sm"></span>
+                                                    <i v-else class="fas fa-ban me-1"></i>{{ t('sql.terminate') }}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div class="small text-muted mt-1">{{ lockData.rows.length }} {{ t('sql.lockRecords') }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="tableStructureModal" tabindex="-1" ref="tableStructureModal">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-table text-primary me-2"></i>
+                            {{ currentTableName }}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Nav Tabs -->
+                        <ul class="nav nav-tabs" id="tableInfoTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="structure-tab" data-bs-toggle="tab"
+                                    data-bs-target="#structure" type="button" role="tab">
+                                    <i class="fas fa-columns me-1"></i>{{ t('sql.tableStructure') }}
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="indexes-tab" data-bs-toggle="tab" data-bs-target="#indexes"
+                                    type="button" role="tab" @click="loadTableIndexes">
+                                    <i class="fas fa-sort-amount-down me-1"></i>{{ t('sql.indexes') }}
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="partitions-tab" data-bs-toggle="tab"
+                                    data-bs-target="#partitions" type="button" role="tab" @click="loadTablePartitions">
+                                    <i class="fas fa-layer-group me-1"></i>{{ t('sql.partitions') }}
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="triggers-tab" data-bs-toggle="tab"
+                                    data-bs-target="#triggers" type="button" role="tab" @click="loadTableTriggers">
+                                    <i class="fas fa-bolt me-1"></i>{{ t('sql.triggers') }}
+                                </button>
+                            </li>
+                        </ul>
+
+                        <!-- Tab Content -->
+                        <div class="tab-content mt-3" id="tableInfoTabContent">
+                            <!-- 表结构标签页 -->
+                            <div class="tab-pane fade show active" id="structure" role="tabpanel">
+                                <div v-if="loadingTableStructure" class="text-center py-5">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                    <div class="mt-2">{{ t('sql.loading') }}</div>
+                                </div>
+                                <div v-else-if="tableStructure.length > 0">
+                                    <table class="table table-bordered table-hover table-sm">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 50px;">#</th>
+                                                <th>{{ t('sql.columnName') }}</th>
+                                                <th>{{ t('sql.dataType') }}</th>
+                                                <th style="width: 80px;">{{ t('sql.nullable') }}</th>
+                                                <th>{{ t('sql.defaultValue') }}</th>
+                                                <th>{{ t('sql.comment') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="(col, idx) in tableStructure" :key="idx">
+                                                <td class="text-muted">{{ idx + 1 }}</td>
+                                                <td>
+                                                    <i class="fas fa-key text-warning me-1" v-if="col.isPrimaryKey"
+                                                        :title="t('sql.primaryKey')"></i>
+                                                    <strong>{{ col.columnName }}</strong>
+                                                </td>
+                                                <td><code>{{ col.dataType }}</code></td>
+                                                <td>
+                                                    <span class="badge"
+                                                        :class="col.nullable === 'Y' ? 'bg-success' : 'bg-secondary'">
+                                                        {{ col.nullable === 'Y' ? 'YES' : 'NO' }}
+                                                    </span>
+                                                </td>
+                                                <td><span class="text-muted">{{ col.defaultValue || '-' }}</span></td>
+                                                <td>{{ col.comments || '-' }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div v-else class="text-center text-muted py-5">
+                                    <i class="fas fa-inbox fa-3x mb-3"></i>
+                                    <p>{{ t('sql.noTableStructure') }}</p>
+                                </div>
+                            </div>
+
+                            <!-- 索引标签页 -->
+                            <div class="tab-pane fade" id="indexes" role="tabpanel">
+                                <div v-if="loadingTableIndexes" class="text-center py-5">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                    <div class="mt-2">{{ t('sql.loading') }}</div>
+                                </div>
+                                <div v-else-if="tableIndexes.length > 0">
+                                    <table class="table table-bordered table-hover table-sm">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 50px;">#</th>
+                                                <th>{{ t('sql.indexName') }}</th>
+                                                <th>{{ t('sql.indexColumn') }}</th>
+                                                <th style="width: 100px;">{{ t('sql.uniqueness') }}</th>
+                                                <th style="width: 100px;">{{ t('sql.indexType') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="(idx, i) in tableIndexes" :key="i">
+                                                <td class="text-muted">{{ i + 1 }}</td>
+                                                <td><strong>{{ idx.indexName }}</strong></td>
+                                                <td><code>{{ idx.columnName }}</code></td>
+                                                <td>
+                                                    <span class="badge"
+                                                        :class="idx.uniqueness === 'UNIQUE' ? 'bg-primary' : 'bg-secondary'">
+                                                        {{ idx.uniqueness }}
+                                                    </span>
+                                                </td>
+                                                <td>{{ idx.indexType }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div v-else class="text-center text-muted py-5">
+                                    <i class="fas fa-inbox fa-3x mb-3"></i>
+                                    <p>{{ t('sql.noIndexes') }}</p>
+                                </div>
+                            </div>
+
+                            <!-- 分区标签页 -->
+                            <div class="tab-pane fade" id="partitions" role="tabpanel">
+                                <div v-if="loadingTablePartitions" class="text-center py-5">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                    <div class="mt-2">{{ t('sql.loading') }}</div>
+                                </div>
+                                <div v-else-if="tablePartitions.length > 0">
+                                    <table class="table table-bordered table-hover table-sm">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 50px;">#</th>
+                                                <th>{{ t('sql.partitionName') }}</th>
+                                                <th>{{ t('sql.partitionType') }}</th>
+                                                <th>{{ t('sql.partitionKey') }}</th>
+                                                <th>{{ t('sql.partitionValue') }}</th>
+                                                <th style="width: 120px;">{{ t('sql.subPartitions') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="(part, i) in tablePartitions" :key="i">
+                                                <td class="text-muted">{{ i + 1 }}</td>
+                                                <td><strong>{{ part.partitionName }}</strong></td>
+                                                <td><span class="badge bg-info">{{ part.partitionType }}</span></td>
+                                                <td><code>{{ part.partitionKey || '-' }}</code></td>
+                                                <td>{{ part.partitionValue || '-' }}</td>
+                                                <td class="text-center">{{ part.subPartitionCount || 0 }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div v-else class="text-center text-muted py-5">
+                                    <i class="fas fa-inbox fa-3x mb-3"></i>
+                                    <p>{{ t('sql.noPartitions') }}</p>
+                                </div>
+                            </div>
+
+                            <!-- 触发器标签页 -->
+                            <div class="tab-pane fade" id="triggers" role="tabpanel">
+                                <div v-if="loadingTableTriggers" class="text-center py-5">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                    <div class="mt-2">{{ t('sql.loading') }}</div>
+                                </div>
+                                <div v-else-if="tableTriggers.length > 0">
+                                    <table class="table table-bordered table-hover table-sm">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 50px;">#</th>
+                                                <th>{{ t('sql.triggerName') }}</th>
+                                                <th style="width: 120px;">{{ t('sql.triggerEvent') }}</th>
+                                                <th style="width: 100px;">{{ t('sql.triggerTiming') }}</th>
+                                                <th style="width: 80px;">{{ t('sql.status') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="(trg, i) in tableTriggers" :key="i">
+                                                <td class="text-muted">{{ i + 1 }}</td>
+                                                <td><strong>{{ trg.triggerName }}</strong></td>
+                                                <td><span class="badge bg-warning">{{ trg.triggeringEvent }}</span></td>
+                                                <td><span class="badge bg-secondary">{{ trg.triggerType }}</span></td>
+                                                <td>
+                                                    <span class="badge"
+                                                        :class="trg.status === 'ENABLED' ? 'bg-success' : 'bg-danger'">
+                                                        {{ trg.status }}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div v-else class="text-center text-muted py-5">
+                                    <i class="fas fa-inbox fa-3x mb-3"></i>
+                                    <p>{{ t('sql.noTriggers') }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" @click="generateCreateTableSQL">
+                            <i class="fas fa-code me-1"></i>{{ t('sql.generateCreateSql') }}
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('sql.close') }}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        var enSqlTexts = {
+            'sql.maxTabs': 'Maximum of {0} tabs supported',
+            'sql.renameTab': 'Enter new tab name',
+            'sql.query': 'Query',
+            'sql.newTabName': 'Enter new tab name',
+            'sql.selectDatasource': 'Please select a datasource first',
+            'sql.tip': 'Tip',
+            'sql.processing': 'Processing...',
+            'sql.refreshing': 'Refreshing...',
+            'sql.completed': 'Completed',
+            'sql.refreshComplete': 'Refresh completed, {0} tables',
+            'sql.refreshFailed': 'Refresh failed: {0}',
+            'sql.dataReloading': 'Reloading data...',
+            'sql.dataRefreshed': 'Data refreshed',
+            'sql.loadingFailed': 'Failed to load {0}: {1}',
+            'sql.getDdlFailed': 'Cannot get object DDL: {0}',
+            'sql.loadDatasourceFailed': 'Failed to load datasource: {0}',
+            'sql.connectionSuccess': 'Connection successful',
+            'sql.connectionTestSuccess': 'Database connection test successful!',
+            'sql.connectionFailed': 'Connection failed',
+            'sql.connectionError': 'Connection error',
+            'sql.formatSuccess': 'Format Success',
+            'sql.sqlAutoFormatted': 'SQL has been auto-formatted',
+            'sql.formatFailed': 'Format failed',
+            'sql.sqlSyntaxError': 'SQL statement may have syntax errors',
+            'sql.formatError': 'Format error',
+            'sql.formatterLoadFailed': 'SQL Formatter failed to load',
+            'sql.requestError': 'Request error: {0}',
+            'sql.unlockSuccess': 'Unlock Success',
+            'sql.unlockFailed': 'Unlock Failed',
+            'sql.confirmTerminate': 'Are you sure you want to force terminate session SID={0}, Serial#={1}?\nThis will immediately disconnect the connection and may cause data loss!',
+            'sql.pendingFeature': 'Coming soon',
+            'sql.featureInDevelopment': '{0} feature in development. Will connect to current datasource: {1}',
+            'sql.tableStructure': 'Table Structure',
+            'sql.copySuccess': 'Copy Success',
+            'sql.fillSuccess': 'Fill Success',
+            'sql.viewTableStructure': 'View Table Structure',
+            'sql.noDatasource': 'Unknown database',
+            'sql.zoomOut': 'Zoom out',
+            'sql.zoomIn': 'Zoom in',
+            'sql.hasContent': '(has content)',
+            'sql.closeTab': 'Close',
+            'sql.newTab': 'New tab',
+            'sql.execute': 'Execute',
+            'sql.explainPlan': 'Explain Plan',
+            'sql.format': 'Format',
+            'sql.template': 'Templates',
+            'sql.clear': 'Clear',
+            'sql.executeTip': 'Ctrl+Enter to execute / selected part',
+            'sql.autocompleteTip': 'Alt+/ for table/column autocomplete',
+            'sql.placeholder': 'Enter SQL statement...',
+            'sql.executing': 'Executing query...',
+            'sql.result': 'Result',
+            'sql.rows': 'Rows',
+            'sql.tableView': 'Table',
+            'sql.textView': 'Text',
+            'sql.export': 'Export',
+            'sql.exportCsv': 'Export CSV',
+            'sql.exportExcel': 'Export Excel',
+            'sql.exportSql': 'Export SQL Script',
+            'sql.textViewTip': 'Text view - Tab separated - Select all to copy',
+            'sql.success': 'Success',
+            'sql.affectedRows': 'operation affected',
+            'sql.error': 'Error',
+            'sql.inputSqlTip': 'Enter SQL and click Execute',
+            'sql.showing': 'Showing',
+            'sql.rowsPerPage': 'rows/page',
+            'sql.dangerConfirm': 'Dangerous Operation Confirmation',
+            'sql.operating': 'Operating:',
+            'sql.executingHighRisk': 'You are executing the following high-risk command on database',
+            'sql.blockedReason': 'Block reason',
+            'sql.mayCauseDamage': 'This command may cause data loss or database corruption!',
+            'sql.cancelExecute': 'Cancel',
+            'sql.confirmExecute': 'Confirm Execute',
+            'sql.sqlTemplateLib': 'SQL Template Library',
+            'sql.searchTemplate': 'Search by template name, description, or SQL keywords...',
+            'sql.allCategories': 'All Categories',
+            'sql.onlyCurrentDbType': 'Only show templates for current DB type (current:',
+            'sql.selectTemplate': 'Select Template',
+            'sql.templateDescription': 'Template Description',
+            'sql.templateParams': 'Template Parameters',
+            'sql.enterParam': 'Enter',
+            'sql.sqlPreview': 'SQL Preview',
+            'sql.templateNotFound': 'No matching templates found. Try adjusting keywords or category.',
+            'sql.copy': 'Copy',
+            'sql.overwrite': 'Overwrite to Editor',
+            'sql.copiedToClipboard': 'SQL template copied to clipboard',
+            'sql.copyFailed': 'Copy Failed',
+            'sql.cannotWriteClipboard': 'Cannot write to clipboard. Please copy manually.',
+            'sql.templateOverwritten': 'SQL template overwritten to editor. You can continue editing.',
+            'sql.unlockTables': 'Unlock Tables',
+            'sql.queryingLockInfo': 'Querying lock information, please wait...',
+            'sql.currentDatasource': 'Current datasource:',
+            'sql.refresh': 'Refresh',
+            'sql.noBlockingLocks': 'No blocking locks currently',
+            'sql.objectName': 'Object Name',
+            'sql.machine': 'Machine',
+            'sql.sid': 'SID',
+            'sql.serial': 'Serial#',
+            'sql.user': 'User',
+            'sql.program': 'Program',
+            'sql.status': 'Status',
+            'sql.lockDuration': 'Lock Duration',
+            'sql.loginTime': 'Login Time',
+            'sql.action': 'Action',
+            'sql.terminate': 'Terminate',
+            'sql.terminateSession': 'Force terminate session (high-risk operation)',
+            'sql.lockRecords': 'lock records (only showing sessions locked > 60s)',
+            'sql.indexes': 'Indexes',
+            'sql.triggers': 'Triggers',
+            'sql.tables': 'Tables',
+            'sql.views': 'Views',
+            'sql.procedures': 'Procedures',
+            'sql.sequences': 'Sequences',
+            'sql.loading': 'Loading...',
+            'sql.noData': 'No data',
+            'sql.commonTools': 'Common Tools',
+            'sql.largeTableQuery': 'Large Table Query',
+            'sql.largeTableQueryDesc': 'Scan large tables by size/row count (pending)',
+            'sql.haSwitchover': 'HA Switchover',
+            'sql.haSwitchoverDesc': 'Primary-standby switchover and operations (pending)',
+            'sql.archiveCleanup': 'Archive Cleanup',
+            'sql.archiveCleanupDesc': 'Clean archive logs to free space (pending)',
+            'sql.recycleBinCleanup': 'Recycle Bin Cleanup',
+            'sql.recycleBinCleanupDesc': 'Clear or restore recycle bin objects (pending)',
+            'sql.unlockTablesTool': 'Unlock Tables',
+            'sql.unlockTablesToolDesc': 'Release table locks held by sessions (pending)',
+            'sql.healthCheck': 'Health Check',
+            'sql.healthCheckDesc': 'Database health and config inspection (pending)',
+            'sql.awrReport': 'AWR Report',
+            'sql.awrReportDesc': 'Export Oracle AWR performance report (pending)',
+            'sql.tabTitle': 'Query',
+            'sql.pivotRowCol': 'Row to Column (CASE WHEN)',
+            'sql.pivotRowColCategory': 'Row/Column Transform',
+            'sql.pivotRowColDesc': 'Convert row data to columns by month, compatible with major databases',
+            'sql.unpivotColRow': 'Column to Row (UNION ALL)',
+            'sql.unpivotColRowCategory': 'Row/Column Transform',
+            'sql.unpivotColRowDesc': 'Split multiple columns into rows, compatible with Oracle/MySQL/DM',
+            'sql.recursiveCte': 'Recursive CTE (Hierarchical Query)',
+            'sql.recursiveCteCategory': 'Complex Query',
+            'sql.recursiveCteDesc': 'Build tree structures, supports organization/menu hierarchy',
+            'sql.windowTopN': 'Window Function Group TopN',
+            'sql.windowTopNCategory': 'Window Function',
+            'sql.windowTopNDesc': 'Get top N per group, commonly used for rankings/latest records',
+            'sql.keepLatestPerGroup': 'Keep Only Latest Record Per Group',
+            'sql.keepLatestPerGroupCategory': 'Window Function',
+            'sql.keepLatestPerGroupDesc': 'Deduplicate to keep latest record for each business key',
+            'sql.mergeUpsert': 'MERGE UPSERT Template',
+            'sql.mergeUpsertCategory': 'Data Repair',
+            'sql.mergeUpsertDesc': 'Update if primary key exists, otherwise insert (Oracle/DM)',
+            'sql.duplicateDetect': 'Duplicate Data Detection',
+            'sql.duplicateDetectCategory': 'Data Quality',
+            'sql.duplicateDetectDesc': 'Locate duplicate records by business key',
+            'sql.dateFillStat': 'Date Fill Statistics',
+            'sql.dateFillStatCategory': 'Report Statistics',
+            'sql.dateFillStatDesc': 'Generate date sequence and fill missing date data',
+            'sql.generateCreateSql': 'Generate CREATE SQL',
+            'sql.close': 'Close',
+            'sql.partitions': 'Partitions',
+            'sql.noPartitions': 'No partition information found',
+            'sql.triggerName': 'Trigger Name',
+            'sql.triggerEvent': 'Trigger Event',
+            'sql.triggerTiming': 'Trigger Timing',
+            'sql.noTriggers': 'No trigger information found',
+            'sql.indexName': 'Index Name',
+            'sql.indexColumn': 'Index Column',
+            'sql.uniqueness': 'Uniqueness',
+            'sql.indexType': 'Index Type',
+            'sql.noIndexes': 'No index information found',
+            'sql.columnName': 'Column Name',
+            'sql.dataType': 'Data Type',
+            'sql.nullable': 'Nullable',
+            'sql.defaultValue': 'Default',
+            'sql.comment': 'Comment',
+            'sql.primaryKey': 'Primary Key',
+            'sql.noTableStructure': 'No table structure information',
+            'sql.seconds': 's',
+            'sql.minutes': 'm',
+            'sql.hours': 'h',
+            'sql.tabsSupported': '',
+            'sql.noPartitionInfo': 'No partition information',
+            'sql.noTriggerInfo': 'No trigger information found',
+            'sql.noIndexInfo': 'No index information',
+            'sql.tableStructureLoadFailed': 'Failed to load table structure',
+            'sql.tableIndexesLoadFailed': 'Failed to load table indexes',
+            'sql.tablePartitionsLoadFailed': 'Failed to load table partitions',
+            'sql.tableTriggersLoadFailed': 'Failed to load table triggers',
+            'sql.createTableSqlSuccess': 'CREATE SQL generated',
+            'sql.createTableSqlFailed': 'Failed to generate CREATE SQL',
+            'sql.clearHistoryConfirm': 'Are you sure you want to clear history?',
+            'sql.exporting': 'Exporting...',
+            'sql.exportFailed': 'Export failed',
+            'sql.fetchAllDataFailed': 'Failed to fetch all data: {0}',
+            'sql.explainPlanFailed': 'Explain plan query failed: {0}',
+            'sql.requestErrorNoArgs': 'Request error',
+            'sql.executeError': 'Execute error: {0}',
+            'sql.tokenGenerateFailed': 'Token generation failed',
+            'sql.tokenRequestFailed': 'Token request failed: {0}',
+            'sql.serverSidePaging': 'Server-side paging',
+            'sql.unknownDatabase': 'Unknown database',
+            'sql.langZh': 'CN'
+        };
+
+        var zhSqlTexts = {
+            'sql.maxTabs': '最多支持 {0} 个标签页',
+            'sql.renameTab': '请输入新的标签页名称',
+            'sql.query': '查询',
+            'sql.newTabName': '请输入新的标签页名称',
+            'sql.selectDatasource': '请先选择数据源',
+            'sql.tip': '提示',
+            'sql.processing': '处理中',
+            'sql.refreshing': '正在刷新...',
+            'sql.completed': '完成',
+            'sql.refreshComplete': '刷新完成，共 {0} 个表',
+            'sql.refreshFailed': '刷新失败: {0}',
+            'sql.dataReloading': '正在重新加载数据...',
+            'sql.dataRefreshed': '数据已刷新',
+            'sql.loadingFailed': '加载失败: {0} {1}',
+            'sql.getDdlFailed': '无法获取对象DDL: {0}',
+            'sql.loadDatasourceFailed': '加载数据源失败: {0}',
+            'sql.connectionSuccess': '连接成功',
+            'sql.connectionTestSuccess': '数据库连接测试成功！',
+            'sql.connectionFailed': '连接失败',
+            'sql.connectionError': '连接异常',
+            'sql.formatSuccess': '格式化成功',
+            'sql.sqlAutoFormatted': 'SQL 已自动排版',
+            'sql.formatFailed': '格式化失败',
+            'sql.sqlSyntaxError': 'SQL 语句可能存在语法问题',
+            'sql.formatError': '格式化失败',
+            'sql.formatterLoadFailed': 'SQL Formatter 加载失败',
+            'sql.requestError': '请求异常: {0}',
+            'sql.unlockSuccess': '解锁成功',
+            'sql.unlockFailed': '解锁失败',
+            'sql.confirmTerminate': '确定要强制终止会话 SID={0}, Serial#={1} 吗？\n此操作会立即断开连接，可能造成数据丢失！',
+            'sql.pendingFeature': '敬请期待',
+            'sql.featureInDevelopment': '「{0}」功能开发中，将连接当前数据源：{1}',
+            'sql.tableStructure': '表结构',
+            'sql.copySuccess': '复制成功',
+            'sql.fillSuccess': '填充成功',
+            'sql.viewTableStructure': '查看表结构',
+            'sql.noDatasource': '未知数据库',
+            'sql.zoomOut': '缩小字体',
+            'sql.zoomIn': '放大字体',
+            'sql.hasContent': '（有内容）',
+            'sql.closeTab': '关闭',
+            'sql.newTab': '新建标签页',
+            'sql.execute': '执行',
+            'sql.explainPlan': '执行计划',
+            'sql.format': '格式化',
+            'sql.template': '模板',
+            'sql.clear': '清空',
+            'sql.executeTip': 'Ctrl+Enter 执行 / 选中部分执行',
+            'sql.autocompleteTip': 'Alt+/ 补全表名/字段',
+            'sql.placeholder': '输入 SQL 语句...',
+            'sql.executing': '正在执行查询...',
+            'sql.result': '执行结果',
+            'sql.rows': '行',
+            'sql.tableView': '表格',
+            'sql.textView': '文本',
+            'sql.export': '导出',
+            'sql.exportCsv': '导出 CSV',
+            'sql.exportExcel': '导出 Excel',
+            'sql.exportSql': '导出 SQL 脚本',
+            'sql.textViewTip': '文本视图 - Tab分隔 - 可直接全选复制',
+            'sql.success': '执行成功',
+            'sql.affectedRows': '操作影响了',
+            'sql.error': '执行出错',
+            'sql.inputSqlTip': '输入 SQL 语句并点击执行',
+            'sql.showing': '显示',
+            'sql.rowsPerPage': '条/页',
+            'sql.dangerConfirm': '危险操作确认',
+            'sql.operating': '正在操作:',
+            'sql.executingHighRisk': '你正在数据库上执行以下高危命令！',
+            'sql.blockedReason': '拦截原因',
+            'sql.mayCauseDamage': '此命令可能会造成数据丢失或数据库损坏！',
+            'sql.cancelExecute': '取消执行',
+            'sql.confirmExecute': '确定要继续执行',
+            'sql.sqlTemplateLib': 'SQL 模板库',
+            'sql.searchTemplate': '按模板名、说明、SQL关键字检索...',
+            'sql.allCategories': '全部分类',
+            'sql.onlyCurrentDbType': '仅显示当前数据库类型模板（当前:',
+            'sql.selectTemplate': '选择模板',
+            'sql.templateDescription': '模板说明',
+            'sql.templateParams': '模板参数',
+            'sql.enterParam': '请输入',
+            'sql.sqlPreview': 'SQL 预览',
+            'sql.templateNotFound': '未找到匹配模板，请调整关键词或分类。',
+            'sql.copy': '复制',
+            'sql.overwrite': '覆盖到编辑器',
+            'sql.copiedToClipboard': 'SQL 模板已复制到剪贴板',
+            'sql.copyFailed': '复制失败',
+            'sql.cannotWriteClipboard': '无法写入剪贴板，请手动复制',
+            'sql.templateOverwritten': 'SQL 模板已覆盖到编辑器，可继续手工修改',
+            'sql.unlockTables': '解锁库表',
+            'sql.queryingLockInfo': '正在查询锁表信息，请稍候...',
+            'sql.currentDatasource': '当前数据源：',
+            'sql.refresh': '刷新',
+            'sql.noBlockingLocks': '当前无阻塞锁',
+            'sql.objectName': '对象名',
+            'sql.machine': '机器',
+            'sql.sid': 'SID',
+            'sql.serial': 'Serial#',
+            'sql.user': '用户',
+            'sql.program': '程序',
+            'sql.status': '状态',
+            'sql.lockDuration': '锁定时长',
+            'sql.loginTime': '登录时间',
+            'sql.action': '操作',
+            'sql.terminate': '终止',
+            'sql.terminateSession': '强制终止会话（高危操作）',
+            'sql.lockRecords': '条锁记录（仅显示锁定超过 60 秒的会话）',
+            'sql.indexes': '索引',
+            'sql.triggers': '触发器',
+            'sql.tables': '表',
+            'sql.views': '视图',
+            'sql.procedures': '存储过程',
+            'sql.sequences': '序列',
+            'sql.loading': '加载中...',
+            'sql.noData': '暂无数据',
+            'sql.commonTools': '常用工具',
+            'sql.largeTableQuery': '大表查询',
+            'sql.largeTableQueryDesc': '按容量/行数筛查大表（待接入）',
+            'sql.haSwitchover': '主备倒换',
+            'sql.haSwitchoverDesc': '主备切换演练与操作（待接入）',
+            'sql.archiveCleanup': '归档清理',
+            'sql.archiveCleanupDesc': '清理归档日志释放空间（待接入）',
+            'sql.recycleBinCleanup': '清理回收站',
+            'sql.recycleBinCleanupDesc': '清空或还原回收站对象（待接入）',
+            'sql.unlockTablesTool': '解锁库表',
+            'sql.unlockTablesToolDesc': '释放会话占用的表锁（待接入）',
+            'sql.healthCheck': '智能体检',
+            'sql.healthCheckDesc': '数据库健康与配置巡检（待接入）',
+            'sql.awrReport': 'AWR报告',
+            'sql.awrReportDesc': '导出 Oracle AWR 性能报告（待接入）',
+            'sql.tabTitle': '查询',
+            'sql.pivotRowCol': '行转列（CASE WHEN）',
+            'sql.pivotRowColCategory': '行列转换',
+            'sql.pivotRowColDesc': '按月份将行数据转成列，兼容主流数据库',
+            'sql.unpivotColRow': '列转行（UNION ALL）',
+            'sql.unpivotColRowCategory': '行列转换',
+            'sql.unpivotColRowDesc': '将多列指标拆成行，适配 Oracle/MySQL/DM',
+            'sql.recursiveCte': '递归 CTE（层级查询）',
+            'sql.recursiveCteCategory': '复杂查询',
+            'sql.recursiveCteDesc': '构建树形结构，支持组织/菜单层级展开',
+            'sql.windowTopN': '窗口函数分组 TopN',
+            'sql.windowTopNCategory': '窗口函数',
+            'sql.windowTopNDesc': '按分组取前N，常用于排行榜/最新记录',
+            'sql.keepLatestPerGroup': '每组保留最新一条',
+            'sql.keepLatestPerGroupCategory': '窗口函数',
+            'sql.keepLatestPerGroupDesc': '去重保留每个业务主键的最新记录',
+            'sql.mergeUpsert': 'MERGE UPSERT 模板',
+            'sql.mergeUpsertCategory': '数据修复',
+            'sql.mergeUpsertDesc': '按主键存在则更新，不存在则插入（Oracle/DM）',
+            'sql.duplicateDetect': '重复数据排查',
+            'sql.duplicateDetectCategory': '数据质量',
+            'sql.duplicateDetectDesc': '按业务键定位重复记录',
+            'sql.dateFillStat': '日期补齐统计',
+            'sql.dateFillStatCategory': '报表统计',
+            'sql.dateFillStatDesc': '生成日期序列并补齐缺失日期数据',
+            'sql.generateCreateSql': '生成建表SQL',
+            'sql.close': '关闭',
+            'sql.partitions': '分区',
+            'sql.noPartitions': '未发现分区信息',
+            'sql.triggerName': '触发器名称',
+            'sql.triggerEvent': '触发事件',
+            'sql.triggerTiming': '触发时机',
+            'sql.noTriggers': '未发现触发器信息',
+            'sql.indexName': '索引名称',
+            'sql.indexColumn': '索引列',
+            'sql.uniqueness': '唯一性',
+            'sql.indexType': '索引类型',
+            'sql.noIndexes': '暂无索引信息',
+            'sql.columnName': '列名',
+            'sql.dataType': '数据类型',
+            'sql.nullable': '可空',
+            'sql.defaultValue': '默认值',
+            'sql.comment': '注释',
+            'sql.primaryKey': '主键',
+            'sql.noTableStructure': '暂无表结构信息',
+            'sql.seconds': '秒',
+            'sql.minutes': '分',
+            'sql.hours': '小时',
+            'sql.tabsSupported': '',
+            'sql.noPartitionInfo': '未发现分区信息',
+            'sql.noTriggerInfo': '未发现触发器信息',
+            'sql.noIndexInfo': '暂无索引信息',
+            'sql.tableStructureLoadFailed': '获取表结构失败',
+            'sql.tableIndexesLoadFailed': '获取表索引失败',
+            'sql.tablePartitionsLoadFailed': '获取表分区失败',
+            'sql.tableTriggersLoadFailed': '获取表触发器失败',
+            'sql.createTableSqlSuccess': '建表SQL已生成',
+            'sql.createTableSqlFailed': '无法生成建表SQL',
+            'sql.clearHistoryConfirm': '确定清空历史记录吗?',
+            'sql.exporting': '导出中...',
+            'sql.exportFailed': '导出失败',
+            'sql.fetchAllDataFailed': '获取全量数据失败: {0}',
+            'sql.explainPlanFailed': '执行计划查询失败: {0}',
+            'sql.requestErrorNoArgs': '请求异常',
+            'sql.executeError': '执行出错: {0}',
+            'sql.serverSidePaging': '服务端分页',
+            'sql.unknownDatabase': '未知数据库',
+            'sql.noDatasource': '未知数据库',
+            'sql.langZh': '中文',
+        };
+
+        var sqlLocaleMessages = {};
+        async function loadSqlLocaleMessages(locale) {
+            try {
+                var res = await fetch('/js/locale/' + locale + '.json');
+                if (!res.ok) throw new Error('Failed to load locale');
+                sqlLocaleMessages = await res.json();
+            } catch (e) {
+                console.error('Failed to load locale:', e);
+            }
+        }
+        loadSqlLocaleMessages(localStorage.getItem('locale') || 'en');
+
+        var sqlAllTexts = { 'en': enSqlTexts, 'zh_CN': zhSqlTexts };
+
+        createApp({
+            data() {
+                return {
+                    locale: localStorage.getItem('locale') || 'en',
+                    dataSources: [],
+                    selectedDataSourceIdx: null,
+                    tabs: [],
+                    activeTabId: null,
+                    maxTabs: 15,
+                    sql: '',
+                    loading: false,
+                    result: null,
+                    activeResultTabIndex: 0,
+                    lastExecutionTime: null,
+                    history: [],
+                    showSidebar: true,
+                    baseFontSize: parseInt(localStorage.getItem('sqlToolFontSize') || 13),
+                    csrfToken: null,  // CSRF Token
+                    pagination: {
+                        currentPage: 1,
+                        pageSize: 10,
+                        pageSizeOptions: [10, 20, 50, 100]
+                    },
+                    textViewMode: false,  // 文本视图模式（Tab分隔，便于复制）
+                    // 服务端分页状态
+                    totalCount: -1,      // 总行数（-1 表示无/未知）
+                    serverPaging: false, // 是否启用服务端分页模式
+                    lastExecutedSql: '', // 上一次执行的 SQL（用于翻页时重新请求）
+                    lastDatasourceIdx: null, // 上一次执行的数据源
+                    toastTitle: '',
+                    toastMessage: '',
+                    toastType: 'success',  // 'success' or 'error'
+                    // Database objects
+                    objectSearch: '',
+                    currentDbType: 'ORACLE',  // 当前数据源类型: ORACLE/DM/MYSQL
+                    dbObjects: {
+                        tables: [],
+                        views: [],
+                        indexes: [],
+                        procedures: [],
+                        triggers: [],
+                        sequences: []
+                    },
+                    loadingObjects: {
+                        tables: false,
+                        views: false,
+                        indexes: false,
+                        procedures: false,
+                        triggers: false,
+                        sequences: false
+                    },
+                    loadedObjects: {
+                        tables: false,
+                        views: false,
+                        indexes: false,
+                        procedures: false,
+                        triggers: false,
+                        sequences: false
+                    },
+                    // 解锁库表弹窗状态
+                    lockData: {
+                        loading: false,
+                        rows: [],
+                        error: null,
+                        unlocking: null
+                    },
+                    // 左侧「常用工具」配置（仅前端入口，后续接后端）
+                    commonTools: [
+                        { id: 'large_table_query',    labelKey: 'sql.largeTableQuery',     descKey: 'sql.largeTableQueryDesc',    icon: 'fas fa-th-large',    requireOracle: false },
+                        { id: 'ha_switchover',         labelKey: 'sql.haSwitchover',          descKey: 'sql.haSwitchoverDesc',        icon: 'fas fa-sync-alt',     requireOracle: false },
+                        { id: 'archive_cleanup',       labelKey: 'sql.archiveCleanup',        descKey: 'sql.archiveCleanupDesc',      icon: 'fas fa-archive',      requireOracle: false },
+                        { id: 'recycle_bin_cleanup',   labelKey: 'sql.recycleBinCleanup',      descKey: 'sql.recycleBinCleanupDesc',   icon: 'fas fa-recycle',      requireOracle: false },
+                        { id: 'unlock_tables',         labelKey: 'sql.unlockTablesTool',        descKey: 'sql.unlockTablesToolDesc',    icon: 'fas fa-unlock-alt',   requireOracle: false },
+                        { id: 'health_check',          labelKey: 'sql.healthCheck',            descKey: 'sql.healthCheckDesc',        icon: 'fas fa-heartbeat',     requireOracle: false },
+                        { id: 'awr_export',            labelKey: 'sql.awrReport',              descKey: 'sql.awrReportDesc',          icon: 'fas fa-chart-bar',    requireOracle: true }
+                    ],
+                    // Context menu
+                    contextMenu: {
+                        show: false,
+                        x: 0,
+                        y: 0,
+                        tableName: ''
+                    },
+                    // Table structure
+                    currentTableName: '',
+                    tableStructure: [],
+                    loadingTableStructure: false,
+                    // Table indexes
+                    tableIndexes: [],
+                    loadingTableIndexes: false,
+                    // Table partitions
+                    tablePartitions: [],
+                    loadingTablePartitions: false,
+                    // Table triggers
+                    tableTriggers: [],
+                    loadingTableTriggers: false,
+                    // Resize
+                    inputAreaHeight: 400,
+                    isResizing: false,
+                    startResizeY: 0,
+                    startResizeHeight: 0,
+                    dangerousSqlReason: '',
+                    pendingSql: '',
+                    generatingToken: false,
+                    pendingDatasourceIdx: null,
+                    tabsPersistTimer: null,
+                    documentClickHandler: null,
+                    keydownHandler: null,
+                    beforeUnloadHandler: null,
+                    showSqlTemplateModal: false,
+                    selectedSqlTemplateId: '',
+                    sqlTemplateSearch: '',
+                    sqlTemplateCategory: '',
+                    onlyCurrentDbTemplates: true,
+                    sqlTemplateParams: {},
+                    sqlTemplates: [
+                        {
+                            id: 'pivot-sales-case',
+                            nameKey: 'sql.pivotRowCol',
+                            categoryKey: 'sql.pivotRowColCategory',
+                            descKey: 'sql.pivotRowColDesc',
+                            dbTypes: ['ORACLE', 'DM', 'MYSQL'],
+                            sql: "SELECT ${group_col},\n       SUM(CASE WHEN ${pivot_col} = '${val1}' THEN ${value_col} ELSE 0 END) AS ${val1_alias},\n       SUM(CASE WHEN ${pivot_col} = '${val2}' THEN ${value_col} ELSE 0 END) AS ${val2_alias},\n       SUM(CASE WHEN ${pivot_col} = '${val3}' THEN ${value_col} ELSE 0 END) AS ${val3_alias}\nFROM ${table_name}\nGROUP BY ${group_col}\nORDER BY ${group_col};"
+                        },
+                        {
+                            id: 'unpivot-union-all',
+                            nameKey: 'sql.unpivotColRow',
+                            categoryKey: 'sql.unpivotColRowCategory',
+                            descKey: 'sql.unpivotColRowDesc',
+                            dbTypes: ['ORACLE', 'DM', 'MYSQL'],
+                            sql: "SELECT ${pk_col}, '${col1}' AS metric_name, ${col1} AS metric_value FROM ${table_name}\nUNION ALL\nSELECT ${pk_col}, '${col2}' AS metric_name, ${col2} AS metric_value FROM ${table_name}\nUNION ALL\nSELECT ${pk_col}, '${col3}' AS metric_name, ${col3} AS metric_value FROM ${table_name};"
+                        },
+                        {
+                            id: 'recursive-cte',
+                            nameKey: 'sql.recursiveCte',
+                            categoryKey: 'sql.recursiveCteCategory',
+                            descKey: 'sql.recursiveCteDesc',
+                            dbTypes: ['MYSQL'],
+                            sql: "WITH RECURSIVE tree AS (\n    SELECT ${id_col}, ${parent_col}, ${name_col}, 1 AS lvl\n    FROM ${table_name}\n    WHERE ${parent_col} IS NULL\n\n    UNION ALL\n\n    SELECT t.${id_col}, t.${parent_col}, t.${name_col}, tree.lvl + 1\n    FROM ${table_name} t\n    JOIN tree ON t.${parent_col} = tree.${id_col}\n)\nSELECT *\nFROM tree\nORDER BY lvl, ${id_col};"
+                        },
+                        {
+                            id: 'window-topn',
+                            nameKey: 'sql.windowTopN',
+                            categoryKey: 'sql.windowTopNCategory',
+                            descKey: 'sql.windowTopNDesc',
+                            dbTypes: ['ORACLE', 'DM', 'MYSQL'],
+                            sql: "SELECT *\nFROM (\n    SELECT t.*,\n           ROW_NUMBER() OVER (PARTITION BY ${group_col} ORDER BY ${order_col} DESC) AS rn\n    FROM ${table_name} t\n) x\nWHERE x.rn <= ${top_n};"
+                        },
+                        {
+                            id: 'latest-per-key',
+                            nameKey: 'sql.keepLatestPerGroup',
+                            categoryKey: 'sql.keepLatestPerGroupCategory',
+                            descKey: 'sql.keepLatestPerGroupDesc',
+                            dbTypes: ['ORACLE', 'DM', 'MYSQL'],
+                            sql: "SELECT *\nFROM (\n    SELECT t.*,\n           ROW_NUMBER() OVER (PARTITION BY ${biz_key} ORDER BY ${time_col} DESC) AS rn\n    FROM ${table_name} t\n) z\nWHERE z.rn = 1;"
+                        },
+                        {
+                            id: 'merge-upsert',
+                            nameKey: 'sql.mergeUpsert',
+                            categoryKey: 'sql.mergeUpsertCategory',
+                            descKey: 'sql.mergeUpsertDesc',
+                            dbTypes: ['ORACLE', 'DM'],
+                            sql: "MERGE INTO ${target_table} t\nUSING (\n    SELECT ${pk_value} AS ${pk_col}, ${val1} AS ${col1}, ${val2} AS ${col2}\n    FROM dual\n) s\nON (t.${pk_col} = s.${pk_col})\nWHEN MATCHED THEN\n    UPDATE SET t.${col1} = s.${col1},\n               t.${col2} = s.${col2}\nWHEN NOT MATCHED THEN\n    INSERT (${pk_col}, ${col1}, ${col2})\n    VALUES (s.${pk_col}, s.${col1}, s.${col2});"
+                        },
+                        {
+                            id: 'duplicate-detect',
+                            nameKey: 'sql.duplicateDetect',
+                            categoryKey: 'sql.duplicateDetectCategory',
+                            descKey: 'sql.duplicateDetectDesc',
+                            dbTypes: ['ORACLE', 'DM', 'MYSQL'],
+                            sql: "SELECT ${biz_key}, COUNT(*) AS cnt\nFROM ${table_name}\nGROUP BY ${biz_key}\nHAVING COUNT(*) > 1\nORDER BY cnt DESC;"
+                        },
+                        {
+                            id: 'date-series-left-join',
+                            nameKey: 'sql.dateFillStat',
+                            categoryKey: 'sql.dateFillStatCategory',
+                            descKey: 'sql.dateFillStatDesc',
+                            dbTypes: ['MYSQL'],
+                            sql: "WITH RECURSIVE d AS (\n    SELECT CAST('${start_date}' AS DATE) AS dt\n    UNION ALL\n    SELECT DATE_ADD(dt, INTERVAL 1 DAY)\n    FROM d\n    WHERE dt < CAST('${end_date}' AS DATE)\n)\nSELECT d.dt,\n       COALESCE(x.cnt, 0) AS cnt\nFROM d\nLEFT JOIN (\n    SELECT DATE(${time_col}) AS dt, COUNT(*) AS cnt\n    FROM ${table_name}\n    GROUP BY DATE(${time_col})\n) x ON x.dt = d.dt\nORDER BY d.dt;"
+                        }
+                    ]
+                }
+            },
+            computed: {
+                currentDatabaseName() {
+                    const idx = this.pendingDatasourceIdx !== null ? this.pendingDatasourceIdx : this.selectedDataSourceIdx;
+                    if (idx !== null && this.dataSources) {
+                        const ds = this.dataSources.find(d => d.index === idx);
+                        if (ds) {
+                            return `${ds.name} (${ds.username})`;
+                        }
+                    }
+                    return this.t('sql.unknownDatabase');
+                },
+                /** 当前为 Oracle（AWR 等仅 Oracle 特性） */
+                isOracleDb() {
+                    return (this.currentDbType || '').toUpperCase() === 'ORACLE';
+                },
+                currentResult() {
+                    if (this.result && this.result.batch && this.result.multiResults) {
+                        return this.result.multiResults[this.activeResultTabIndex] || this.result;
+                    }
+                    return this.result;
+                },
+                /**
+                 * 当前结果集是否处于服务端分页（单条执行看根对象；批量执行看当前 multiResults 项）
+                 */
+                effectiveServerPaging() {
+                    if (!this.currentResult) return false;
+                    const cr = this.currentResult;
+                    const tc = cr.totalCount;
+                    const hasMeta = cr.pageSize > 0 && tc != null && Number(tc) >= 0;
+                    if (!hasMeta) return false;
+                    if (this.serverPaging) return true;
+                    return !!(this.result && this.result.batch && this.result.multiResults && this.result.multiResults.length > 0);
+                },
+                /**
+                 * 翻页/改每页条数时是否需要重新请求后端（单条或批量中含服务端分页的 SELECT）
+                 */
+                needsServerPagingRefetch() {
+                    if (!this.lastExecutedSql) return false;
+                    if (this.serverPaging) return true;
+                    if (this.result && this.result.batch && this.result.multiResults) {
+                        return this.result.multiResults.some(r => r.pageSize > 0 && r.totalCount != null && Number(r.totalCount) >= 0);
+                    }
+                    return false;
+                },
+                paginatedRows() {
+                    if (!this.currentResult || !this.currentResult.rows) return [];
+                    // 服务端分页时，rows 本身就是当前页数据，直接返回
+                    if (this.effectiveServerPaging && this.currentResult.pageSize > 0) {
+                        return this.currentResult.rows;
+                    }
+                    // 前端分页（非 SELECT 或批量结果）
+                    const start = (this.pagination.currentPage - 1) * this.pagination.pageSize;
+                    const end = start + this.pagination.pageSize;
+                    return this.currentResult.rows.slice(start, end);
+                },
+                totalPages() {
+                    if (!this.currentResult || !this.currentResult.rows) return 0;
+                    // 服务端分页
+                    if (this.effectiveServerPaging && this.currentResult.totalPages > 0) {
+                        return this.currentResult.totalPages;
+                    }
+                    return Math.ceil(this.currentResult.rows.length / this.pagination.pageSize);
+                },
+                pageStart() {
+                    if (!this.currentResult || !this.currentResult.rows || this.currentResult.rows.length === 0) return 0;
+                    if (this.effectiveServerPaging && this.currentResult.pageSize > 0) {
+                        return (this.currentResult.currentPage - 1) * this.currentResult.pageSize + 1;
+                    }
+                    return (this.pagination.currentPage - 1) * this.pagination.pageSize + 1;
+                },
+                pageEnd() {
+                    if (!this.currentResult || !this.currentResult.rows) return 0;
+                    if (this.effectiveServerPaging && this.currentResult.pageSize > 0) {
+                        return (this.currentResult.currentPage - 1) * this.currentResult.pageSize + this.currentResult.rows.length;
+                    }
+                    return Math.min(this.pagination.currentPage * this.pagination.pageSize, this.currentResult.rows.length);
+                },
+                // 当前分页的页码（统一入口）
+                currentPageNum() {
+                    if (this.effectiveServerPaging && this.currentResult && this.currentResult.pageSize > 0) {
+                        return this.currentResult.currentPage;
+                    }
+                    return this.pagination.currentPage;
+                },
+                // 显示的总行数文本
+                totalRowsText() {
+                    if (this.effectiveServerPaging && this.currentResult) {
+                        const tc = this.currentResult.totalCount;
+                        if (tc != null && Number(tc) >= 0) {
+                            return Number(tc);
+                        }
+                    }
+                    return this.currentResult && this.currentResult.rows ? this.currentResult.rows.length : 0;
+                },
+                // 文本视图内容（Tab分隔，包含表头）
+                textViewContent() {
+                    if (!this.currentResult || !this.currentResult.columns || !this.currentResult.rows) return '';
+                    const cols = this.currentResult.columns;
+                    const rows = this.currentResult.rows;
+                    // 表头行
+                    const lines = [cols.join('\t')];
+                    // 数据行
+                    for (const row of rows) {
+                        const cells = cols.map(col => {
+                            const val = row[col];
+                            if (val === null || val === undefined) return '';
+                            return String(val);
+                        });
+                        lines.push(cells.join('\t'));
+                    }
+                    return lines.join('\n');
+                },
+                selectedSqlTemplate() {
+                    return this.sqlTemplates.find(item => item.id === this.selectedSqlTemplateId) || null;
+                },
+                sqlTemplateCategories() {
+                    const categories = this.sqlTemplates.map(item => item.categoryKey ? this.t(item.categoryKey) : item.category).filter(Boolean);
+                    return [...new Set(categories)];
+                },
+                filteredSqlTemplates() {
+                    const keyword = (this.sqlTemplateSearch || '').trim().toLowerCase();
+                    return this.sqlTemplates.filter(item => {
+                        const catKey = item.categoryKey ? this.t(item.categoryKey) : item.category;
+                        const categoryMatch = !this.sqlTemplateCategory || catKey === this.sqlTemplateCategory;
+                        if (!categoryMatch) return false;
+                        const dbTypes = item.dbTypes && item.dbTypes.length ? item.dbTypes : ['ORACLE', 'DM', 'MYSQL'];
+                        const dbTypeMatch = !this.onlyCurrentDbTemplates || dbTypes.includes((this.currentDbType || '').toUpperCase());
+                        if (!dbTypeMatch) return false;
+                        if (!keyword) return true;
+                        const nameVal = item.nameKey ? this.t(item.nameKey) : item.name;
+                        const descVal = item.descKey ? this.t(item.descKey) : item.description;
+                        const catVal = item.categoryKey ? this.t(item.categoryKey) : item.category;
+                        const searchable = `${nameVal} ${descVal} ${item.sql} ${catVal}`.toLowerCase();
+                        return searchable.includes(keyword);
+                    });
+                },
+                sqlTemplateVariables() {
+                    const tpl = this.selectedSqlTemplate;
+                    if (!tpl || !tpl.sql) return [];
+                    const vars = [];
+                    const regex = /\$\{([a-zA-Z0-9_]+)\}/g;
+                    let match;
+                    while ((match = regex.exec(tpl.sql)) !== null) {
+                        const key = match[1];
+                        if (!vars.includes(key)) vars.push(key);
+                    }
+                    return vars;
+                },
+                renderedSqlTemplate() {
+                    const tpl = this.selectedSqlTemplate;
+                    if (!tpl) return '';
+                    let sql = tpl.sql;
+                    for (const key of this.sqlTemplateVariables) {
+                        const rawValue = this.sqlTemplateParams[key];
+                        const value = rawValue === undefined || rawValue === null ? '' : String(rawValue);
+                        sql = sql.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), value);
+                    }
+                    return sql;
+                },
+                filteredServers() { return []; }, // placeholder if reused, otherwise ignored
+                memoryUsageRate() { return '0%'; },
+                healthStatusClass() { return ''; }
+            },
+            watch: {
+                baseFontSize(val) {
+                    document.documentElement.style.setProperty('--base-font-size', val + 'px');
+                    localStorage.setItem('sqlToolFontSize', val);
+                    setTimeout(() => {
+                        if (this.editor) this.editor.refresh();
+                    }, 50);
+                },
+                sql(newVal) {
+                    if (this.editor && newVal !== this.editor.getValue()) {
+                        this.editor.setValue(newVal);
+                    }
+                    this.syncCurrentTabState();
+                    this.persistTabsState();
+                },
+                // 新结果到来时自动切回表格视图
+                result(newVal) {
+                    if (newVal) this.textViewMode = false;
+                },
+                'dbObjects.tables': {
+                    handler() { this.updateSqlHints(); },
+                    deep: true
+                },
+                'dbObjects.views': {
+                    handler() { this.updateSqlHints(); },
+                    deep: true
+                },
+                sqlTemplateSearch() {
+                    this.ensureSqlTemplateSelection();
+                },
+                sqlTemplateCategory() {
+                    this.ensureSqlTemplateSelection();
+                },
+                onlyCurrentDbTemplates() {
+                    this.ensureSqlTemplateSelection();
+                },
+                currentDbType() {
+                    this.ensureSqlTemplateSelection();
+                }
+            },
+            beforeUnmount() {
+                this.syncCurrentTabState();
+                this.persistTabsState();
+                if (this.tabsPersistTimer) {
+                    clearInterval(this.tabsPersistTimer);
+                }
+                if (this.documentClickHandler) {
+                    document.removeEventListener('click', this.documentClickHandler);
+                }
+                if (this.keydownHandler) {
+                    window.removeEventListener('keydown', this.keydownHandler);
+                }
+                if (this.beforeUnloadHandler) {
+                    window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+                }
+            },
+            mounted() {
+                document.documentElement.style.setProperty('--base-font-size', this.baseFontSize + 'px');
+                this.setupCsrfInterceptor();
+                this.getCsrfToken();
+                this.loadDataSources();
+
+                this.initTabs();
+                this.updateTitle();
+                const savedHistory = localStorage.getItem('sql_history');
+                if (savedHistory) {
+                    this.history = JSON.parse(savedHistory);
+                }
+
+                this.$nextTick(() => {
+                    if (this.$refs.sqlEditor) {
+                        this.editor = CodeMirror.fromTextArea(this.$refs.sqlEditor, {
+                            mode: 'text/x-sql',
+                            theme: 'dracula',
+                            lineNumbers: true,
+                            indentWithTabs: true,
+                            smartIndent: true,
+                            matchBrackets: true,
+                            autofocus: true,
+                            extraKeys: {
+                                "Ctrl-Enter": () => this.executeSql(),
+                                "Ctrl-Space": "autocomplete",
+                                "Alt-/": (cm) => this.handleF6AutoComplete(cm),
+                                "Ctrl-T": () => this.newTab(),
+                                "Ctrl-W": () => this.closeTab(this.activeTabId),
+                                "Ctrl-Tab": () => this.switchToAdjacentTab(1),
+                                "Shift-Ctrl-Tab": () => this.switchToAdjacentTab(-1)
+                            },
+                            hintOptions: {
+                                tables: {}
+                            }
+                        });
+
+                        this.editor.on('change', (cm) => {
+                            this.sql = cm.getValue();
+                        });
+
+                        if (this.sql) {
+                            this.editor.setValue(this.sql);
+                        }
+
+                        this.editor.on('inputRead', (cm, change) => {
+                            if (change.text.length === 1 && change.text[0] === '.') {
+                                this.handleDotInput(cm);
+                            }
+                        });
+                    }
+                });
+
+                this.documentClickHandler = () => {
+                    this.hideContextMenu();
+                };
+                document.addEventListener('click', this.documentClickHandler);
+
+                this.keydownHandler = (event) => this.handleGlobalShortcuts(event);
+                window.addEventListener('keydown', this.keydownHandler);
+
+                this.beforeUnloadHandler = () => {
+                    this.syncCurrentTabState();
+                    this.persistTabsState();
+                };
+                window.addEventListener('beforeunload', this.beforeUnloadHandler);
+
+                this.tabsPersistTimer = setInterval(() => {
+                    this.syncCurrentTabState();
+                    this.persistTabsState();
+                }, 5000);
+            },
+            methods: {
+                t: function(key) {
+                    var merged = Object.assign({}, sqlAllTexts[this.locale] || sqlAllTexts['en'], sqlLocaleMessages);
+                    var val = merged[key] || key.split('.').pop();
+                    if (arguments.length > 1) {
+                        for (var i = 1; i < arguments.length; i++) {
+                            val = val.replace('{' + (i-1) + '}', arguments[i]);
+                        }
+                    }
+                    return val;
+                },
+                updateTitle: function() {
+                    var merged = Object.assign({}, sqlAllTexts[this.locale] || sqlAllTexts['en'], sqlLocaleMessages);
+                    document.title = (merged['sql.title'] || 'SQL Executor') + ' - Web Tool';
+                },
+                setLanguage: function(locale) {
+                    this.locale = locale;
+                    localStorage.setItem('locale', locale);
+                    loadSqlLocaleMessages(locale);
+                    this.updateTitle();
+                },
+                createDefaultPagination() {
+                    return {
+                        currentPage: 1,
+                        pageSize: 10,
+                        pageSizeOptions: [10, 20, 50, 100]
+                    };
+                },
+                createTab(title) {
+                    return {
+                        id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                        title: title || `${this.t('sql.query')} ${this.tabs.length + 1}`,
+                        sql: '',
+                        loading: false,
+                        result: null,
+                        lastExecutionTime: null,
+                        pagination: this.createDefaultPagination()
+                    };
+                },
+                getActiveTab() {
+                    return this.tabs.find(t => t.id === this.activeTabId) || null;
+                },
+                syncCurrentTabState() {
+                    const tab = this.getActiveTab();
+                    if (!tab) return;
+                    tab.sql = this.sql;
+                    tab.loading = this.loading;
+                    tab.result = this.result;
+                    tab.lastExecutionTime = this.lastExecutionTime;
+                    tab.pagination = {
+                        currentPage: this.pagination.currentPage,
+                        pageSize: this.pagination.pageSize,
+                        pageSizeOptions: this.pagination.pageSizeOptions.slice()
+                    };
+                },
+                applyTabState(tab) {
+                    if (!tab) return;
+                    this.sql = tab.sql || '';
+                    this.loading = !!tab.loading;
+                    this.result = tab.result || null;
+                    this.lastExecutionTime = tab.lastExecutionTime || null;
+                    this.pagination = {
+                        currentPage: tab.pagination?.currentPage || 1,
+                        pageSize: tab.pagination?.pageSize || 10,
+                        pageSizeOptions: [10, 20, 50, 100]
+                    };
+                    if (this.editor && this.editor.getValue() !== this.sql) {
+                        this.editor.setValue(this.sql);
+                    }
+                },
+                persistTabsState() {
+                    if (!this.tabs || this.tabs.length === 0) return;
+                    localStorage.setItem('sql_editor_tabs', JSON.stringify(this.tabs));
+                    localStorage.setItem('sql_editor_active_tab', this.activeTabId || '');
+                },
+                initTabs() {
+                    const savedTabs = localStorage.getItem('sql_editor_tabs');
+                    const savedActiveTab = localStorage.getItem('sql_editor_active_tab');
+                    if (savedTabs) {
+                        try {
+                            const parsedTabs = JSON.parse(savedTabs);
+                            if (Array.isArray(parsedTabs) && parsedTabs.length > 0) {
+                                this.tabs = parsedTabs.map((tab, idx) => ({
+                                    id: tab.id || `${Date.now()}_${idx}`,
+                                    title: tab.title || `${this.t('sql.tabTitle')} ${idx + 1}`,
+                                    sql: tab.sql || '',
+                                    loading: false,
+                                    result: tab.result || null,
+                                    lastExecutionTime: tab.lastExecutionTime || null,
+                                    pagination: {
+                                        currentPage: tab.pagination?.currentPage || 1,
+                                        pageSize: tab.pagination?.pageSize || 10,
+                                        pageSizeOptions: [10, 20, 50, 100]
+                                    }
+                                }));
+                                this.activeTabId = this.tabs.some(t => t.id === savedActiveTab)
+                                    ? savedActiveTab
+                                    : this.tabs[0].id;
+                                this.applyTabState(this.getActiveTab());
+                                return;
+                            }
+                        } catch (e) {
+                        }
+                    }
+                    const firstTab = this.createTab(this.t('sql.query') + ' 1');
+                    this.tabs = [firstTab];
+                    this.activeTabId = firstTab.id;
+                    this.applyTabState(firstTab);
+                    this.persistTabsState();
+                },
+                newTab() {
+                    if (this.tabs.length >= this.maxTabs) {
+                        this.showToast(this.t('sql.tip'), this.t('sql.maxTabs', this.maxTabs), 'error');
+                        return;
+                    }
+                    this.syncCurrentTabState();
+                    const tab = this.createTab();
+                    this.tabs.push(tab);
+                    this.activeTabId = tab.id;
+                    this.applyTabState(tab);
+                    this.persistTabsState();
+                    if (this.editor) {
+                        this.$nextTick(() => this.editor.focus());
+                    }
+                },
+                switchTab(tabId) {
+                    if (tabId === this.activeTabId) return;
+                    this.syncCurrentTabState();
+                    const tab = this.tabs.find(t => t.id === tabId);
+                    if (!tab) return;
+                    this.activeTabId = tabId;
+                    this.applyTabState(tab);
+                    this.persistTabsState();
+                },
+                closeTab(tabId) {
+                    if (!tabId || this.tabs.length === 0) return;
+                    if (this.tabs.length === 1) {
+                        this.tabs = [this.createTab(this.t('sql.query') + ' 1')];
+                        this.activeTabId = this.tabs[0].id;
+                        this.applyTabState(this.tabs[0]);
+                        this.persistTabsState();
+                        return;
+                    }
+                    const currentIndex = this.tabs.findIndex(t => t.id === tabId);
+                    if (currentIndex === -1) return;
+                    const isClosingActive = tabId === this.activeTabId;
+                    if (!isClosingActive) {
+                        this.tabs.splice(currentIndex, 1);
+                        this.persistTabsState();
+                        return;
+                    }
+                    this.syncCurrentTabState();
+                    this.tabs.splice(currentIndex, 1);
+                    const nextIndex = Math.max(0, currentIndex - 1);
+                    this.activeTabId = this.tabs[nextIndex].id;
+                    this.applyTabState(this.tabs[nextIndex]);
+                    this.persistTabsState();
+                },
+                renameTab(tab) {
+                    const newName = prompt(this.t('sql.newTabName'), tab.title || '');
+                    if (!newName || !newName.trim()) return;
+                    tab.title = newName.trim();
+                    this.persistTabsState();
+                },
+                switchToAdjacentTab(step) {
+                    if (!this.tabs || this.tabs.length <= 1) return;
+                    const index = this.tabs.findIndex(t => t.id === this.activeTabId);
+                    if (index === -1) return;
+                    const nextIndex = (index + step + this.tabs.length) % this.tabs.length;
+                    this.switchTab(this.tabs[nextIndex].id);
+                },
+                handleGlobalShortcuts(event) {
+                    if (!event.ctrlKey) return;
+                    const key = (event.key || '').toLowerCase();
+                    if (key === 't') {
+                        event.preventDefault();
+                        this.newTab();
+                        return;
+                    }
+                    if (key === 'w') {
+                        event.preventDefault();
+                        this.closeTab(this.activeTabId);
+                        return;
+                    }
+                    if (key === 'tab') {
+                        event.preventDefault();
+                        this.switchToAdjacentTab(event.shiftKey ? -1 : 1);
+                    }
+                },
+                openSqlTemplateModal() {
+                    this.showSqlTemplateModal = true;
+                    this.ensureSqlTemplateSelection();
+                    for (const key of this.sqlTemplateVariables) {
+                        if (this.sqlTemplateParams[key] === undefined) {
+                            this.sqlTemplateParams[key] = '';
+                        }
+                    }
+                },
+                closeSqlTemplateModal() {
+                    this.showSqlTemplateModal = false;
+                },
+                ensureSqlTemplateSelection() {
+                    if (!this.selectedSqlTemplateId && this.filteredSqlTemplates.length > 0) {
+                        this.selectedSqlTemplateId = this.filteredSqlTemplates[0].id;
+                        return;
+                    }
+                    if (this.selectedSqlTemplateId && !this.filteredSqlTemplates.some(item => item.id === this.selectedSqlTemplateId)) {
+                        this.selectedSqlTemplateId = this.filteredSqlTemplates.length > 0 ? this.filteredSqlTemplates[0].id : '';
+                    }
+                },
+                async copySqlTemplate() {
+                    if (!this.renderedSqlTemplate) return;
+                    try {
+                        await navigator.clipboard.writeText(this.renderedSqlTemplate);
+                        this.showToast(this.t('sql.copySuccess'), this.t('sql.copiedToClipboard'), 'success');
+                    } catch (e) {
+                        this.showToast(this.t('sql.copyFailed'), this.t('sql.cannotWriteClipboard'), 'error');
+                    }
+                },
+                insertSqlTemplate() {
+                    const text = this.renderedSqlTemplate;
+                    if (!text) return;
+                    if (this.editor) {
+                        this.editor.setValue(text);
+                        this.sql = text;
+                        this.editor.focus();
+                    } else {
+                        this.sql = text;
+                    }
+                    this.closeSqlTemplateModal();
+                    this.showToast(this.t('sql.fillSuccess'), this.t('sql.templateOverwritten'), 'success');
+                },
+                updateSqlHints() {
+                    if (!this.editor) return;
+
+                    let hintOptions = this.editor.getOption('hintOptions') || { tables: {} };
+                    let tablesHint = hintOptions.tables || {};
+                    let updated = false;
+
+                    const allObjects = [...(this.dbObjects.tables || []), ...(this.dbObjects.views || [])];
+                    allObjects.forEach(obj => {
+                        if (obj.name && !tablesHint[obj.name]) {
+                            tablesHint[obj.name] = []; // 初始时，列为空数组
+                            updated = true;
+                        }
+                    });
+
+                    if (updated) {
+                        hintOptions.tables = tablesHint;
+                        this.editor.setOption('hintOptions', hintOptions);
+                    }
+                },
+                resetAutocompleteHints() {
+                    if (!this.editor) return;
+                    this.editor.setOption('hintOptions', { tables: {} });
+                },
+                resolveTableAlias(cm, word) {
+                    const sqlStr = cm.getValue().toUpperCase();
+                    // 分词，保留点号，按空白符、逗号、分号、括号及常见运算符分割
+                    const tokens = sqlStr.split(/[\s,;()=<>+\-*/]+/);
+                    const keywords = [
+                        'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'JOIN', 'ON', 'IN', 'GROUP', 'BY', 'ORDER', 'ASC', 'DESC',
+                        'LEFT', 'RIGHT', 'INNER', 'OUTER', 'AS', 'IS', 'NOT', 'NULL', 'HAVING', 'LIMIT', 'OFFSET', 'UNION',
+                        'ALL', 'EXISTS', 'BETWEEN', 'LIKE', 'SET', 'UPDATE', 'DELETE', 'INSERT', 'INTO', 'VALUES'
+                    ];
+
+                    const searchWord = word.toUpperCase();
+
+                    for (let i = 0; i < tokens.length - 1; i++) {
+                        let word1 = tokens[i];
+                        if (!word1 || keywords.includes(word1)) continue;
+
+                        let word2 = tokens[i + 1];
+                        if (!word2) continue;
+
+                        if (word2 === 'AS' && i + 2 < tokens.length) {
+                            word2 = tokens[i + 2];
+                        }
+
+                        if (!word2 || keywords.includes(word2)) continue;
+
+                        if (word2 === searchWord) {
+                            return word1;
+                        }
+                    }
+                    return word; // 如果没匹配到别名，假设 word 就是表名本身
+                },
+                async handleDotInput(cm) {
+                    await this.handleSmartAutocomplete(cm, true);
+                },
+
+                async handleF6AutoComplete(cm) {
+                    await this.handleSmartAutocomplete(cm, false);
+                },
+
+                async handleSmartAutocomplete(cm, isDotTrigger) {
+                    await this.ensureTablesLoaded();
+
+                    const cur = cm.getCursor();
+                    const line = cm.getLine(cur.line);
+                    const textBeforeCursor = line.substring(0, cur.ch);
+
+                    const match = textBeforeCursor.match(/([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]*)*)$/);
+
+                    if (!match) {
+                        if (!isDotTrigger) cm.showHint({ completeSingle: false });
+                        return;
+                    }
+
+                    const chain = match[1];
+                    const chainUp = chain.toUpperCase();
+                    const parts = chainUp.split('.');
+                    const origParts = chain.split('.');
+
+                    if (parts.length === 1) {
+                        if (!isDotTrigger) cm.showHint({ completeSingle: false });
+                        return;
+                    }
+
+                    if (parts.length === 2) {
+                        const prefix1 = parts[0];
+                        const prefix2 = origParts[1];
+
+                        const realTableName = this.resolveTableAlias(cm, prefix1);
+                        const tableKey = this.resolveTableKey(cm, realTableName);
+
+                        if (tableKey) {
+                            await this.ensureTableColumns(cm, tableKey);
+                            const columns = this.getColumnsForTable(cm, tableKey);
+                            this.showSmartHints(cm, columns);
+                        } else {
+                            const tables = this.getAllTableNames(cm);
+                            this.showSmartHints(cm, tables);
+                        }
+                        return;
+                    }
+
+                    if (parts.length >= 3) {
+                        const tablePart = parts[1];
+                        const prefix3 = origParts[2];
+
+                        const tableKey = this.resolveTableKey(cm, tablePart);
+                        if (tableKey) {
+                            await this.ensureTableColumns(cm, tableKey);
+                            const columns = this.getColumnsForTable(cm, tableKey);
+                            this.showSmartHints(cm, columns);
+                        } else {
+                            if (!isDotTrigger) cm.showHint({ completeSingle: false });
+                        }
+                        return;
+                    }
+                },
+
+                async ensureTablesLoaded() {
+                    if (!this.loadedObjects.tables) {
+                        await this.loadDatabaseObjects('tables');
+                    }
+                    if (!this.loadedObjects.views) {
+                        await this.loadDatabaseObjects('views');
+                    }
+                    this.updateSqlHints();
+                },
+
+                resolveTableKey(cm, name) {
+                    if (!name) return null;
+                    const hintOptions = cm.getOption('hintOptions') || { tables: {} };
+                    const tablesHint = hintOptions.tables || {};
+                    let searchName = name.toUpperCase();
+                    if (searchName.includes('.')) {
+                        searchName = searchName.split('.').pop();
+                    }
+                    if (tablesHint.hasOwnProperty(searchName) && Array.isArray(tablesHint[searchName])) {
+                        return searchName;
+                    }
+                    const keys = Object.keys(tablesHint);
+                    for (let i = 0; i < keys.length; i++) {
+                        if (keys[i].toUpperCase() === searchName && Array.isArray(tablesHint[keys[i]])) {
+                            return keys[i];
+                        }
+                    }
+                    return null;
+                },
+
+                getAllTableNames(cm) {
+                    const hintOptions = cm.getOption('hintOptions') || { tables: {} };
+                    const tablesHint = hintOptions.tables || {};
+                    return Object.keys(tablesHint).filter(k => Array.isArray(tablesHint[k]));
+                },
+
+                getColumnsForTable(cm, tableKey) {
+                    const hintOptions = cm.getOption('hintOptions') || { tables: {} };
+                    const tablesHint = hintOptions.tables || {};
+                    const cols = tablesHint[tableKey];
+                    return Array.isArray(cols) ? cols : [];
+                },
+
+                showSmartHints(cm, items) {
+                    if (!items || items.length === 0) return;
+
+                    cm.showHint({
+                        completeSingle: false,
+                        hint: function () {
+                            const cur = cm.getCursor();
+                            const line = cm.getLine(cur.line);
+                            const textBeforeCursor = line.substring(0, cur.ch);
+
+                            const match = textBeforeCursor.match(/([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]*)*)$/);
+                            if (!match) return null;
+
+                            const parts = match[1].split('.');
+                            const currentPrefix = parts[parts.length - 1].toUpperCase();
+
+                            const filteredList = currentPrefix
+                                ? items.filter(t => t.toUpperCase().startsWith(currentPrefix))
+                                : items.slice();
+
+                            const startCh = cur.ch - currentPrefix.length;
+
+                            return {
+                                list: filteredList,
+                                from: CodeMirror.Pos(cur.line, startCh),
+                                to: cur
+                            };
+                        }
+                    });
+                },
+
+                async ensureTableColumns(cm, tableName) {
+                    if (!tableName) return;
+                    const key = this.resolveTableKey(cm, tableName) || tableName;
+                    let hintOptions = cm.getOption('hintOptions') || { tables: {} };
+                    let tablesHint = hintOptions.tables || {};
+                    if (tablesHint[key] && Array.isArray(tablesHint[key]) && tablesHint[key].length === 0) {
+                        const dsIdx = this.selectedDataSourceIdx;
+                        if (dsIdx === null || dsIdx === undefined) return;
+                        try {
+                            const res = await axios.get(`/api/oracle/table-structure/${encodeURIComponent(key)}`, {
+                                params: { datasourceIndex: dsIdx }
+                            });
+                            if (res.data && res.data.length > 0) {
+                                tablesHint[key] = res.data
+                                    .map(col => col.columnName || col.COLUMN_NAME || col.name || col.column_name)
+                                    .filter(Boolean);
+                                hintOptions.tables = tablesHint;
+                                cm.setOption('hintOptions', hintOptions);
+                            }
+                        } catch (e) {
+                            console.error('autocomplete: failed to load columns for', key, e);
+                        }
+                    }
+                },
+
+                // --- End AutoComplete ---
+
+                // Resize Handle Methods
+                startResize(e) {
+                    this.isResizing = true;
+                    this.startResizeY = e.clientY;
+                    this.startResizeHeight = this.inputAreaHeight;
+                    document.body.style.cursor = 'row-resize';
+                    document.body.style.userSelect = 'none';
+
+                    document.addEventListener('mousemove', this.onResize);
+                    document.addEventListener('mouseup', this.stopResize);
+                },
+                onResize(e) {
+                    if (!this.isResizing) return;
+                    const deltaY = e.clientY - this.startResizeY;
+                    const newHeight = Math.max(100, Math.min(800, this.startResizeHeight + deltaY));
+                    this.inputAreaHeight = newHeight;
+                },
+                stopResize() {
+                    this.isResizing = false;
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+
+                    document.removeEventListener('mousemove', this.onResize);
+                    document.removeEventListener('mouseup', this.stopResize);
+
+                    // Refresh CodeMirror layout
+                    if (this.editor) {
+                        this.editor.refresh();
+                    }
+                },
+                /** 常用工具入口 */
+                onCommonTool(tool) {
+                    if (this.selectedDataSourceIdx === null) return;
+                    if (tool.requireOracle && !this.isOracleDb) return;
+                    if (tool.id === 'unlock_tables') {
+                        this.openUnlockModal();
+                    } else {
+                        this.showToast(this.t('sql.pendingFeature'), this.t('sql.featureInDevelopment', this.t(tool.labelKey), this.currentDatabaseName), 'success');
+                    }
+                },
+                /** 打开解锁库表弹窗并查询 */
+                openUnlockModal() {
+                    this.lockData.loading = false;
+                    this.lockData.rows = [];
+                    this.lockData.error = null;
+                    this.lockData.unlocking = null;
+                    const modal = new bootstrap.Modal(document.getElementById('unlockTableModal'));
+                    modal.show();
+                    this.$nextTick(() => this.fetchLockedObjects());
+                },
+                /** 查询锁表信息 */
+                async fetchLockedObjects() {
+                    this.lockData.loading = true;
+                    this.lockData.error = null;
+                    try {
+                        const res = await axios.get('/api/database/lock/locked-objects', {
+                            params: { datasourceIndex: this.selectedDataSourceIdx }
+                        });
+                        if (res.data.success) {
+                            this.lockData.rows = res.data.data || [];
+                        } else {
+                            this.lockData.error = res.data.message || this.t('sql.loadingFailed');
+                        }
+                    } catch (e) {
+                        this.lockData.error = this.t('sql.requestError', e.response?.data?.message || e.message);
+                    } finally {
+                        this.lockData.loading = false;
+                    }
+                },
+                /** 执行解锁 */
+                async doUnlock(row, idx) {
+                    if (!confirm(this.t('sql.confirmTerminate', row.SID, row.SERIAL_NUM))) return;
+                    this.lockData.unlocking = idx;
+                    try {
+                        const res = await axios.post('/api/database/lock/unlock-session', null, {
+                            params: {
+                                sid: row.SID,
+                                serial: row.SERIAL_NUM,
+                                datasourceIndex: this.selectedDataSourceIdx
+                            }
+                        });
+                        const msg = res.data.message || '';
+                        if (res.data.success) {
+                            this.showToast(this.t('sql.unlockSuccess'), msg, 'success');
+                            this.fetchLockedObjects();
+                        } else {
+                            this.showToast(this.t('sql.unlockFailed'), msg, 'error');
+                        }
+                    } catch (e) {
+                        this.showToast(this.t('sql.unlockFailed'), e.response?.data?.message || e.message, 'error');
+                    } finally {
+                        this.lockData.unlocking = null;
+                    }
+                },
+                /** 格式化锁定时长 */
+                formatLockDuration(seconds) {
+                    if (seconds == null) return '-';
+                    const s = Number(seconds);
+                    if (s < 60) return s + this.t('sql.seconds');
+                    const m = Math.floor(s / 60);
+                    if (m < 60) return m + this.t('sql.minutes') + (s % 60) + this.t('sql.seconds');
+                    const h = Math.floor(m / 60);
+                    return h + this.t('sql.hours') + (m % 60) + this.t('sql.minutes');
+                },
+                // 显示 Toast 通知
+                showToast(title, message, type = 'success') {
+                    this.toastTitle = title;
+                    this.toastMessage = message;
+                    this.toastType = type;
+
+                    // 使用 Bootstrap Toast API
+                    this.$nextTick(() => {
+                        const toastEl = this.$refs.toast;
+                        if (toastEl) {
+                            const toast = new bootstrap.Toast(toastEl, {
+                                autohide: true,
+                                delay: 3000
+                            });
+                            toast.show();
+                        }
+                    });
+                },
+                // 刷新并重新加载数据（后端已禁用缓存）
+                async refreshCache() {
+                    console.log('Refresh initiated');
+
+                    // 1. 清空搜索框
+                    this.objectSearch = '';
+
+                    if (this.selectedDataSourceIdx === null || this.selectedDataSourceIdx === undefined) {
+                        this.showToast(this.t('sql.tip'), this.t('sql.selectDatasource'), 'error');
+                        return;
+                    }
+
+                    try {
+                        this.showToast(this.t('sql.tip'), this.t('sql.refreshing'), 'info');
+
+                        // 2. 重置本地数据和加载状态
+                        this.dbObjects = {
+                            tables: [], views: [], indexes: [], procedures: [], triggers: [], sequences: []
+                        };
+                        this.loadedObjects = {
+                            tables: false, views: false, indexes: false, procedures: false, triggers: false, sequences: false
+                        };
+
+                        // 3. 折叠面板
+                        this.$nextTick(() => {
+                            const accordion = document.getElementById('dbObjectsAccordion');
+                            if (accordion) {
+                                accordion.querySelectorAll('.accordion-collapse').forEach(el => el.classList.remove('show'));
+                                accordion.querySelectorAll('.accordion-button').forEach(btn => {
+                                    btn.classList.add('collapsed');
+                                    btn.setAttribute('aria-expanded', 'false');
+                                });
+                            }
+                        });
+
+                        // 4. 直接从后端加载最新数据（后端已禁用缓存，每次都查数据库）
+                        const res = await axios.get('/api/oracle/objects/tables', {
+                            params: {
+                                datasourceIndex: this.selectedDataSourceIdx,
+                                _t: Date.now()
+                            }
+                        });
+                        this.dbObjects.tables = res.data || [];
+                        this.loadedObjects.tables = true;
+
+                        this.showToast(this.t('sql.completed'), this.t('sql.refreshComplete', this.dbObjects.tables.length), 'success');
+
+                    } catch (e) {
+                        console.error(e);
+                        this.showToast(this.t('sql.error'), this.t('sql.refreshFailed', e.message), 'error');
+                    }
+                },
+                // 强制重新加载对象列表（点击放大镜或按回车时调用）
+                async forceReloadObjects() {
+                    console.log('Force reload objects');
+
+                    if (this.selectedDataSourceIdx === null || this.selectedDataSourceIdx === undefined) {
+                        this.showToast(this.t('sql.tip'), this.t('sql.selectDatasource'), 'error');
+                        return;
+                    }
+
+                    // 重置所有加载状态
+                    this.loadedObjects = {
+                        tables: false, views: false, indexes: false, procedures: false, triggers: false, sequences: false
+                    };
+
+                    // 找出当前展开的面板
+                    const expandedTypes = [];
+                    const accordion = document.getElementById('dbObjectsAccordion');
+                    if (accordion) {
+                        accordion.querySelectorAll('.accordion-collapse.show').forEach(el => {
+                            const id = el.id;
+                            if (id === 'collapseTables') expandedTypes.push('tables');
+                            else if (id === 'collapseViews') expandedTypes.push('views');
+                            else if (id === 'collapseIndexes') expandedTypes.push('indexes');
+                            else if (id === 'collapseProcedures') expandedTypes.push('procedures');
+                            else if (id === 'collapseTriggers') expandedTypes.push('triggers');
+                            else if (id === 'collapseSequences') expandedTypes.push('sequences');
+                        });
+                    }
+
+                    // 强制重新加载展开的面板
+                    this.showToast(this.t('sql.tip'), this.t('sql.dataReloading'), 'info');
+
+                    for (const type of expandedTypes) {
+                        this.dbObjects[type] = [];
+                        await this.loadDatabaseObjects(type, true);
+                    }
+
+                    // 如果没有展开的面板，默认加载tables
+                    if (expandedTypes.length === 0) {
+                        this.dbObjects.tables = [];
+                        await this.loadDatabaseObjects('tables', true);
+                    }
+
+                    this.showToast(this.t('sql.completed'), this.t('sql.dataRefreshed'), 'success');
+                },
+                // 过滤数据库对象
+                filteredObjects(type) {
+                    if (!this.objectSearch) {
+                        return this.dbObjects[type] || [];
+                    }
+                    const search = this.objectSearch.toLowerCase();
+                    return (this.dbObjects[type] || []).filter(obj =>
+                        obj.name.toLowerCase().includes(search)
+                    );
+                },
+                // 懒加载数据库对象
+                async loadDatabaseObjects(type, force = false) {
+                    // 如果已经加载过且不是强制加载，不重复加载
+                    if (!force && this.loadedObjects[type]) {
+                        return;
+                    }
+
+                    if (this.selectedDataSourceIdx === null || this.selectedDataSourceIdx === undefined) {
+                        this.showToast(this.t('sql.tip'), this.t('sql.selectDatasource'), 'error');
+                        return;
+                    }
+
+                    this.loadingObjects[type] = true;
+                    try {
+                        const res = await axios.get(`/api/oracle/objects/${type}`, {
+                            params: {
+                                datasourceIndex: this.selectedDataSourceIdx,
+                                _t: Date.now()  // 添加时间戳防止浏览器缓存
+                            }
+                        });
+                        this.dbObjects[type] = res.data || [];
+                        this.loadedObjects[type] = true;
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), this.t('sql.loadingFailed', type, e.message), 'error');
+                    } finally {
+                        this.loadingObjects[type] = false;
+                    }
+                },
+                // 处理对象点击事件
+                handleObjectClick(type, name) {
+                    if (type === 'tables') {
+                        // 表：显示 SELECT * FROM 表名
+                        this.sql = `SELECT * FROM ${name}`;
+                        this.$nextTick(() => {
+                            if (this.editor) {
+                                this.editor.focus();
+                                this.editor.setCursor(this.editor.lineCount(), 0);
+                            }
+                        });
+                    } else {
+                        // 其他对象：获取DDL
+                        this.getObjectDDL(type, name);
+                    }
+                },
+                // 获取对象DDL
+                async getObjectDDL(type, name) {
+                    if (this.selectedDataSourceIdx === null || this.selectedDataSourceIdx === undefined) {
+                        this.showToast(this.t('sql.tip'), this.t('sql.selectDatasource'), 'error');
+                        return;
+                    }
+
+                    try {
+                        const res = await axios.get(`/api/oracle/ddl/${type}/${encodeURIComponent(name)}`, {
+                            params: { datasourceIndex: this.selectedDataSourceIdx }
+                        });
+                        if (res.data && res.data.ddl) {
+                            this.sql = res.data.ddl;
+                            this.$nextTick(() => {
+                                if (this.editor) this.editor.focus();
+                            });
+                        }
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), this.t('sql.getDdlFailed', e.message), 'error');
+                    }
+                },
+                // AES解密函数（与后端保持一致）
+                decryptData(encryptedData) {
+                    if (!encryptedData) return null;
+                    try {
+                        // 使用CryptoJS解密
+                        const key = CryptoJS.enc.Utf8.parse('XjToolSecretKey1'); // 16字符，与后端一致
+                        const decrypted = CryptoJS.AES.decrypt(encryptedData, key, {
+                            mode: CryptoJS.mode.ECB,
+                            padding: CryptoJS.pad.Pkcs7
+                        });
+                        const decryptedStr = decrypted.toString(CryptoJS.enc.Utf8);
+                        // 解析JSON
+                        return JSON.parse(decryptedStr);
+                    } catch (e) {
+                        return null;
+                    }
+                },
+                changePage(page) {
+                    if (page < 1 || page > this.totalPages) return;
+                    if (this.needsServerPagingRefetch) {
+                        // 服务端分页：重新请求后端（含批量中多条 SELECT 同页码分页）
+                        this.pagination.currentPage = page;
+                        this.executeSqlInternal(this.lastExecutedSql, this.lastDatasourceIdx, null, page, this.pagination.pageSize);
+                    } else {
+                        this.pagination.currentPage = page;
+                    }
+                },
+                // 配置axios CSRF拦截器
+                setupCsrfInterceptor() {
+                    axios.interceptors.request.use(config => {
+                        // 如果是POST/PUT/DELETE/PATCH请求，添加CSRF Token
+                        const modifyingMethods = ['post', 'put', 'delete', 'patch'];
+                        if (config.method && modifyingMethods.includes(config.method.toLowerCase())) {
+                            if (this.csrfToken) {
+                                config.headers['X-CSRF-Token'] = this.csrfToken;
+                            }
+                        }
+                        return config;
+                    }, error => {
+                        return Promise.reject(error);
+                    });
+
+                    // 响应拦截器：如果Token过期，自动刷新
+                    axios.interceptors.response.use(
+                        response => response,
+                        async error => {
+                            if (error.response && error.response.status === 403) {
+                                const errorMsg = error.response.data?.message || '';
+                                // 如果是CSRF Token过期，尝试刷新Token
+                                if (errorMsg.includes('CSRF') || errorMsg.includes('Token')) {
+                                    console.log('CSRF Token无效，重新获取...');
+                                    await this.getCsrfToken();
+                                    // 重试原请求
+                                    const config = error.config;
+                                    if (this.csrfToken) {
+                                        config.headers['X-CSRF-Token'] = this.csrfToken;
+                                    }
+                                    return axios.request(config);
+                                }
+                            }
+                            return Promise.reject(error);
+                        }
+                    );
+                },
+                // 获取CSRF Token
+                async getCsrfToken() {
+                    try {
+                        const res = await axios.get('/api/csrf/token');
+                        if (res.data && res.data.success) {
+                            this.csrfToken = res.data.token;
+                            console.log('CSRF Token已获取');
+                        } else {
+                            console.warn('CSRF Token获取失败');
+                        }
+                    } catch (e) {
+                        console.error('获取CSRF Token异常:', e);
+                    }
+                },
+                async loadDataSources() {
+                    try {
+                        const res = await axios.get('/api/oracle/datasources');
+                        // 解密每个数据源信息（整个对象）
+                        this.dataSources = res.data
+                            .map(dto => this.decryptData(dto.encryptedData))
+                            .filter(ds => ds !== null);  // 过滤解密失败的
+                        if (this.dataSources.length > 0) {
+                            this.selectedDataSourceIdx = this.dataSources[0].index;
+                            await this.fetchDatabaseType();
+                        }
+                    } catch (e) {
+                        alert(this.t('sql.loadDatasourceFailed', e.message));
+                    }
+                },
+                async testConnection() {
+                    if (this.selectedDataSourceIdx === null || this.selectedDataSourceIdx === undefined) {
+                        this.showToast(this.t('sql.tip'), this.t('sql.selectDatasource'), 'error');
+                        return;
+                    }
+                    try {
+                        const res = await axios.post(`/api/oracle/test-connection?index=${this.selectedDataSourceIdx}`);
+                        if (res.data.success) {
+                            this.showToast(this.t('sql.connectionSuccess'), this.t('sql.connectionTestSuccess'), 'success');
+                        } else {
+                            this.showToast(this.t('sql.connectionFailed'), res.data.errorMessage || this.t('sql.error'), 'error');
+                        }
+                    } catch (e) {
+                        this.showToast(this.t('sql.connectionError'), e.message || this.t('sql.requestErrorNoArgs'), 'error');
+                    }
+                },
+                formatSql() {
+                    if (!this.editor || !window.sqlFormatter || !window.sqlFormatter.format) {
+                        this.showToast(this.t('sql.formatError'), this.t('sql.formatterLoadFailed'), 'error');
+                        return;
+                    }
+                    const dialectMap = {
+                        MYSQL: 'mysql',
+                        ORACLE: 'plsql',
+                        DM: 'sql'
+                    };
+                    const language = dialectMap[this.currentDbType] || 'sql';
+                    const hasSelection = this.editor.somethingSelected();
+                    const sourceSql = hasSelection ? this.editor.getSelection() : this.editor.getValue();
+                    if (!sourceSql || !sourceSql.trim()) {
+                        return;
+                    }
+                    try {
+                        const formattedSql = window.sqlFormatter.format(sourceSql, {
+                            language: language
+                        });
+                        if (hasSelection) {
+                            this.editor.replaceSelection(formattedSql);
+                        } else {
+                            this.editor.setValue(formattedSql);
+                        }
+                        this.sql = this.editor.getValue();
+                        this.showToast(this.t('sql.formatSuccess'), this.t('sql.sqlAutoFormatted'), 'success');
+                    } catch (e) {
+                        this.showToast(this.t('sql.formatFailed'), this.t('sql.sqlSyntaxError'), 'error');
+                    }
+                },
+                async executeSql() {
+                    if (this.selectedDataSourceIdx === null) return;
+
+                    let sqlToExecute = this.sql.trim();
+                    if (this.editor && this.editor.somethingSelected()) {
+                        sqlToExecute = this.editor.getSelection().trim();
+                    }
+                    if (!sqlToExecute) return;
+                    this.executeSqlInternal(sqlToExecute, this.selectedDataSourceIdx);
+                },
+
+                async executeSqlInternal(sql, datasourceIdx, token = null, page = null, pageSize = null) {
+                    this.loading = true;
+                    this.result = null;
+                    this.activeResultTabIndex = 0;
+                    this.lastExecutionTime = null;
+                    // 仅在全新执行（非翻页）时重置页码和分页状态
+                    if (page === null) {
+                        this.pagination.currentPage = 1;
+                        this.totalCount = -1;
+                        this.serverPaging = false;
+                        this.lastExecutedSql = sql;
+                        this.lastDatasourceIdx = datasourceIdx;
+                    }
+                    this.syncCurrentTabState();
+                    this.persistTabsState();
+
+                    try {
+                        const payload = {
+                            datasourceIndex: datasourceIdx,
+                            sql: sql,
+                            page: page !== null ? page : this.pagination.currentPage,
+                            pageSize: pageSize !== null ? pageSize : this.pagination.pageSize
+                        };
+
+                        if (token) {
+                            payload.dangerousCommandToken = token;
+                        }
+
+                        const res = await axios.post('/api/oracle/execute', payload);
+
+                        // Handle Need Confirm
+                        if (res.data.needConfirm) {
+                            this.pendingSql = sql;
+                            this.pendingDatasourceIdx = datasourceIdx;
+                            this.dangerousSqlReason = res.data.errorMessage;
+
+                            const modal = new bootstrap.Modal(document.getElementById('dangerousSqlModal'));
+                            modal.show();
+                            return;
+                        }
+
+                        this.result = res.data;
+                        this.lastExecutionTime = res.data.executionTime;
+
+                        // 检测后端是否返回了服务端分页信息
+                        if (res.data.pageSize > 0 && res.data.totalCount >= 0) {
+                            this.serverPaging = true;
+                            this.totalCount = res.data.totalCount;
+                            this.pagination.currentPage = res.data.currentPage;
+                        } else {
+                            this.serverPaging = false;
+                            this.totalCount = -1;
+                            // 批量执行：根对象无分页字段，但子结果可能带服务端分页元数据
+                            if (res.data.batch && res.data.multiResults && res.data.multiResults.length > 0) {
+                                const p = res.data.multiResults.find(r => r.pageSize > 0 && r.totalCount != null && Number(r.totalCount) >= 0);
+                                if (p && p.currentPage > 0) {
+                                    this.pagination.currentPage = p.currentPage;
+                                }
+                            }
+                        }
+
+                        // Add to history
+                        this.addToHistory(sql, res.data.success);
+                    } catch (e) {
+                        this.result = {
+                            success: false,
+                            errorMessage: this.t('sql.executeError', e.message)
+                        };
+                        this.addToHistory(sql, false);
+                    } finally {
+                        this.loading = false;
+                        this.syncCurrentTabState();
+                        this.persistTabsState();
+                    }
+                },
+
+                async confirmDangerousSql() {
+                    if (!this.pendingSql) return;
+
+                    this.generatingToken = true;
+                    try {
+                        // Request Token
+                        // Note: sessionId is optional in backend, will use HttpSession ID if omitted
+                        const formData = new FormData();
+                        formData.append('command', this.pendingSql);
+
+                        const res = await axios.post('/api/ssh/security/generate-token', formData);
+
+                        if (res.data && res.data.token) {
+                            // Close modal
+                            const modalEl = document.getElementById('dangerousSqlModal');
+                            const modal = bootstrap.Modal.getInstance(modalEl);
+                            if (modal) modal.hide();
+
+                            // Re-execute with token
+                            // We need to pass the token. executeSqlInternal handles it.
+                            await this.executeSqlInternal(this.pendingSql, this.pendingDatasourceIdx, res.data.token);
+                        } else {
+                            this.showToast(this.t('sql.error'), this.t('sql.tokenGenerateFailed'), 'error');
+                        }
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), this.t('sql.tokenRequestFailed', e.response?.data?.message || e.message), 'error');
+                        console.error(e);
+                    } finally {
+                        this.generatingToken = false;
+                    }
+                },
+
+                cancelDangerousSql() {
+                    this.pendingSql = '';
+                    this.dangerousSqlReason = '';
+                    this.pendingDatasourceIdx = null;
+                    const modalEl = document.getElementById('dangerousSqlModal');
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                },
+                async explainPlan() {
+                    if (this.selectedDataSourceIdx === null) return;
+                    let sqlToExplain = this.sql.trim();
+                    if (this.editor && this.editor.somethingSelected()) {
+                        sqlToExplain = this.editor.getSelection().trim();
+                    }
+                    if (!sqlToExplain) return;
+
+                    this.loading = true;
+                    this.result = null;
+                    this.lastExecutionTime = null;
+                    this.pagination.currentPage = 1;
+                    this.syncCurrentTabState();
+                    this.persistTabsState();
+
+                    try {
+                        const res = await axios.post('/api/oracle/explain', {
+                            datasourceIndex: this.selectedDataSourceIdx,
+                            sql: sqlToExplain
+                        });
+                        this.result = res.data;
+                        this.lastExecutionTime = res.data.executionTime;
+                    } catch (e) {
+                        this.result = {
+                            success: false,
+                            errorMessage: this.t('sql.explainPlanFailed', e.message)
+                        };
+                    } finally {
+                        this.loading = false;
+                        this.syncCurrentTabState();
+                        this.persistTabsState();
+                    }
+                },
+                addToHistory(sql, success) {
+                    // Remove duplicates
+                    this.history = this.history.filter(h => h.sql !== sql);
+                    // Add to top
+                    this.history.unshift({
+                        sql,
+                        success,
+                        timestamp: Date.now()
+                    });
+                    // Keep last 50
+                    if (this.history.length > 50) this.history.pop();
+                    localStorage.setItem('sql_history', JSON.stringify(this.history));
+                },
+                loadHistory(item) {
+                    this.sql = item.sql;
+                },
+                clearHistory() {
+                    if (confirm(this.t('sql.clearHistoryConfirm'))) {
+                        this.history = [];
+                        localStorage.removeItem('sql_history');
+                    }
+                },
+                formatTime(timestamp) {
+                    const d = new Date(timestamp);
+                    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+                },
+                formatCellValue(val) {
+                    if (val === null || val === undefined) return '<null>';
+                    if (typeof val === 'object') return JSON.stringify(val);
+                    return val;
+                },
+                downloadBlob(content, mimeType, fileName) {
+                    const blob = new Blob([content], { type: mimeType });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", fileName);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                },
+                exportCsv() {
+                    if (!this.currentResult || !this.currentResult.columns || !this.currentResult.rows) return;
+                    this.fetchAllRowsForExport().then(allRows => {
+                        const headers = this.currentResult.columns.join(',');
+                        const rowsStr = allRows.map(row =>
+                            this.currentResult.columns.map(col => {
+                                let cell = row[col];
+                                if (cell === null || cell === undefined) cell = '';
+                                cell = String(cell).replace(/"/g, '""');
+                                return `"${cell}"`;
+                            }).join(',')
+                        ).join('\n');
+                        const csvContent = "\uFEFF" + headers + '\n' + rowsStr;
+                        this.downloadBlob(csvContent, 'text/csv;charset=utf-8;', "query_result_" + Date.now() + ".csv");
+                    });
+                },
+                exportExcel() {
+                    if (!this.currentResult || !this.currentResult.columns || !this.currentResult.rows) return;
+                    this.fetchAllRowsForExport().then(allRows => {
+                        const escapeHtml = (val) => String(val)
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/'/g, '&#39;');
+                        const headerHtml = this.currentResult.columns.map(col => `<th>${escapeHtml(col)}</th>`).join('');
+                        const rowsHtml = allRows.map(row => {
+                            const cells = this.currentResult.columns.map(col => {
+                                const value = row[col] === null || row[col] === undefined ? '' : row[col];
+                                return `<td>${escapeHtml(value)}</td>`;
+                            }).join('');
+                            return `<tr>${cells}</tr>`;
+                        }).join('');
+                        const tableHtml = `\uFEFF<html><head><meta charset="UTF-8"></head><body><table border="1"><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
+                        this.downloadBlob(tableHtml, 'application/vnd.ms-excel;charset=utf-8;', "query_result_" + Date.now() + ".xls");
+                    });
+                },
+                /**
+                 * 导出前获取全量数据：
+                 * - 若是服务端分页模式，重新向后端请求 pageSize=0（全量）
+                 * - 否则直接使用当前 currentResult.rows
+                 */
+                async fetchAllRowsForExport() {
+                    // 当前结果集非服务端分页时，rows 已是全量
+                    if (!this.effectiveServerPaging || !this.lastExecutedSql) {
+                        return this.currentResult.rows;
+                    }
+                    // 批量且当前标签为服务端分页：只拉取该条 SQL 的全量；单条执行仍用整段 SQL
+                    const sqlForExport = (this.result && this.result.batch && this.currentResult && this.currentResult.sql)
+                        ? this.currentResult.sql
+                        : this.lastExecutedSql;
+                    // 服务端分页时，重新请求全量（pageSize=0）
+                    try {
+                        this.showToast(this.t('sql.tip'), this.t('sql.exporting'), 'success');
+                        const res = await axios.post('/api/oracle/execute', {
+                            datasourceIndex: this.lastDatasourceIdx,
+                            sql: sqlForExport,
+                            page: 1,
+                            pageSize: 0   // 0 = 不分页，返回全量
+                        });
+                        if (res.data && res.data.success && res.data.rows) {
+                            return res.data.rows;
+                        }
+                    } catch (e) {
+                        this.showToast(this.t('sql.exportFailed'), this.t('sql.fetchAllDataFailed', e.message), 'error');
+                    }
+                    // 降级：返回当前页数据
+                    return this.currentResult.rows;
+                },
+                inferExportTableName() {
+                    const sqlText = (this.sql || '').trim();
+                    const match = sqlText.match(/\bfrom\s+([`"\[]?[a-zA-Z0-9_.$]+[`"\]]?)/i);
+                    if (!match || !match[1]) return 'export_table';
+                    return match[1].replace(/^[`"\[]|[`"\]]$/g, '');
+                },
+                toSqlLiteral(value) {
+                    if (value === null || value === undefined) return 'NULL';
+                    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+                    if (typeof value === 'boolean') return value ? '1' : '0';
+                    if (value instanceof Date) return `'${value.toISOString().replace('T', ' ').replace('Z', '')}'`;
+                    if (typeof value === 'object') {
+                        const text = JSON.stringify(value).replace(/'/g, "''");
+                        return `'${text}'`;
+                    }
+                    const text = String(value).replace(/'/g, "''");
+                    return `'${text}'`;
+                },
+                exportInsertSql() {
+                    if (!this.currentResult || !this.currentResult.columns || !this.currentResult.rows) return;
+                    const tableName = this.inferExportTableName();
+                    const columns = this.currentResult.columns.join(', ');
+                    this.fetchAllRowsForExport().then(allRows => {
+                        const lines = allRows.map(row => {
+                            const values = this.currentResult.columns.map(col => this.toSqlLiteral(row[col])).join(', ');
+                            return `INSERT INTO ${tableName} (${columns}) VALUES (${values});`;
+                        });
+                        const sqlScript = lines.join('\n');
+                        this.downloadBlob(sqlScript, 'text/plain;charset=utf-8;', "insert_script_" + Date.now() + ".sql");
+                    });
+                },
+                // 显示右键菜单
+                showContextMenu(event, tableName) {
+                    this.contextMenu.show = true;
+                    this.contextMenu.x = event.clientX;
+                    this.contextMenu.y = event.clientY;
+                    this.contextMenu.tableName = tableName;
+                },
+                // 隐藏右键菜单
+                hideContextMenu() {
+                    this.contextMenu.show = false;
+                },
+                // 查看表结构
+                async viewTableStructure() {
+                    if (!this.contextMenu.tableName) return;
+
+                    this.currentTableName = this.contextMenu.tableName;
+                    this.loadingTableStructure = true;
+                    this.tableStructure = [];
+
+                    // 显示模态框
+                    const modal = new bootstrap.Modal(this.$refs.tableStructureModal);
+                    modal.show();
+
+                    try {
+                        const res = await axios.get(`/api/oracle/table-structure/${encodeURIComponent(this.currentTableName)}`, {
+                            params: { datasourceIndex: this.selectedDataSourceIdx }
+                        });
+                        this.tableStructure = res.data || [];
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), this.t('sql.tableStructureLoadFailed'), 'error');
+                    } finally {
+                        this.loadingTableStructure = false;
+                    }
+                },
+                // 加载表索引信息
+                async loadTableIndexes() {
+                    if (!this.currentTableName || this.loadingTableIndexes) return;
+
+                    this.loadingTableIndexes = true;
+                    this.tableIndexes = [];
+
+                    try {
+                        const res = await axios.get(`/api/oracle/table-indexes/${encodeURIComponent(this.currentTableName)}`, {
+                            params: { datasourceIndex: this.selectedDataSourceIdx }
+                        });
+                        this.tableIndexes = res.data || [];
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), this.t('sql.tableIndexesLoadFailed'), 'error');
+                    } finally {
+                        this.loadingTableIndexes = false;
+                    }
+                },
+                // 加载表分区信息
+                async loadTablePartitions() {
+                    if (!this.currentTableName || this.loadingTablePartitions) return;
+
+                    this.loadingTablePartitions = true;
+                    this.tablePartitions = [];
+
+                    try {
+                        const res = await axios.get(`/api/oracle/table-partitions/${encodeURIComponent(this.currentTableName)}`, {
+                            params: { datasourceIndex: this.selectedDataSourceIdx }
+                        });
+                        this.tablePartitions = res.data || [];
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), this.t('sql.tablePartitionsLoadFailed'), 'error');
+                    } finally {
+                        this.loadingTablePartitions = false;
+                    }
+                },
+                // 加载表触发器信息
+                async loadTableTriggers() {
+                    if (!this.currentTableName || this.loadingTableTriggers) return;
+
+                    this.loadingTableTriggers = true;
+                    this.tableTriggers = [];
+
+                    try {
+                        const res = await axios.get(`/api/oracle/table-triggers/${encodeURIComponent(this.currentTableName)}`, {
+                            params: { datasourceIndex: this.selectedDataSourceIdx }
+                        });
+                        this.tableTriggers = res.data || [];
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), this.t('sql.tableTriggersLoadFailed'), 'error');
+                    } finally {
+                        this.loadingTableTriggers = false;
+                    }
+                },
+                // 获取数据库类型并清除对象缓存
+                async fetchDatabaseType() {
+                    try {
+                        const res = await axios.get('/api/oracle/datasource-type', {
+                            params: { index: this.selectedDataSourceIdx }
+                        });
+                        this.currentDbType = res.data?.type || 'ORACLE';
+                        this.resetAutocompleteHints();
+
+                        // 清除本地对象列表和加载状态
+                        this.dbObjects = {
+                            tables: [],
+                            views: [],
+                            indexes: [],
+                            procedures: [],
+                            sequences: []
+                        };
+                        this.loadedObjects = {
+                            tables: false,
+                            views: false,
+                            indexes: false,
+                            procedures: false,
+                            sequences: false
+                        };
+
+                        // 折叠所有手风琴面板
+                        this.$nextTick(() => {
+                            const accordionElement = document.getElementById('dbObjectsAccordion');
+                            if (accordionElement) {
+                                const collapseElements = accordionElement.querySelectorAll('.accordion-collapse');
+                                collapseElements.forEach(el => {
+                                    const bsCollapse = bootstrap.Collapse.getInstance(el);
+                                    if (bsCollapse) {
+                                        bsCollapse.hide();
+                                    } else {
+                                        // 如果没有实例，直接移除show类
+                                        el.classList.remove('show');
+                                    }
+                                });
+                            }
+                        });
+
+                        // 调用后端清除缓存
+                        if (this.selectedDataSourceIdx !== null && this.selectedDataSourceIdx !== undefined) {
+                            await axios.post(`/api/oracle/cache/clear?datasourceIndex=${this.selectedDataSourceIdx}`);
+                        }
+                    } catch (e) {
+                        this.resetAutocompleteHints();
+                        this.currentDbType = 'ORACLE';  // 默认为Oracle
+                    }
+                },
+                // 生成建表SQL
+                async generateCreateTableSQL() {
+                    if (!this.currentTableName) return;
+
+                    try {
+                        const res = await axios.get(`/api/oracle/create-table-sql/${encodeURIComponent(this.currentTableName)}`, {
+                            params: { datasourceIndex: this.selectedDataSourceIdx }
+                        });
+
+                        if (res.data && res.data.sql) {
+                            // 将SQL语句填充到编辑器
+                            this.sql = res.data.sql;
+
+                            // 关闭模态框
+                            const modal = bootstrap.Modal.getInstance(this.$refs.tableStructureModal);
+                            if (modal) modal.hide();
+
+                            // 聚焦编辑器
+                            this.$nextTick(() => {
+                                if (this.editor) this.editor.focus();
+                            });
+
+                            this.showToast(this.t('sql.success'), this.t('sql.createTableSqlSuccess'), 'success');
+                        }
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), this.t('sql.createTableSqlFailed'), 'error');
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+    <!-- Bootstrap 5 JavaScript -->
+    <script src="/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

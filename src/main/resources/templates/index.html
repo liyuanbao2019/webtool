@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Tool</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link href="/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="/css/style.css" rel="stylesheet">
+    <!-- Vue 3 & Axios -->
+    <script src="/js/vue.global.prod.js"></script>
+    <script src="/js/axios.min.js"></script>
+    <!-- CryptoJS for AES decryption -->
+    <script src="/js/crypto-js.min.js"></script>
+    <style>
+        :root {
+            --workspace-primary: #6366f1;
+            --workspace-bg: #f8fafc;
+            --workspace-header: #ffffff;
+            --workspace-border: #e5e7eb;
+            --workspace-text-main: #1f2937;
+            --workspace-text-sub: #64748b;
+            --workspace-footer: #1e293b;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            background: var(--workspace-bg);
+            color: var(--workspace-text-main);
+        }
+
+        .workspace-shell {
+            height: 100vh;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .workspace-header {
+            height: 64px;
+            border-bottom: 1px solid var(--workspace-border);
+            background: var(--workspace-header);
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+            padding: 0 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            z-index: 20;
+        }
+
+        .workspace-brand {
+            display: inline-flex;
+            align-items: center;
+            gap: .625rem;
+            text-decoration: none;
+            color: var(--workspace-text-main);
+            min-width: 190px;
+        }
+
+        .workspace-brand-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: .625rem;
+            background: var(--workspace-primary);
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
+            font-size: .95rem;
+        }
+
+        .workspace-brand-title {
+            font-size: 1rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .search-zone {
+            flex: 1;
+            max-width: 640px;
+            position: relative;
+        }
+
+        .search-zone i {
+            position: absolute;
+            top: 50%;
+            left: 14px;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            font-size: .85rem;
+        }
+
+        .search-zone input {
+            border: 1px solid transparent;
+            background: #f1f5f9;
+            border-radius: 999px;
+            height: 40px;
+            padding-left: 36px;
+            font-size: .9rem;
+            transition: all .2s ease;
+        }
+
+        .search-zone input:focus {
+            background: #fff;
+            border-color: #c7d2fe;
+            box-shadow: 0 0 0 .2rem rgba(99, 102, 241, .16);
+        }
+
+        .workspace-tools {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            margin-left: auto;
+        }
+
+        .jump-inline {
+            width: 290px;
+            border: 1px solid var(--workspace-border);
+            border-radius: .625rem;
+            background: #f8fafc;
+            padding: .18rem;
+            display: flex;
+            align-items: center;
+            gap: .25rem;
+        }
+
+        .jump-inline i {
+            color: #94a3b8;
+            padding: 0 .4rem;
+            font-size: .8rem;
+        }
+
+        .jump-inline input {
+            border: none;
+            background: transparent;
+            font-size: .82rem;
+            flex: 1;
+            outline: none;
+            color: #475569;
+        }
+
+        .jump-inline .btn {
+            border-radius: .45rem;
+            padding: .25rem .6rem;
+            font-size: .78rem;
+            font-weight: 600;
+        }
+
+        .icon-tool-btn {
+            border: none;
+            background: transparent;
+            color: #64748b;
+            width: 34px;
+            height: 34px;
+            border-radius: .5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all .2s ease;
+            text-decoration: none;
+        }
+
+        .icon-tool-btn:hover {
+            background: #eef2ff;
+            color: var(--workspace-primary);
+        }
+
+        .divider-v {
+            width: 1px;
+            height: 22px;
+            background: #d1d5db;
+            margin: 0 .3rem;
+        }
+
+        .lang-switcher {
+            display: flex;
+            gap: 2px;
+            background: #f1f5f9;
+            border-radius: .4rem;
+            padding: 2px;
+        }
+
+        .lang-btn {
+            border: none;
+            background: transparent;
+            color: #94a3b8;
+            padding: 4px 10px;
+            border-radius: .3rem;
+            font-size: .75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+
+        .lang-btn:hover {
+            color: var(--workspace-primary);
+        }
+
+        .lang-btn.active {
+            background: #fff;
+            color: var(--workspace-primary);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+        }
+
+        .workspace-main {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 1.1rem 1.25rem;
+        }
+
+        .page-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: .75rem;
+            gap: .7rem;
+            flex-wrap: wrap;
+        }
+
+        .servers-title {
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            font-size: 1.18rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .servers-count {
+            background: #e2e8f0;
+            color: #475569;
+            border-radius: 999px;
+            padding: .08rem .55rem;
+            font-size: .76rem;
+            font-weight: 600;
+        }
+
+        .quick-links-panel {
+            background: #fff;
+            border: 1px solid var(--workspace-border);
+            border-radius: .55rem;
+            box-shadow: 0 1px 5px rgba(15, 23, 42, 0.05);
+            padding: .75rem;
+            margin-bottom: .75rem;
+            display: flex;
+            align-items: center;
+            gap: .65rem;
+            flex-wrap: wrap;
+        }
+
+        .quick-links-title {
+            font-size: .88rem;
+            font-weight: 700;
+            color: #475569;
+            margin-bottom: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            white-space: nowrap;
+        }
+
+        .quick-links-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem;
+            flex: 1;
+        }
+
+        .quick-link-item {
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            border-radius: .5rem;
+            padding: .38rem .62rem;
+            color: #1f2937;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            font-size: .8rem;
+            font-weight: 600;
+            transition: all .2s ease;
+        }
+
+        .quick-link-item:hover {
+            border-color: #c7d2fe;
+            background: #eef2ff;
+            color: #3730a3;
+            transform: translateY(-1px);
+        }
+
+        .view-switch {
+            display: flex;
+            background: #f1f5f9;
+            border-radius: .5rem;
+            padding: .15rem;
+        }
+
+        .view-switch button {
+            background: transparent;
+            border: none;
+            color: #64748b;
+            padding: .25rem .6rem;
+            border-radius: .35rem;
+            font-size: .85rem;
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .view-switch button.active {
+            background: #fff;
+            color: var(--workspace-primary);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .server-grid .row {
+            --bs-gutter-x: .5rem;
+            --bs-gutter-y: .5rem;
+        }
+
+        .server-card {
+            background: #fff;
+            border: 1px solid var(--workspace-border);
+            border-radius: .55rem;
+            box-shadow: 0 1px 5px rgba(15, 23, 42, 0.05);
+            padding: .34rem .48rem;
+            cursor: pointer;
+            transition: all .2s ease;
+            min-height: 66px;
+            position: relative;
+        }
+
+        .server-card:hover {
+            transform: translateY(-2px);
+            border-color: #c7d2fe;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
+        }
+
+        .server-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .3rem;
+            margin-bottom: .12rem;
+        }
+
+        .server-ip {
+            font-size: .82rem;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1.2;
+        }
+
+        .server-menu-btn {
+            font-size: .76rem;
+            line-height: 1;
+            width: 28px;
+            height: 28px;
+            border-radius: .3rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all .15s ease;
+            cursor: pointer;
+        }
+
+        .server-menu-btn:hover {
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--workspace-primary);
+        }
+
+        .server-card-meta {
+            color: #64748b;
+            font-size: .66rem;
+            font-family: Consolas, Monaco, monospace;
+            margin-bottom: 0;
+            line-height: 1.3;
+        }
+
+        .server-list-view {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .server-list-item {
+            display: flex;
+            align-items: center;
+            padding: .6rem 1rem;
+            background: #fff;
+            border: 1px solid var(--workspace-border);
+            border-radius: .55rem;
+            box-shadow: 0 1px 5px rgba(15, 23, 42, 0.05);
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .server-list-item:hover {
+            transform: translateY(-1px);
+            border-color: #c7d2fe;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+        }
+
+        .server-list-item .status-indicator {
+            margin-right: 1rem;
+        }
+
+        .server-list-info {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .server-list-name {
+            font-weight: 600;
+            color: #0f172a;
+            min-width: 200px;
+        }
+
+        .server-list-meta {
+            color: #64748b;
+            font-family: Consolas, Monaco, monospace;
+            font-size: .85rem;
+        }
+
+        .server-list-actions {
+            opacity: 0;
+            transition: opacity .2s;
+        }
+
+        .server-list-item:hover .server-list-actions {
+            opacity: 1;
+        }
+
+        .server-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .server-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .server-group-header {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .5rem .6rem;
+            margin-bottom: .6rem;
+            border-bottom: 2px solid var(--workspace-border);
+        }
+
+        .server-group-header i {
+            color: var(--workspace-primary);
+            font-size: .9rem;
+        }
+
+        .server-group-name {
+            font-size: .9rem;
+            font-weight: 700;
+            color: #374151;
+        }
+
+        .server-group-count {
+            background: #e2e8f0;
+            color: #475569;
+            border-radius: 999px;
+            padding: .04rem .5rem;
+            font-size: .68rem;
+            font-weight: 600;
+        }
+
+        .server-group .row {
+            --bs-gutter-x: .5rem;
+            --bs-gutter-y: .5rem;
+        }
+
+        .status-indicator {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.14);
+            background: #22c55e;
+            margin-right: .32rem;
+        }
+
+        .workspace-footer {
+            flex: 0 0 auto;
+            height: 40px;
+            background: var(--workspace-footer);
+            color: #cbd5e1;
+            border-top: 1px solid #1f2937;
+            padding: 0 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: .75rem;
+            gap: .75rem;
+        }
+
+        .footer-left, .footer-right {
+            display: flex;
+            align-items: center;
+            gap: .7rem;
+        }
+
+        .footer-split {
+            width: 1px;
+            height: 12px;
+            background: #475569;
+        }
+
+        .footer-memory {
+            width: 220px;
+            height: 6px;
+            background: #334155;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .footer-memory > span {
+            display: block;
+            height: 100%;
+            border-radius: 999px;
+            background: #818cf8;
+        }
+
+        @media (max-width: 1200px) {
+            .jump-inline { width: 240px; }
+            .server-list-view { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 992px) {
+            .workspace-header {
+                height: auto;
+                flex-wrap: wrap;
+                padding-top: .6rem;
+                padding-bottom: .6rem;
+            }
+            .search-zone {
+                order: 3;
+                width: 100%;
+                max-width: 100%;
+            }
+            .workspace-tools { width: 100%; justify-content: flex-end; }
+        }
+
+        @media (max-width: 768px) {
+            .workspace-main { padding: .9rem; }
+            .jump-inline { width: 100%; }
+            .workspace-tools { gap: .35rem; flex-wrap: wrap; }
+            .workspace-footer {
+                height: auto;
+                padding: .45rem .75rem;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .footer-right { width: 100%; }
+            .footer-memory { width: 100%; }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app" class="workspace-shell">
+        <header class="workspace-header">
+            <a href="/" class="workspace-brand" onclick="window.location.reload(); return false;" :title="t('index.refresh')">
+                <span class="workspace-brand-icon"><i class="fas fa-server"></i></span>
+                <span class="workspace-brand-title">{{ t('index.brand') }}</span>
+            </a>
+
+            <button class="icon-tool-btn" @click="reloadServers" :title="t('index.refresh')" style="margin-left:0.25rem;">
+                <i class="fas fa-rotate" :class="{'fa-spin': reloading}"></i>
+            </button>
+
+            <div class="search-zone">
+                <i class="fas fa-search"></i>
+                <input type="text" class="form-control" :placeholder="t('index.searchPlaceholder')" v-model="searchQuery">
+            </div>
+
+            <div class="workspace-tools">
+                <div class="jump-inline">
+                    <i class="fas fa-link"></i>
+                    <input type="text" :placeholder="t('index.jumpPlaceholder')" v-model="jumpUrl" @keyup.enter="openUrl">
+                    <button class="btn btn-sm btn-primary" @click="openUrl" :disabled="!jumpUrl.trim()">{{ t('index.jumpButton') }}</button>
+                </div>
+                <a href="/api-test" class="icon-tool-btn" target="_blank" :title="t('index.apiTest')">
+                    <i class="fas fa-bolt"></i>
+                </a>
+                <a href="/sql-tool" class="icon-tool-btn" target="_blank" :title="t('index.sqlTool')">
+                    <i class="fas fa-database"></i>
+                </a>
+                <a href="/audit-dashboard" v-if="isAdmin" class="icon-tool-btn" target="_blank" :title="t('index.audit')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="24" height="24" rx="5" fill="#6366f1"/>
+                        <path d="M12 2L4 5.5V11C4 16.25 7.5 20.75 12 22C16.5 20.75 20 16.25 20 11V5.5L12 2Z" fill="white" opacity="0.3"/>
+                        <path d="M12 2L4 5.5V11C4 16.25 7.5 20.75 12 22C16.5 20.75 20 16.25 20 11V5.5L12 2ZM12 12L10 10L8.5 11.5L12 15L16 11.5L14.5 10L12 12Z" fill="white"/>
+                    </svg>
+                </a>
+                <span class="divider-v"></span>
+                <div class="lang-switcher">
+                    <button class="lang-btn" :class="{active: locale === 'en'}" @click="setLanguage('en')">EN</button>
+                    <button class="lang-btn" :class="{active: locale === 'zh_CN'}" @click="setLanguage('zh_CN')">中文</button>
+                </div>
+                <button class="icon-tool-btn text-danger" @click="logout" :title="t('index.logout')">
+                    <i class="fas fa-arrow-right-from-bracket"></i>
+                </button>
+            </div>
+        </header>
+
+        <main class="workspace-main">
+            <section class="page-toolbar">
+                <h4 class="servers-title">
+                    {{ t('index.serverList') }}
+                    <span class="servers-count">{{ totalServerCount }}</span>
+                </h4>
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <button class="btn btn-primary btn-sm" @click="showAddModal">
+                        <i class="fas fa-plus me-1"></i>{{ t('index.addServer') }}
+                    </button>
+                    <div class="view-switch" v-if="displayGroups.length > 0">
+                        <button :class="{ active: viewMode === 'grid' }" @click="setViewMode('grid')" :title="t('index.gridView')">
+                            <i class="fas fa-th-large"></i>
+                        </button>
+                        <button :class="{ active: viewMode === 'list' }" @click="setViewMode('list')" :title="t('index.listView')">
+                            <i class="fas fa-list"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="quick-links-panel" v-if="commonWebsites.length > 0">
+                <div class="quick-links-title">
+                    <i class="fas fa-star text-warning"></i>
+                    {{ t('index.commonWebsites') }}
+                </div>
+                <div class="quick-links-list">
+                    <a v-for="site in commonWebsites" :key="site.name + site.url" class="quick-link-item" href="#"
+                        @click.prevent="openCommonWebsite(site)" :title="site.url">
+                        <i :class="site.icon || 'fas fa-globe'"></i>
+                        <span>{{ site.name }}</span>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Grid View -->
+            <section class="server-grid" v-if="displayGroups.length > 0 && viewMode === 'grid'">
+                <template v-for="group in displayGroups" :key="group.name || 'ungrouped'">
+                    <div class="server-group">
+                        <div class="server-group-header" v-if="group.name">
+                            <i class="fas fa-layer-group"></i>
+                            <span class="server-group-name">{{ group.name }}</span>
+                            <span class="server-group-count">{{ group.servers.length }}</span>
+                        </div>
+                        <div class="row">
+                            <div class="col-12 col-md-4 col-lg-2" v-for="server in group.servers" :key="server.id">
+                                <div class="server-card" @click="connect(server)">
+                                    <div class="server-card-header">
+                                        <div class="d-flex align-items-center" :title="server.name || server.host">
+                                            <span class="status-indicator"></span>
+                                            <span class="server-ip text-truncate">{{ server.name || server.host }}</span>
+                                        </div>
+                                        <div class="dropdown" @click.stop style="position:relative;">
+                                            <button class="btn btn-link text-secondary p-0 border-0 shadow-none server-menu-btn"
+                                                type="button" @click.stop="activeMenuId = (activeMenuId === server.id ? null : server.id)">
+                                                <i class="fas fa-ellipsis-vertical"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end show" v-if="activeMenuId === server.id" @click.stop style="position:absolute;z-index:1000;top:100%;right:0;margin-top:4px;">
+                                                <li><a class="dropdown-item" href="#"
+                                                        @click.prevent="activeMenuId = null; openEditModal(server)">{{ t('index.editServer') }}</a></li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <div class="server-card-meta">{{ server.username }}@{{ server.host }}:{{ server.port }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </section>
+
+            <!-- List View -->
+            <section class="server-list-view" v-if="displayGroups.length > 0 && viewMode === 'list'">
+                <template v-for="group in displayGroups" :key="group.name || 'ungrouped'">
+                    <div class="server-group">
+                        <div class="server-group-header" v-if="group.name">
+                            <i class="fas fa-layer-group"></i>
+                            <span class="server-group-name">{{ group.name }}</span>
+                            <span class="server-group-count">{{ group.servers.length }}</span>
+                        </div>
+                        <div class="server-list-item" v-for="server in group.servers" :key="server.id"
+                            @click="connect(server)">
+                            <span class="status-indicator"></span>
+                            <div class="server-list-info">
+                                <div class="server-list-name text-truncate" :title="server.name || server.host">
+                                    {{ server.name || server.host }}
+                                </div>
+                                <div class="server-list-meta">
+                                    {{ server.username }}@{{ server.host }}:{{ server.port }}
+                                </div>
+                            </div>
+                            <div class="server-list-actions">
+                                <div class="dropdown" @click.stop style="position:relative;">
+                                    <button class="btn btn-link text-secondary p-0 border-0 shadow-none server-menu-btn" type="button"
+                                        @click.stop="activeMenuId = (activeMenuId === server.id ? null : server.id)">
+                                        <i class="fas fa-ellipsis-vertical"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end show" v-if="activeMenuId === server.id" @click.stop style="position:absolute;z-index:1000;top:100%;right:0;margin-top:4px;">
+                                        <li><a class="dropdown-item" href="#"
+                                                @click.prevent="activeMenuId = null; openEditModal(server)">{{ t('index.editServer') }}</a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </section>
+
+            <section v-if="displayGroups.length === 0" class="text-center py-5">
+                <div class="mb-3 text-muted" style="font-size: 3rem;"><i class="fas fa-search"></i></div>
+                <h5>{{ t('index.noServers') }}</h5>
+                <p class="text-muted mb-0" v-if="searchQuery">{{ t('index.noServersSearch') }}</p>
+                <p class="text-muted mb-0" v-else>{{ t('index.noServersEmpty') }}</p>
+            </section>
+        </main>
+
+        <footer class="workspace-footer">
+            <div class="footer-left">
+                <span class="d-inline-flex align-items-center gap-1">
+                    <i class="fas fa-circle-check text-success"></i>
+                    <span>{{ t('footer.systemStatus') }}{{ monitor.healthStatus }}</span>
+                </span>
+                <span class="footer-split"></span>
+                <span>{{ t('footer.connections') }} <span class="text-white">{{ monitor.currentConnections }}</span> / {{ monitor.maxConnections }}</span>
+                <span class="footer-split"></span>
+                <span>{{ t('footer.threads') }} <span class="text-white">{{ monitor.activeThreads }}</span></span>
+            </div>
+            <div class="footer-right">
+                <span><i class="fas fa-memory me-1"></i>{{ t('footer.memory') }}</span>
+                <span class="footer-memory"><span :style="{width: memoryUsageRate}"></span></span>
+                <span class="text-white">{{ monitor.usedMemory }} MB / {{ monitor.totalMemory }} MB</span>
+            </div>
+        </footer>
+
+        <!-- Add/Edit Server Modal -->
+        <div v-if="showModal" class="modal d-block" style="background: rgba(0,0,0,0.5)">
+            <div class="modal-dialog modal-dialog-centered" style="max-height:90vh;display:flex;flex-direction:column;">
+                <div class="modal-content" style="max-height:90vh;display:flex;flex-direction:column;">
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold">{{ isEditing ? t('index.editServer') : t('index.addServer') }}</h5>
+                        <button type="button" class="btn-close" @click="showModal = false"></button>
+                    </div>
+                    <div class="modal-body p-4" style="overflow-y:auto;flex:1;">
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">{{ t('modal.group') }}</label>
+                            <div style="display:flex;gap:0.5rem;">
+                                <select v-model="newServer.groupName" class="form-select">
+                                    <option value="">{{ t('modal.groupDefault') }}</option>
+                                    <option v-for="g in existingGroups" :key="g" :value="g">{{ g }}</option>
+                                </select>
+                                <input v-model="newServer.newGroupName" class="form-control" :placeholder="t('modal.groupNew')" style="max-width:160px;">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">{{ t('modal.name') }}</label>
+                            <input v-model="newServer.name" class="form-control" :placeholder="t('modal.namePlaceholder')">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                <label class="form-label text-muted small fw-bold">{{ t('modal.host') }} <span class="text-danger">*</span></label>
+                                <input v-model="newServer.host" class="form-control" placeholder="192.168.1.1" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label text-muted small fw-bold">{{ t('modal.port') }}</label>
+                                <input v-model.number="newServer.port" type="number" class="form-control" placeholder="22">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">{{ t('modal.username') }} <span class="text-danger">*</span></label>
+                            <input v-model="newServer.username" class="form-control" placeholder="root">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">{{ t('modal.password') }} <span class="text-danger">*</span></label>
+                            <input v-model="newServer.password" type="password" class="form-control" placeholder="********">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-muted small fw-bold">{{ t('modal.suUsername') }}</label>
+                                <input v-model="newServer.suUser" class="form-control" :placeholder="t('modal.namePlaceholder')">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-muted small fw-bold">{{ t('modal.suPassword') }}</label>
+                                <input v-model="newServer.suPassword" type="password" class="form-control" placeholder="********">
+                            </div>
+                        </div>
+                        <div class="form-text text-muted small mt-1">{{ t('modal.suHint') }}</div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button class="btn btn-light" @click="showModal = false">{{ t('modal.cancel') }}</button>
+                        <button class="btn btn-primary px-4" @click="isEditing ? updateServer() : addServer()">{{ isEditing ? t('modal.saveEdit') : t('modal.save') }}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle JS (for Dropdowns) -->
+    <script src="/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        var localeMessages = {};
+        var localeCache = {};
+        var currentLocale = localStorage.getItem('locale') || 'en';
+
+        function preloadLocales() {
+            return Promise.all([
+                fetch('/js/locale/en.json').then(function(r) { return r.json(); }),
+                fetch('/js/locale/zh_CN.json').then(function(r) { return r.json(); })
+            ]).then(function(results) {
+                localeCache['en'] = results[0];
+                localeCache['zh_CN'] = results[1];
+                localeMessages = localeCache[currentLocale] || {};
+            }).catch(function(e) {
+                console.error('Failed to preload locales:', e);
+            });
+        }
+
+        function getMessage(key) {
+            var keys = key.split('.');
+            var value = localeMessages;
+            for (var i = 0; i < keys.length; i++) {
+                if (value == null) return keys[keys.length - 1];
+                value = value[keys[i]];
+            }
+            return value || keys[keys.length - 1];
+        }
+
+        var enTexts = {
+            'index.brand': 'Security Ops Console',
+            'index.refresh': 'Refresh server list',
+            'index.searchPlaceholder': 'Search by IP, tag or note...',
+            'index.jumpPlaceholder': 'Quick URL jump...',
+            'index.jumpButton': 'Go',
+            'index.apiTest': 'API Test Tool',
+            'index.sqlTool': 'SQL Tool',
+            'index.audit': 'Audit Dashboard',
+            'index.logout': 'Logout',
+            'index.confirmLogout': 'Are you sure you want to logout?',
+            'index.serverList': 'Server List',
+            'index.addServer': 'Add Server',
+            'index.editServer': 'Edit Server',
+            'index.deleteServer': 'Delete Server',
+            'index.gridView': 'Grid View',
+            'index.listView': 'List View',
+            'index.commonWebsites': 'Common Websites',
+            'index.noServers': 'No servers found',
+            'index.noServersSearch': 'No servers match your search.',
+            'index.noServersEmpty': 'No servers available currently.',
+            'modal.group': 'Group',
+            'modal.groupDefault': 'Default Group',
+            'modal.groupNew': 'New Group (optional)',
+            'modal.name': 'Server Name',
+            'modal.namePlaceholder': 'Example: Production Web Server',
+            'modal.host': 'Host Address',
+            'modal.port': 'Port',
+            'modal.username': 'Username',
+            'modal.password': 'Password',
+            'modal.suUsername': 'SU Username',
+            'modal.suPassword': 'SU Password',
+            'modal.suHint': 'Fill in only when switching to elevated user.',
+            'modal.cancel': 'Cancel',
+            'modal.save': 'Save',
+            'modal.saveEdit': 'Save Changes',
+            'modal.required': 'Required',
+            'footer.systemStatus': 'System Status:',
+            'footer.connections': 'Pool:',
+            'footer.threads': 'Active Threads:',
+            'footer.memory': 'Memory',
+            'alert.hostRequired': 'Please enter host address',
+            'alert.usernameRequired': 'Please enter username',
+            'alert.passwordRequired': 'Please enter password',
+            'alert.loadFailed': 'Failed to load server info',
+            'alert.connectionLimit': 'Connection limit reached, please close some connections and retry.'
+        };
+
+        var zhTexts = {
+            'index.brand': '安全运维工作台',
+            'index.refresh': '刷新服务器列表',
+            'index.searchPlaceholder': '搜索服务器 IP、标签或备注...',
+            'index.jumpPlaceholder': '输入 URL 快速跳转...',
+            'index.jumpButton': '跳转',
+            'index.apiTest': 'API 调测工具',
+            'index.sqlTool': 'SQL 工具',
+            'index.audit': '审计看板',
+            'index.logout': '退出登录',
+            'index.confirmLogout': '确定要退出登录吗？',
+            'index.serverList': '服务器列表',
+            'index.addServer': '新增服务器',
+            'index.editServer': '修改服务器',
+            'index.deleteServer': '删除服务器',
+            'index.gridView': '网格视图',
+            'index.listView': '列表视图',
+            'index.commonWebsites': '常用网站',
+            'index.noServers': '未找到服务器',
+            'index.noServersSearch': '没有匹配当前搜索条件的服务器。',
+            'index.noServersEmpty': '当前暂无可展示服务器。',
+            'modal.group': '分组',
+            'modal.groupDefault': '默认分组',
+            'modal.groupNew': '新建分组（可选）',
+            'modal.name': '服务器名称',
+            'modal.namePlaceholder': '如：生产环境Web服务器',
+            'modal.host': '主机地址',
+            'modal.port': '端口',
+            'modal.username': '用户名',
+            'modal.password': '密码',
+            'modal.suUsername': 'su 用户名',
+            'modal.suPassword': 'su 密码',
+            'modal.suHint': '仅在需要切换到高级用户时填写。',
+            'modal.cancel': '取消',
+            'modal.save': '保存',
+            'modal.saveEdit': '保存修改',
+            'modal.required': '必填',
+            'footer.systemStatus': '系统状态：',
+            'footer.connections': '连接池：',
+            'footer.threads': '活动线程：',
+            'footer.memory': '内存',
+            'alert.hostRequired': '请输入主机地址',
+            'alert.usernameRequired': '请输入用户名',
+            'alert.passwordRequired': '请输入密码',
+            'alert.loadFailed': '加载服务器信息失败',
+            'alert.connectionLimit': '当前服务器连接数已达上限，请关闭部分连接后重试。'
+        };
+
+        var allTexts = { 'en': enTexts, 'zh_CN': zhTexts };
+
+        const { createApp } = Vue;
+
+        var vueApp = createApp({
+            data() {
+                return {
+                    locale: currentLocale,
+                    serverGroups: [],
+                    commonWebsites: [],
+                    searchQuery: '',
+                    jumpUrl: '',
+                    showModal: false,
+                    isEditing: false,
+                    editingId: null,
+                    activeMenuId: null,
+                    viewMode: localStorage.getItem('serverViewMode') || 'grid',
+                    newServer: {
+                        groupName: '',
+                        newGroupName: '',
+                        name: '',
+                        host: '',
+                        port: 22,
+                        username: '',
+                        password: '',
+                        suUser: '',
+                        suPassword: ''
+                    },
+                    existingGroups: [],
+                    reloading: false,
+                    monitor: {
+                        currentConnections: 0,
+                        maxConnections: 50,
+                        usageRate: '0%',
+                        usedMemory: 0,
+                        totalMemory: 0,
+                        activeThreads: 0,
+                        healthStatus: 'Normal'
+                    },
+                    monitorTimer: null,
+                    csrfToken: null,
+                    isAdmin: false
+                }
+            },
+            computed: {
+                displayGroups() {
+                    if (!this.searchQuery) return this.serverGroups;
+                    var query = this.searchQuery.toLowerCase();
+                    return this.serverGroups
+                        .map(group => ({
+                            name: group.name,
+                            servers: group.servers.filter(server =>
+                                (server.name || '').toLowerCase().includes(query) ||
+                                (server.host || '').toLowerCase().includes(query) ||
+                                (server.username || '').toLowerCase().includes(query)
+                            )
+                        }))
+                        .filter(group => group.servers.length > 0);
+                },
+                memoryUsageRate() {
+                    if (this.totalMemory === 0) return '0%';
+                    return Math.round(this.monitor.usedMemory / this.monitor.totalMemory * 100) + '%';
+                },
+                totalServerCount() {
+                    return this.serverGroups.reduce(function(sum, g) { return sum + (g.servers ? g.servers.length : 0); }, 0);
+                }
+            },
+            mounted: function() {
+                this.setupCsrfInterceptor();
+                this.getCsrfToken();
+                this.loadAuthStatus();
+                this.loadServers();
+                this.loadCommonWebsites();
+                this.loadMonitorData();
+                this.monitorTimer = setInterval(function(self) {
+                    self.loadMonitorData();
+                }, 5000, this);
+                document.addEventListener('click', function() {
+                    this.activeMenuId = null;
+                }.bind(this));
+            },
+            beforeUnmount: function() {
+                if (this.monitorTimer) {
+                    clearInterval(this.monitorTimer);
+                }
+            },
+            methods: {
+                t: function(key) {
+                    var merged = Object.assign({}, allTexts[this.locale] || allTexts['en'], localeMessages);
+                    return merged[key] || key.split('.').pop();
+                },
+                setLanguage: function(locale) {
+                    this.locale = locale;
+                    currentLocale = locale;
+                    localStorage.setItem('locale', locale);
+                    localeMessages = localeCache[locale] || {};
+                    this.updateTitle();
+                },
+                updateTitle: function() {
+                    var merged = Object.assign({}, allTexts[this.locale] || allTexts['en'], localeMessages);
+                    var brand = merged['index.title'] || merged['index.brand'] || document.title;
+                    document.title = brand;
+                },
+                loadAuthStatus: function() {
+                    var self = this;
+                    axios.get('/api/auth/status').then(function(response) {
+                        if (response.data) {
+                            self.isAdmin = response.data.isAdmin === true;
+                        }
+                    }).catch(function() {});
+                },
+                setupCsrfInterceptor: function() {
+                    var self = this;
+                    axios.interceptors.request.use(function(config) {
+                        var modifyingMethods = ['post', 'put', 'delete', 'patch'];
+                        if (config.method && modifyingMethods.indexOf(config.method.toLowerCase()) !== -1) {
+                            if (self.csrfToken) {
+                                config.headers['X-CSRF-Token'] = self.csrfToken;
+                            }
+                        }
+                        return config;
+                    }, function(error) {
+                        return Promise.reject(error);
+                    });
+                    axios.interceptors.response.use(
+                        function(response) { return response; },
+                        function async(error) {
+                            if (error.response && error.response.status === 403) {
+                                var errorMsg = error.response.data && error.response.data.message || '';
+                                if (errorMsg.indexOf('CSRF') !== -1 || errorMsg.indexOf('Token') !== -1) {
+                                    console.log('CSRF Token invalid, refreshing...');
+                                    self.getCsrfToken().then(function() {
+                                        var cfg = error.config;
+                                        if (self.csrfToken) {
+                                            cfg.headers['X-CSRF-Token'] = self.csrfToken;
+                                        }
+                                        return axios.request(cfg);
+                                    });
+                                }
+                            }
+                            return Promise.reject(error);
+                        }
+                    );
+                },
+                getCsrfToken: function() {
+                    var self = this;
+                    return axios.get('/api/csrf/token').then(function(res) {
+                        if (res.data && res.data.success) {
+                            self.csrfToken = res.data.token;
+                        }
+                    }).catch(function(e) {
+                        console.error('Failed to get CSRF token:', e);
+                    });
+                },
+                decryptData: function(encryptedData) {
+                    if (!encryptedData) return null;
+                    try {
+                        var key = CryptoJS.enc.Utf8.parse('XjToolSecretKey1');
+                        var decrypted = CryptoJS.AES.decrypt(encryptedData, key, {
+                            mode: CryptoJS.mode.ECB,
+                            padding: CryptoJS.pad.Pkcs7
+                        });
+                        var decryptedStr = decrypted.toString(CryptoJS.enc.Utf8);
+                        return JSON.parse(decryptedStr);
+                    } catch (e) {
+                        console.error('Decryption failed:', e);
+                        return null;
+                    }
+                },
+                loadServers: function() {
+                    var self = this;
+                    axios.get('/api/server/list').then(function(res) {
+                        self.serverGroups = res.data.map(function(group) {
+                            return {
+                                name: group.name,
+                                servers: (group.servers || [])
+                                    .map(function(dto) { return self.decryptData(dto.encryptedData); })
+                                    .filter(function(server) { return server !== null; })
+                            };
+                        });
+                    });
+                },
+                reloadServers: function() {
+                    var self = this;
+                    this.reloading = true;
+                    Promise.resolve(axios.post('/api/server/reload'))
+                        .then(function() { return self.loadServers(); })
+                        .then(function() { return self.loadGroups(); })
+                        .catch(function(e) { console.error(e); })
+                        .then(function() { self.reloading = false; });
+                },
+                loadCommonWebsites: function() {
+                    var self = this;
+                    axios.get('/api/server/common-websites').then(function(res) {
+                        self.commonWebsites = Array.isArray(res.data) ? res.data : [];
+                    }).catch(function(e) {
+                        console.error('Failed to load common websites:', e);
+                        self.commonWebsites = [];
+                    });
+                },
+                loadMonitorData: function() {
+                    var self = this;
+                    Promise.all([
+                        axios.get('/api/monitor/ssh-status'),
+                        axios.get('/api/monitor/system-status')
+                    ]).then(function(results) {
+                        var sshRes = results[0];
+                        var sysRes = results[1];
+                        self.monitor.currentConnections = sshRes.data.currentConnections;
+                        self.monitor.maxConnections = sshRes.data.maxConnections;
+                        self.monitor.usageRate = sshRes.data.usageRate;
+                        self.monitor.usedMemory = sysRes.data.usedMemoryMB;
+                        self.monitor.totalMemory = sysRes.data.totalMemoryMB;
+                        self.monitor.activeThreads = sysRes.data.activeThreads;
+                        var usageNum = parseFloat(sshRes.data.usageRate);
+                        var txt = self.t('monitor.normal');
+                        if (usageNum >= 90) txt = self.t('monitor.warning');
+                        else if (usageNum >= 70) txt = self.t('monitor.busy');
+                        else txt = self.t('monitor.normal');
+                        self.monitor.healthStatus = txt;
+                    }).catch(function(e) {
+                        console.error('Failed to load monitor data:', e);
+                    });
+                },
+                showAddModal: function() {
+                    this.isEditing = false;
+                    this.editingId = null;
+                    this.newServer = { port: 22, groupName: '', newGroupName: '', name: '', host: '', username: '', password: '', suUser: '', suPassword: '' };
+                    this.loadGroups();
+                    this.showModal = true;
+                },
+                openEditModal: function(serverOrHost) {
+                    var self = this;
+                    var host = typeof serverOrHost === 'string' ? serverOrHost : serverOrHost.host;
+                    axios.get('/api/server/' + encodeURIComponent(host)).then(function(res) {
+                        var data = res.data;
+                        self.isEditing = true;
+                        self.editingId = data.id;
+                        var suEntries = data.suPasswords ? Object.entries(data.suPasswords) : [];
+                        self.newServer = {
+                            groupName: data.groupName || '',
+                            newGroupName: '',
+                            name: data.name || '',
+                            host: data.host || '',
+                            port: data.port || 22,
+                            username: data.username || '',
+                            password: data.password || '',
+                            suUser: suEntries.length > 0 ? suEntries[0][0] : '',
+                            suPassword: suEntries.length > 0 ? suEntries[0][1] : ''
+                        };
+                        self.loadGroups();
+                        self.showModal = true;
+                    }).catch(function(e) {
+                        alert(self.t('alert.loadFailed'));
+                        console.error(e);
+                    });
+                },
+                updateServer: function() {
+                    var self = this;
+                    if (!this.newServer.host) { alert(this.t('alert.hostRequired')); return; }
+                    if (!this.newServer.username) { alert(this.t('alert.usernameRequired')); return; }
+                    if (!this.newServer.password) { alert(this.t('alert.passwordRequired')); return; }
+                    var serverToUpdate = Object.assign({}, this.newServer, { id: this.editingId });
+                    if (serverToUpdate.newGroupName && serverToUpdate.newGroupName.trim()) {
+                        serverToUpdate.groupName = serverToUpdate.newGroupName.trim();
+                    }
+                    if (!serverToUpdate.groupName) serverToUpdate.groupName = this.t('modal.groupDefault');
+                    if (!serverToUpdate.name) serverToUpdate.name = serverToUpdate.host;
+                    if (serverToUpdate.suUser && serverToUpdate.suPassword) {
+                        serverToUpdate.suPasswords = {};
+                        serverToUpdate.suPasswords[serverToUpdate.suUser] = serverToUpdate.suPassword;
+                    }
+                    delete serverToUpdate.suUser;
+                    delete serverToUpdate.suPassword;
+                    delete serverToUpdate.newGroupName;
+                    axios.put('/api/server/' + this.editingId, serverToUpdate).then(function() {
+                        self.showModal = false;
+                        self.loadServers();
+                    });
+                },
+                loadGroups: function() {
+                    var self = this;
+                    axios.get('/api/server/groups').then(function(res) {
+                        self.existingGroups = Array.isArray(res.data) ? res.data : [];
+                    }).catch(function(e) {
+                        self.existingGroups = [];
+                    });
+                },
+                addServer: function() {
+                    var self = this;
+                    if (!this.newServer.host) { alert(this.t('alert.hostRequired')); return; }
+                    if (!this.newServer.username) { alert(this.t('alert.usernameRequired')); return; }
+                    if (!this.newServer.password) { alert(this.t('alert.passwordRequired')); return; }
+                    var serverToAdd = Object.assign({}, this.newServer);
+                    if (serverToAdd.newGroupName && serverToAdd.newGroupName.trim()) {
+                        serverToAdd.groupName = serverToAdd.newGroupName.trim();
+                    }
+                    if (!serverToAdd.groupName) serverToAdd.groupName = this.t('modal.groupDefault');
+                    if (!serverToAdd.name) serverToAdd.name = serverToAdd.host;
+                    if (serverToAdd.suUser && serverToAdd.suPassword) {
+                        serverToAdd.suPasswords = {};
+                        serverToAdd.suPasswords[serverToAdd.suUser] = serverToAdd.suPassword;
+                    }
+                    delete serverToAdd.suUser;
+                    delete serverToAdd.suPassword;
+                    delete serverToAdd.newGroupName;
+                    axios.post('/api/server/add', serverToAdd).then(function() {
+                        self.showModal = false;
+                        self.loadServers();
+                    });
+                },
+                setViewMode: function(mode) {
+                    this.viewMode = mode;
+                    localStorage.setItem('serverViewMode', mode);
+                },
+                connect: function(server) {
+                    if (this.monitor.currentConnections >= this.monitor.maxConnections) {
+                        alert(this.t('alert.connectionLimit'));
+                        return;
+                    }
+                    localStorage.setItem('currentServer', JSON.stringify(server));
+                    var timestamp = new Date().getTime();
+                    var windowName = 'ssh_' + server.id + '_' + timestamp;
+                    window.open('/terminal', windowName);
+                },
+                openUrl: function() {
+                    var url = this.jumpUrl.trim();
+                    if (!url) return;
+                    if (!url.match(/^https?:\/\//i)) url = 'http://' + url;
+                    window.open(url, '_blank');
+                    this.jumpUrl = '';
+                },
+                openCommonWebsite: function(site) {
+                    if (!site || !site.url) return;
+                    var url = site.url.trim();
+                    if (!url.match(/^https?:\/\//i)) url = 'http://' + url;
+                    window.open(url, '_blank');
+                },
+                logout: function() {
+                    var self = this;
+                    if (confirm(this.t('index.confirmLogout'))) {
+                        axios.post('/api/auth/logout').then(function() {
+                            window.location.href = '/login';
+                        });
+                    }
+                }
+            }
+        });
+
+        var app = vueApp.mount('#app');
+        window.vueApp = app;
+
+        preloadLocales().then(function() {
+            app.updateTitle();
+        });
+    </script>
+</body>
+
+</html>

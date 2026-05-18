@@ -1,0 +1,141 @@
+package com.gxcj.xjtool.service;
+
+import com.gxcj.xjtool.dto.ExecuteSqlRequest;
+import com.gxcj.xjtool.dto.OracleDataSourceDto;
+import com.gxcj.xjtool.dto.SqlResultResponse;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Oracle 数据库服务接口
+ */
+public interface OracleService {
+
+    /**
+     * 获取配置的数据源列表
+     */
+    List<OracleDataSourceDto> getDataSources();
+
+    /**
+     * 测试数据库连接
+     * 
+     * @param datasourceIndex 数据源索引
+     * @return 连接结果
+     */
+    SqlResultResponse testConnection(int datasourceIndex);
+
+    /**
+     * 获取数据源类型
+     * 
+     * @param datasourceIndex 数据源索引
+     * @return 数据库类型 (ORACLE/DM/MYSQL)
+     */
+    String getDatasourceType(int datasourceIndex);
+
+    /**
+     * 执行 SQL 语句
+     * 
+     * @param request 执行请求
+     * @return 执行结果
+     */
+    SqlResultResponse executeSql(ExecuteSqlRequest request);
+
+    /**
+     * 获取 SQL 执行计划
+     * 
+     * @param request 执行请求
+     * @return 执行计划结果
+     */
+    SqlResultResponse explainSql(ExecuteSqlRequest request);
+
+    /**
+     * 获取数据库对象列表
+     * 
+     * @param type            对象类型：tables, views, indexes, procedures, sequences
+     * @param datasourceIndex 数据源索引
+     * @return 对象列表
+     */
+    List<Map<String, String>> getDatabaseObjects(String type, int datasourceIndex);
+
+    /**
+     * 获取数据库对象的DDL语句
+     * 
+     * @param type            对象类型：views, indexes, procedures, sequences
+     * @param name            对象名称
+     * @param datasourceIndex 数据源索引
+     * @return DDL语句
+     */
+    String getObjectDDL(String type, String name, int datasourceIndex);
+
+    /**
+     * 清除指定数据源的对象缓存
+     * 
+     * @param datasourceIndex 数据源索引
+     */
+    void clearObjectsCache(int datasourceIndex);
+
+    /**
+     * 获取表结构信息
+     * 
+     * @param tableName       表名
+     * @param datasourceIndex 数据源索引
+     * @return 表结构列表
+     */
+    List<Map<String, Object>> getTableStructure(String tableName, int datasourceIndex);
+
+    /**
+     * 获取表索引信息
+     * 
+     * @param tableName       表名
+     * @param datasourceIndex 数据源索引
+     * @return 索引列表
+     */
+    List<Map<String, Object>> getTableIndexes(String tableName, int datasourceIndex);
+
+    /**
+     * 生成建表SQL语句
+     * 
+     * @param tableName       表名
+     * @param datasourceIndex 数据源索引
+     * @return 建表SQL语句
+     */
+    String getCreateTableSQL(String tableName, int datasourceIndex);
+
+    /**
+     * 获取表分区信息
+     * 
+     * @param tableName       表名
+     * @param datasourceIndex 数据源索引
+     * @return 分区信息列表
+     */
+    List<Map<String, Object>> getTablePartitions(String tableName, int datasourceIndex);
+
+    /**
+     * 获取表触发器信息
+     * 
+     * @param tableName       表名
+     * @param datasourceIndex 数据源索引
+     * @return 触发器信息列表
+     */
+    List<Map<String, Object>> getTableTriggers(String tableName, int datasourceIndex);
+
+    /**
+     * 查询锁表信息（主节点 + 所有 slave 并行，去重合并）
+     * 仅 Oracle 数据源有效
+     *
+     * @param datasourceIndex 数据源索引
+     * @return 锁表记录列表
+     */
+    List<Map<String, Object>> getLockedObjects(int datasourceIndex);
+
+    /**
+     * 解锁指定会话
+     *
+     * @param sid             会话 SID
+     * @param serial          会话 Serial#
+     * @param datasourceIndex 数据源索引
+     * @return 操作结果
+     */
+    Map<String, Object> unlockSession(String sid, String serial, int datasourceIndex);
+}

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="login.title">Web Tool - Login</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link href="/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --gradient: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--gradient);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        .background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -1;
+        }
+
+        .background .shape {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            animation: float 15s infinite;
+        }
+
+        .background .shape:nth-child(1) {
+            width: 80px;
+            height: 80px;
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .background .shape:nth-child(2) {
+            width: 120px;
+            height: 120px;
+            top: 70%;
+            left: 80%;
+            animation-delay: 2s;
+        }
+
+        .background .shape:nth-child(3) {
+            width: 60px;
+            height: 60px;
+            top: 40%;
+            left: 50%;
+            animation-delay: 4s;
+        }
+
+        .background .shape:nth-child(4) {
+            width: 150px;
+            height: 150px;
+            top: 80%;
+            left: 20%;
+            animation-delay: 6s;
+        }
+
+        .background .shape:nth-child(5) {
+            width: 100px;
+            height: 100px;
+            top: 20%;
+            left: 70%;
+            animation-delay: 8s;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 0.5;
+            }
+            50% {
+                transform: translateY(-30px) rotate(180deg);
+                opacity: 0.8;
+            }
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 20px;
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(10px);
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .login-header .logo {
+            width: 70px;
+            height: 70px;
+            background: var(--gradient);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .login-header .logo i {
+            font-size: 32px;
+            color: white;
+        }
+
+        .login-header h1 {
+            font-size: 26px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .login-header p {
+            color: #888;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-group {
+            position: relative;
+        }
+
+        .input-group i {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #aaa;
+            font-size: 18px;
+            transition: color 0.3s;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 14px 14px 50px;
+            font-size: 15px;
+            border: 2px solid #e8e8e8;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            background: #fafafa;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background: #fff;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-control:focus+i,
+        .input-group:focus-within i {
+            color: var(--primary-color);
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            background: var(--gradient);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .btn-login:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .btn-login .spinner {
+            display: none;
+            margin-right: 10px;
+        }
+
+        .btn-login.loading .spinner {
+            display: inline-block;
+        }
+
+        .btn-login.loading .btn-text {
+            opacity: 0.8;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+            animation: shake 0.5s ease;
+        }
+
+        .alert-danger {
+            background: #ffe6e6;
+            color: #d63031;
+            border: 1px solid #ffcccc;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .login-footer {
+            margin-top: 25px;
+            text-align: center;
+            font-size: 13px;
+            color: #999;
+        }
+
+        .login-footer i {
+            color: var(--primary-color);
+        }
+
+        .lang-switcher {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 100;
+            display: flex;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 20px;
+            padding: 4px;
+        }
+
+        .lang-btn {
+            border: none;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.7);
+            padding: 5px 14px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .lang-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .lang-btn.active {
+            background: #fff;
+            color: var(--primary-color);
+        }
+
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 30px 24px;
+            }
+            .login-header h1 {
+                font-size: 22px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="lang-switcher">
+        <button class="lang-btn active" id="langEn" onclick="setLanguage('en')">EN</button>
+        <button class="lang-btn" id="langZh" onclick="setLanguage('zh_CN')">中文</button>
+    </div>
+
+    <div class="background">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="logo">
+                    <i class="fas fa-terminal"></i>
+                </div>
+                <h1>Web Tool</h1>
+                <p data-i18n="login.subtitle">Secure Web Operations Tool</p>
+            </div>
+
+            <div class="alert alert-danger" id="errorAlert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <span id="errorMessage" data-i18n="login.error.invalid">Invalid username or password</span>
+            </div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username" data-i18n="login.username">Username</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="username"
+                            data-i18n-placeholder="login.usernamePlaceholder"
+                            placeholder="Enter username" required autocomplete="username">
+                        <i class="fas fa-user"></i>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password" data-i18n="login.password">Password</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" id="password"
+                            data-i18n-placeholder="login.passwordPlaceholder"
+                            placeholder="Enter password" required autocomplete="current-password">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="captcha" data-i18n="login.captcha">Captcha</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="captcha"
+                            data-i18n-placeholder="login.captchaPlaceholder"
+                            placeholder="Enter captcha" required style="padding-right: 120px;">
+                        <i class="fas fa-shield-alt"></i>
+                        <img src="/api/auth/captcha" id="captchaImg" alt="captcha"
+                            style="position: absolute; right: 4px; top: 4px; height: 40px; border-radius: 8px; cursor: pointer; z-index: 10;">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-login" id="loginBtn">
+                    <span class="spinner"><i class="fas fa-spinner fa-spin"></i></span>
+                    <span class="btn-text" data-i18n="login.button">Log In</span>
+                </button>
+            </form>
+
+            <div class="login-footer">
+                <i class="fas fa-shield-alt"></i>
+                <span data-i18n="login.footer">All connections are encrypted</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Axios -->
+    <script src="/js/axios.min.js"></script>
+    <script>
+        var currentLocale = localStorage.getItem('locale') || 'en';
+        var messages = {};
+
+        async function loadMessages(locale) {
+            try {
+                var res = await fetch('/js/locale/' + locale + '.json');
+                if (!res.ok) throw new Error('Failed to load locale');
+                messages = await res.json();
+                applyTranslations();
+            } catch (e) {
+                console.error('Failed to load locale:', e);
+            }
+        }
+
+        function getMessage(key) {
+            var keys = key.split('.');
+            var value = messages;
+            for (var i = 0; i < keys.length; i++) {
+                if (value == null) return keys[keys.length - 1];
+                value = value[keys[i]];
+            }
+            return value || keys[keys.length - 1];
+        }
+
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(function(el) {
+                var key = el.getAttribute('data-i18n');
+                var text = getMessage(key);
+                if (text && text !== key) {
+                    if (el.tagName === 'TITLE') {
+                        document.title = text;
+                    } else {
+                        el.textContent = text;
+                    }
+                }
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+                var key = el.getAttribute('data-i18n-placeholder');
+                var text = getMessage(key);
+                if (text && text !== key) {
+                    el.placeholder = text;
+                }
+            });
+            document.querySelectorAll('[data-i18n-title]').forEach(function(el) {
+                var key = el.getAttribute('data-i18n-title');
+                var text = getMessage(key);
+                if (text && text !== key) {
+                    el.title = text;
+                }
+            });
+        }
+
+        function setLanguage(locale) {
+            currentLocale = locale;
+            localStorage.setItem('locale', locale);
+            document.getElementById('langEn').classList.toggle('active', locale === 'en');
+            document.getElementById('langZh').classList.toggle('active', locale === 'zh_CN');
+            loadMessages(locale);
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            var username = document.getElementById('username').value.trim();
+            var password = document.getElementById('password').value;
+            var captcha = document.getElementById('captcha').value.trim();
+            var loginBtn = document.getElementById('loginBtn');
+            var errorAlert = document.getElementById('errorAlert');
+            var errorMessage = document.getElementById('errorMessage');
+
+            errorAlert.classList.remove('show');
+
+            loginBtn.disabled = true;
+            loginBtn.classList.add('loading');
+
+            try {
+                var response = await axios.post('/api/auth/login', {
+                    username: username,
+                    password: password,
+                    captcha: captcha
+                });
+
+                if (response.data.success) {
+                    window.location.href = '/';
+                } else {
+                    var msg = response.data.message || getMessage('login.error.invalid');
+                    errorMessage.textContent = msg;
+                    errorAlert.classList.add('show');
+                    refreshCaptcha();
+                }
+            } catch (error) {
+                errorMessage.textContent = getMessage('login.error.network');
+                errorAlert.classList.add('show');
+                refreshCaptcha();
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.classList.remove('loading');
+            }
+        });
+
+        function refreshCaptcha() {
+            document.getElementById('captchaImg').src = '/api/auth/captcha?t=' + new Date().getTime();
+            document.getElementById('captcha').value = '';
+        }
+        document.getElementById('captchaImg').addEventListener('click', refreshCaptcha);
+
+        document.getElementById('password').addEventListener('keypress', function(e) { handleEnter(e); });
+        document.getElementById('captcha').addEventListener('keypress', function(e) { handleEnter(e); });
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+            }
+        }
+
+        document.getElementById('username').focus();
+
+        // Initialize language
+        setLanguage(currentLocale);
+    </script>
+</body>
+
+</html>

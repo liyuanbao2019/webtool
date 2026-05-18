@@ -1,0 +1,2714 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSH Terminal</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link href="/css/all.min.css" rel="stylesheet">
+    <!-- xterm.js -->
+    <link href="/css/xterm.css" rel="stylesheet" />
+    <script src="/js/xterm.js"></script>
+    <script src="/js/xterm-addon-fit.js"></script>
+    <!-- Vue 3 & Axios -->
+    <script src="/js/vue.global.prod.js"></script>
+    <script src="/js/axios.min.js"></script>
+    <!-- Custom CSS -->
+    <link href="/css/style.css" rel="stylesheet">
+    <!-- 防止 Thymeleaf 解析页面中的 ${} / 未挂载 Vue 时露出原始 {{ }} -->
+    <style>
+        [v-cloak] {
+            display: none !important;
+        }
+        .lang-switcher {
+            display: flex;
+            gap: 2px;
+            background: #f1f5f9;
+            border-radius: .4rem;
+            padding: 2px;
+        }
+        .lang-btn {
+            border: none;
+            background: transparent;
+            color: #94a3b8;
+            padding: 4px 10px;
+            border-radius: .3rem;
+            font-size: .72rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+        .lang-btn:hover { color: #0d6efd; }
+        .lang-btn.active {
+            background: #fff;
+            color: #0d6efd;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+
+<body th:inline="none">
+    <div id="app" v-cloak class="d-flex flex-column h-100">
+        <!-- Header -->
+        <header class="app-header" style="height: 50px; min-height: 50px;">
+            <div class="d-flex align-items-center">
+                <a href="/" class="text-decoration-none text-secondary me-3" style="display: none;">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <div class="d-flex align-items-center" v-if="serverInfo">
+                    <i class="fas fa-server text-primary me-2"></i>
+                    <span class="fw-bold me-2" v-if="serverInfo.name !== serverInfo.host">{{ serverInfo.name }}</span>
+                    <span class="badge bg-primary bg-gradient"
+                        style="font-size: 0.85rem; padding: 0.35rem 0.65rem; cursor: pointer;"
+                        @click="copyToClipboard(serverInfo.host)" :title="t('terminal.copyIpTip') + ' ' + serverInfo.host">
+                        <i class="fas fa-network-wired me-1"></i>{{ serverInfo.host }}
+                    </span>
+                </div>
+            </div>
+            <div class="d-flex align-items-center">
+                <div class="lang-switcher" style="margin-right: 8px;">
+                    <button class="lang-btn" :class="{active: locale === 'en'}" @click="setLanguage('en')">EN</button>
+                    <button class="lang-btn" :class="{active: locale === 'zh_CN'}" @click="setLanguage('zh_CN')">中文</button>
+                </div>
+                <div class="d-flex align-items-center me-2" :title="t('terminal.terminalSettings')">
+                    <select class="form-select form-select-sm me-2" style="width: 130px;"
+                        v-model="terminalPreferences.theme" @change="applyTerminalPreferences">
+                        <option v-for="option in terminalThemeOptions" :key="option.id" :value="option.id">
+                            {{ option.name }}
+                        </option>
+                    </select>
+                    <input type="number" class="form-control form-control-sm" style="width: 72px;" min="10" max="28"
+                        v-model.number="terminalPreferences.fontSize" @change="applyTerminalPreferences">
+                    <select class="form-select form-select-sm ms-2" style="width: 108px;"
+                        v-model="terminalPreferences.charset" @change="applyTerminalCharset" :title="t('terminal.charset')">
+                        <option v-for="option in terminalCharsetOptions" :key="option.id" :value="option.id">
+                            {{ option.name }}
+                        </option>
+                    </select>
+                </div>
+                <button class="btn btn-outline-primary btn-sm me-2" @click="openCommandTemplateModal" :title="t('terminal.commandTemplate')">
+                    <i class="fas fa-list-check me-1"></i>{{ t('terminal.template') }}
+                </button>
+            </div>
+        </header>
+
+        <!-- Terminal Layout -->
+        <div class="terminal-layout">
+            <!-- File Manager Sidebar -->
+            <div class="file-sidebar" :class="{ 'collapsed': isSidebarCollapsed }">
+                <div class="file-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center flex-grow-1">
+                        <button class="toggle-sidebar-btn" @click="toggleSidebar"
+                            :title="isSidebarCollapsed ? t('terminal.expandSidebar') : t('terminal.collapseSidebar')">
+                            <i class="fas" :class="isSidebarCollapsed ? 'fa-chevron-right' : 'fa-chevron-left'"></i>
+                            <span v-show="!isSidebarCollapsed" class="ms-2">{{ t('terminal.collapse') }}</span>
+                        </button>
+                        <span class="fw-bold small text-muted ms-3" v-show="!isSidebarCollapsed">
+                            {{ t('terminal.fileDirectory') }}
+                            <span v-if="serverInfo" class="text-primary">({{ currentSftpUser }})</span>
+                        </span>
+                        <span v-if="serverInfo && currentSftpUser !== serverInfo.username && !isSidebarCollapsed"
+                            class="badge bg-warning text-dark ms-2 small" style="font-size: 0.65rem;" :title="t('terminal.switching')">
+                            {{ t('terminal.switching') }}
+                        </span>
+                    </div>
+                    <div class="d-flex" v-show="!isSidebarCollapsed">
+                        <button class="btn btn-sm btn-link text-secondary p-0 me-2" @click="showSwitchUserModal"
+                            :title="serverInfo && currentSftpUser !== serverInfo.username ? t('terminal.switchedUser') + ' ' + currentSftpUser : t('terminal.switchSftpUser')">
+                            <i class="fas fa-user-cog"></i>
+                        </button>
+                        <button class="btn btn-sm btn-link text-secondary p-0 me-2" @click="downloadSelectedItem"
+                            :disabled="!selectedFile"
+                            :title="selectedFile ? (selectedFile.dir ? t('terminal.downloadFolder') : t('terminal.downloadFile')) : t('terminal.selectFileToDownload')">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <button class="btn btn-sm btn-link text-secondary p-0 me-2" @click="uploadFileClick"
+                            :title="t('terminal.uploadFile')">
+                            <i class="fas fa-file-upload"></i>
+                        </button>
+                        <button class="btn btn-sm btn-link text-secondary p-0 me-2" @click="uploadFolderClick"
+                            :title="t('terminal.uploadFolder')">
+                            <i class="fas fa-folder-plus"></i>
+                        </button>
+                        <button class="btn btn-sm btn-link text-secondary p-0" @click="() => listFiles()" :title="t('terminal.refresh')">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                    <input type="file" ref="fileInput" style="display: none" @change="handleFileUpload" multiple>
+                    <input type="file" ref="folderInput" style="display: none" @change="handleFolderUpload"
+                        webkitdirectory mozdirectory directory>
+                </div>
+
+                <!-- Breadcrumb / Path Input & Search -->
+                <div class="p-2 border-bottom bg-white d-flex flex-column gap-2">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light text-secondary"><i class="fas fa-folder-open"></i></span>
+                        <input type="text" class="form-control border-start-0 bg-light ps-0" v-model="currentPath"
+                            @keyup.enter="handlePathEnter" :placeholder="t('terminal.enterPath')">
+                    </div>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light text-secondary"><i class="fas fa-search"></i></span>
+                        <input type="text" class="form-control border-start-0 bg-light ps-0" v-model="fileSearchQuery"
+                            :placeholder="t('terminal.searchFiles')">
+                        <button v-if="fileSearchQuery" class="btn btn-outline-secondary border-start-0 bg-light"
+                            type="button" @click="fileSearchQuery = ''">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- File List -->
+                <div class="file-list">
+                    <div v-if="currentPath !== '/'" class="file-item" @click="navigate('..')">
+                        <i class="fas fa-level-up-alt text-secondary"></i>
+                        <span>..</span>
+                    </div>
+                    <!-- 使用 computed 属性 filteredFiles 渲染列表 -->
+                    <div v-for="file in filteredFiles" :key="file.name" class="file-item"
+                        :class="{ 'selected': selectedFile && selectedFile.name === file.name }"
+                        @click="selectFile(file)" @dblclick="file.dir ? navigate(file.name) : openTextFile(file)">
+                        <i v-if="file.dir" class="fas fa-folder text-warning"></i>
+                        <i v-else class="fas fa-file-code text-secondary"></i>
+
+                        <span class="text-truncate flex-grow-1" :title="file.name">{{ file.name }}</span>
+
+                        <div class="actions">
+                            <button v-if="!file.dir" class="btn btn-link p-0 text-secondary me-2"
+                                @click.stop="openTextFile(file)" :title="t('terminal.onlineEdit')">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            <button class="btn btn-link p-0 text-primary"
+                                @click.stop="file.dir ? downloadFolder(file.name) : downloadFile(file.name)"
+                                :title="file.dir ? t('terminal.downloadFolder') : t('terminal.downloadFile')">
+                                <i class="fas fa-download"></i>
+                            </button>
+                        </div>
+                        <span class="text-muted small ms-2" v-if="!file.dir">{{ formatSize(file.size) }}</span>
+                    </div>
+                </div> <!-- ends file-list -->
+
+                <!-- 上传/下载进度（原模态框改至目录栏底部） -->
+                <div v-if="transferProgress.active" v-show="!isSidebarCollapsed" class="p-3 border-top bg-light"
+                    style="box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index: 10;">
+                    <div class="d-flex justify-content-between align-items-center mb-2 font-monospace small">
+                        <span class="fw-bold text-dark text-truncate pe-2">
+                            <i class="fas me-1"
+                                :class="transferProgress.type === 'upload' ? 'fa-upload text-success' : 'fa-download text-primary'"></i>
+                            {{ transferProgress.type === 'upload' ? t('terminal.upload') : t('terminal.download') }}: {{ transferProgress.folderName }}
+                        </span>
+                        <span>{{ Math.min(100, Math.round((transferProgress.current / Math.max(transferProgress.total,
+                            1)) *
+                            100)) }}%</span>
+                    </div>
+                    <div class="progress mb-2" style="height: 8px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                            :class="transferProgress.type === 'upload' ? 'bg-success' : 'bg-primary'"
+                            :style="{ width: Math.min(100, (transferProgress.current / Math.max(transferProgress.total, 1)) * 100) + '%' }">
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between small text-muted text-truncate font-monospace"
+                        style="font-size: 0.75rem;">
+                        <span class="text-truncate" style="max-width: 160px;" :title="transferProgress.currentFile">{{
+                            transferProgress.currentFile }}</span>
+                        <span>{{ Math.floor(transferProgress.current) }}/{{ transferProgress.total }}</span>
+                    </div>
+                </div>
+            </div> <!-- ends file-sidebar -->
+
+            <!-- Terminal Area -->
+            <div class="terminal-wrapper">
+                <div id="terminal"></div>
+            </div>
+        </div>
+
+        <!-- 切换用户模态框 -->
+        <div v-if="showSwitchUser && serverInfo" class="modal d-block" style="background: rgba(0,0,0,0.5)"
+            @click.self="showSwitchUser = false">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-user-cog me-2"></i>{{ t('terminal.switchSftpUser') }}
+                        </h5>
+                        <button type="button" class="btn-close" @click="showSwitchUser = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-warning small mb-3"
+                            v-if="switchUser.username && switchUser.username !== serverInfo.username">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            <strong>{{ t('terminal.switchedToUser') }} {{ switchUser.username }}</strong><br>
+                            {{ t('terminal.enterPasswordToSync') }}
+                        </div>
+                        <div class="alert alert-info small mb-3">
+                            <i class="fas fa-info-circle me-1"></i>
+                            {{ t('terminal.currentSshUser') }} <strong>{{ serverInfo.username }}</strong><br>
+                            {{ t('terminal.currentSftpUser') }} <strong>{{ currentSftpUser }}</strong>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">{{ t('terminal.newUsername') }}</label>
+                            <input type="text" class="form-control" v-model="switchUser.username"
+                                :placeholder="t('terminal.enterNewUsername')" @keyup.enter="applySwitchUser">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">{{ t('terminal.password') }}</label>
+                            <input type="password" class="form-control" v-model="switchUser.password"
+                                :placeholder="t('terminal.enterPassword')" @keyup.enter="applySwitchUser" ref="passwordInput">
+                        </div>
+                        <div class="form-text small">
+                            <i class="fas fa-lightbulb me-1"></i>
+                            {{ t('terminal.switchTip') }}
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-sm btn-secondary" @click="resetToOriginalUser"
+                            v-if="currentSftpUser !== serverInfo.username">
+                            <i class="fas fa-undo me-1"></i>{{ t('terminal.restoreAccount') }}
+                        </button>
+                        <button type="button" class="btn btn-sm btn-light" @click="showSwitchUser = false">{{ t('terminal.cancel') }}</button>
+                        <button type="button" class="btn btn-sm btn-primary" @click="applySwitchUser">
+                            <i class="fas fa-check me-1"></i>{{ t('terminal.confirmSwitch') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 危险命令确认模态框 -->
+        <div v-if="showDangerousModal" class="modal d-block" style="background: rgba(0,0,0,0.5)">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"
+                style="max-width: min(960px, 94vw); max-height: 92vh;">
+                <div class="modal-content border-danger shadow" style="max-height: 92vh;">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-exclamation-triangle me-2"></i>{{ t('terminal.dangerWarning') }}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white"
+                            @click="cancelDangerousCommand"></button>
+                    </div>
+                    <div class="modal-body fs-5" style="max-height: calc(92vh - 190px); overflow: auto;">
+                        <div class="alert alert-warning">
+                            <strong><i class="fas fa-server me-1"></i>{{ t('terminal.operating') }}</strong>
+                            {{ t('terminal.executingHighRisk') }}<strong class="text-danger">“{{ serverInfo ? serverInfo.host : '' }}”</strong>
+                        </div>
+                        <div class="p-4 bg-dark text-danger fw-bold rounded my-3 text-center shadow-inner"
+                            style="font-size: 1.25rem; word-break: break-all; letter-spacing: 1px; max-height: 42vh; overflow: auto; white-space: pre-wrap; text-align: left;">
+                            {{ dangerousCommandText }}
+                        </div>
+                        <div class="text-center text-danger mb-2">
+                            <i class="fas fa-skull-crossbones fa-2x mb-2"></i>
+                            <h5 class="fw-bold mb-0">{{ t('terminal.mayCauseDamage') }}</h5>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light justify-content-center"
+                        style="position: sticky; bottom: 0; z-index: 2; flex-wrap: wrap; gap: .5rem;">
+                        <button type="button" class="btn btn-secondary btn-lg me-3 px-4"
+                            @click="cancelDangerousCommand">{{ t('terminal.cancelExecute') }}</button>
+                        <button type="button" class="btn btn-danger btn-lg px-4" @click="confirmDangerousCommand">
+                            <i class="fas fa-check me-2"></i>{{ t('terminal.confirmExecute') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 脚本安全确认模态框 -->
+        <div v-if="showScriptConfirmModal" class="modal d-block" style="background: rgba(0,0,0,0.6); z-index: 2050;">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"
+                style="max-width: min(1000px, 96vw); max-height: 94vh;">
+                <div class="modal-content shadow border-warning"
+                    style="max-height: 94vh;">
+                    <!-- 模态框头部 -->
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title">
+                            <i class="fas fa-shield-alt me-2"></i>{{ t('terminal.scriptSecurityWarning') }}
+                        </h5>
+                        <button type="button" class="btn-close"
+                            @click="cancelScriptConfirm"></button>
+                    </div>
+                    <!-- 模态框主体 -->
+                    <div class="modal-body" style="max-height: calc(94vh - 200px); overflow: auto;">
+                        <!-- 服务器、脚本路径和危险等级信息 -->
+                        <div class="alert alert-warning mb-3">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <div>
+                                    <div class="mb-1">
+                                        <i class="fas fa-server me-1"></i>
+                                        {{ t('terminal.operatingServer') }} <strong>{{ serverInfo ? serverInfo.host : '' }}</strong>
+                                    </div>
+                                    <div v-if="scriptConfirmPath" class="small">
+                                        <i class="fas fa-file-code me-1"></i>
+                                        {{ t('terminal.scriptPath') }} <code class="user-select-all text-dark">{{ scriptConfirmPath }}</code>
+                                    </div>
+                                </div>
+                                <div class="badge fs-6 px-3 py-2" :style="{ backgroundColor: scriptConfirmRiskLevelColor, color: '#fff' }">
+                                    <i class="fas fa-exclamation-circle me-1"></i>{{ scriptConfirmRiskLevelLabel }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 脚本命令预览 -->
+                        <div class="mb-3">
+                            <div class="fw-bold mb-2 text-secondary small">
+                                <i class="fas fa-terminal me-1"></i>{{ t('terminal.scriptCommand') }}
+                            </div>
+                            <div class="bg-dark text-light rounded p-3 font-monospace small"
+                                style="word-break: break-all; white-space: pre-wrap; max-height: 20vh; overflow: auto;">
+                                {{ scriptConfirmText }}
+                            </div>
+                        </div>
+
+                        <!-- 危险操作列表 -->
+                        <div v-if="scriptConfirmOperations && scriptConfirmOperations.length > 0" class="mb-0">
+                            <div class="fw-bold mb-2 text-secondary small">
+                                <i class="fas fa-list-alt me-1"></i>{{ t('terminal.detectedDangerousOps') }} {{ scriptConfirmOperations.length }})
+                            </div>
+                            <div class="border rounded" style="max-height: 35vh; overflow: auto;">
+                                <table class="table table-sm table-striped table-hover mb-0">
+                                    <thead class="table-dark sticky-top">
+                                        <tr>
+                                            <th style="width: 70px;">{{ t('terminal.level') }}</th>
+                                            <th style="width: 100px;">{{ t('terminal.opType') }}</th>
+                                            <th>{{ t('terminal.description') }}</th>
+                                            <th style="width: 200px;">{{ t('terminal.suggestion') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(op, index) in scriptConfirmOperations" :key="index">
+                                            <td>
+                                                <span class="badge px-2 py-1" :style="{
+                                                    backgroundColor: getRiskLevelColor(op.riskLevel),
+                                                    color: '#fff',
+                                                    fontSize: '0.7rem'
+                                                }">
+                                                    {{ getRiskLevelLabel(op.riskLevel) }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-secondary">
+                                                    {{ getOpTypeLabel(op.type) }}
+                                                </span>
+                                            </td>
+                                            <td class="small">
+                                                <div class="fw-bold text-danger">{{ op.description }}</div>
+                                                <div v-if="op.originalText" class="text-muted font-monospace mt-1" style="font-size: 0.75rem;">
+                                                    {{ t('terminal.operation') }} {{ op.originalText }}
+                                                </div>
+                                            </td>
+                                            <td class="small text-muted">{{ op.suggestion }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- 扫描消息 -->
+                        <div v-if="scriptConfirmMessage" class="mt-3 alert alert-info mb-0">
+                            <i class="fas fa-info-circle me-1"></i>{{ scriptConfirmMessage }}
+                        </div>
+                    </div>
+                    <!-- 模态框底部 -->
+                    <div class="modal-footer bg-light justify-content-center"
+                        style="position: sticky; bottom: 0; z-index: 2; flex-wrap: wrap; gap: .5rem;">
+                        <button type="button" class="btn btn-secondary btn-lg me-3 px-4" @click="cancelScriptConfirm">
+                            <i class="fas fa-times me-2"></i>{{ t('terminal.cancelScript') }}
+                        </button>
+                        <button type="button" class="btn btn-danger btn-lg px-4" @click="confirmScriptExecution">
+                            <i class="fas fa-check me-2"></i>{{ t('terminal.confirmScript') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showCommandTemplateModal" class="modal d-block" style="background: rgba(0,0,0,0.5)"
+            @click.self="closeCommandTemplateModal">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-list-check me-2 text-primary"></i>{{ t('terminal.commandTemplateLib') }}
+                        </h5>
+                        <button type="button" class="btn-close" @click="closeCommandTemplateModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-8">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input type="text" class="form-control" v-model="commandTemplateSearch"
+                                        :placeholder="t('terminal.searchTemplate')">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <select class="form-select form-select-sm" v-model="commandTemplateCategory">
+                                    <option value="">{{ t('terminal.allCategories') }}</option>
+                                    <option v-for="cat in localizedCommandTemplateCategories" :key="cat.key"
+                                        :value="cat.key">
+                                        {{ cat.label }}
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">{{ t('terminal.selectTemplate') }}</label>
+                            <select class="form-select" v-model="selectedCommandTemplateId">
+                                <option disabled value="">{{ t('terminal.pleaseSelect') }}</option>
+                                <option v-for="tpl in filteredCommandTemplates" :key="tpl.id" :value="tpl.id">
+                                    [{{ tpl.category }}] {{ tpl.name }} - {{ tpl.description }}
+                                </option>
+                            </select>
+                            <div v-if="filteredCommandTemplates.length === 0" class="form-text text-danger">
+                                {{ t('terminal.noMatchingTemplate') }}
+                            </div>
+                        </div>
+                        <div v-if="selectedCommandTemplate" class="mb-3">
+                            <div class="small text-muted mb-2">{{ t('terminal.templateContent') }}</div>
+                            <div class="bg-light border rounded p-2 font-monospace small">{{
+                                selectedCommandTemplate.command }}</div>
+                            <div v-if="selectedCommandTemplate.manualOnly" class="alert alert-warning mt-2 mb-0 py-2">
+                                {{ t('terminal.manualCopyNote') }}
+                            </div>
+                        </div>
+                        <div v-if="templateVariables.length > 0" class="mb-3">
+                            <label class="form-label fw-bold">{{ t('terminal.parameters') }}</label>
+                            <div class="row g-2">
+                                <div class="col-md-6" v-for="name in templateVariables" :key="name">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text" v-text="'$' + '{' + name + '}'"></span>
+                                        <input class="form-control" v-model="templateParams[name]"
+                                            :placeholder="t('terminal.enterParam') + ' ' + name">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="selectedCommandTemplate" class="mb-0">
+                            <div class="small text-muted mb-2">{{ t('terminal.executionPreview') }}</div>
+                            <div class="bg-dark text-light rounded p-2 font-monospace small"
+                                style="word-break: break-all;">{{ renderedTemplateCommand }}</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" @click="closeCommandTemplateModal">{{ t('terminal.cancel') }}</button>
+                        <button type="button" class="btn btn-outline-secondary"
+                            @click="copyToClipboard(renderedTemplateCommand)" :disabled="!renderedTemplateCommand">
+                            <i class="fas fa-copy me-1"></i>{{ t('terminal.copyCommand') }}
+                        </button>
+                        <button type="button" class="btn btn-primary" @click="executeTemplateCommand"
+                            :disabled="!selectedCommandTemplate || selectedCommandTemplate.manualOnly">
+                            <i class="fas fa-play me-1"></i>{{ t('terminal.executeCommand') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showFileEditor" class="modal d-block" style="background: rgba(0,0,0,0.5)">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title text-truncate">
+                            <i class="fas fa-file-alt me-2"></i>{{ editingFilePath }}
+                        </h5>
+                        <button type="button" class="btn-close" @click="confirmCloseFileEditor"></button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <div v-if="isFileEditorLoading" class="p-4 text-center text-muted">{{ t('terminal.loadingFile') }}</div>
+                        <textarea v-else class="form-control border-0 rounded-0 font-monospace"
+                            style="min-height: 60vh; resize: vertical;" v-model="editingFileContent"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" @click="confirmCloseFileEditor">{{ t('terminal.close') }}</button>
+                        <button type="button" class="btn btn-primary" @click="saveTextFile"
+                            :disabled="isFileEditorSaving || isFileEditorLoading">
+                            {{ isFileEditorSaving ? t('terminal.saving') : t('terminal.save') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script th:inline="none">
+        var enTermTexts = {
+            'terminal.copyIpTip': 'Click to copy IP:',
+            'terminal.terminalSettings': 'Terminal Display Settings',
+            'terminal.charset': 'Charset',
+            'terminal.commandTemplate': 'Command Templates',
+            'terminal.template': 'Templates',
+            'terminal.expandSidebar': 'Expand File Browser',
+            'terminal.collapseSidebar': 'Collapse File Browser',
+            'terminal.collapse': 'Collapse',
+            'terminal.fileDirectory': 'File Directory',
+            'terminal.switching': 'Switching',
+            'terminal.switchedUser': 'Current user:',
+            'terminal.switchSftpUser': 'Switch SFTP User',
+            'terminal.switchedToUser': 'SSH user switched to:',
+            'terminal.enterPasswordToSync': 'Please enter the password to sync SFTP access',
+            'terminal.currentSshUser': 'Current SSH user:',
+            'terminal.currentSftpUser': 'Current SFTP user:',
+            'terminal.newUsername': 'New Username',
+            'terminal.enterNewUsername': 'Enter the username to switch to',
+            'terminal.password': 'Password',
+            'terminal.enterPassword': 'Enter the password',
+            'terminal.switchTip': 'Note: After switching users, the file browser will use the new user\'s permissions, but the SSH terminal connection will not change.',
+            'terminal.restoreAccount': 'Restore Original Account',
+            'terminal.cancel': 'Cancel',
+            'terminal.confirmSwitch': 'Confirm Switch',
+            'terminal.dangerWarning': 'Dangerous Command Warning',
+            'terminal.operating': 'Operating:',
+            'terminal.executingHighRisk': 'You are executing the following high-risk command on server',
+            'terminal.mayCauseDamage': 'This command may cause data loss or system damage!',
+            'terminal.cancelExecute': 'Cancel Execution',
+            'terminal.confirmExecute': 'Confirm Execution',
+            'terminal.scriptSecurityWarning': 'Script Security Warning',
+            'terminal.operatingServer': 'Operating server:',
+            'terminal.scriptPath': 'Current script path:',
+            'terminal.scriptCommand': 'Script Command',
+            'terminal.detectedDangerousOps': 'Detected dangerous operations in script execution (total',
+            'terminal.level': 'Level',
+            'terminal.opType': 'Type',
+            'terminal.description': 'Description',
+            'terminal.suggestion': 'Suggestion',
+            'terminal.operation': 'Operation:',
+            'terminal.cancelScript': 'Cancel Execution',
+            'terminal.confirmScript': 'Confirm Script Execution',
+            'terminal.commandTemplateLib': 'Command Template Library',
+            'terminal.searchTemplate': 'Search by template name, description, or command keywords...',
+            'terminal.allCategories': 'All Categories',
+            'terminal.selectTemplate': 'Select Template',
+            'terminal.pleaseSelect': 'Please select a command template',
+            'terminal.noMatchingTemplate': 'No matching templates found. Try adjusting keywords or category.',
+            'terminal.templateContent': 'Template Content',
+            'terminal.manualCopyNote': 'This template is for manual copying and execution only. One-click execution is not supported.',
+            'terminal.parameters': 'Parameters',
+            'terminal.enterParam': 'Enter',
+            'terminal.executionPreview': 'Execution Preview',
+            'terminal.copyCommand': 'Copy Command',
+            'terminal.executeCommand': 'Execute Command',
+            'terminal.loadingFile': 'Loading file...',
+            'terminal.close': 'Close',
+            'terminal.saving': 'Saving...',
+            'terminal.save': 'Save',
+            'terminal.download': 'Download',
+            'terminal.upload': 'Upload',
+            'terminal.downloadFolder': 'Download Selected Folder',
+            'terminal.downloadFile': 'Download Selected File',
+            'terminal.selectFileToDownload': 'Please select a file or folder to download',
+            'terminal.uploadFile': 'Upload File',
+            'terminal.uploadFolder': 'Upload Folder',
+            'terminal.refresh': 'Refresh',
+            'terminal.enterPath': 'Enter directory path...',
+            'terminal.searchFiles': 'Search files in current directory...',
+            'terminal.onlineEdit': 'Online Edit',
+            'terminal.copySuccess': 'Copied to clipboard',
+            'terminal.copyFailed': 'Copy failed',
+            'terminal.savedSuccess': 'File saved successfully',
+            'terminal.saveFailed': 'Failed to save file',
+            'terminal.uploadSuccess': 'Upload successful',
+            'terminal.uploadFailed': 'Upload failed',
+            'terminal.downloadFailed': 'Download failed',
+            'terminal.highRisk': 'High Risk',
+            'terminal.mediumRisk': 'Medium Risk',
+            'terminal.lowRisk': 'Low Risk',
+            'terminal.safe': 'Safe',
+            'terminal.criticalRisk': 'Critical Risk',
+            'terminal.manualCopyOnlyAlert': 'This template is for manual copying and execution only. One-click execution is not supported.',
+            'terminal.copiedToClipboard': 'Copied:',
+            'terminal.saveSuccess': 'File saved successfully',
+            'terminal.enterUsernamePassword': 'Please enter username and password',
+            'terminal.catNetwork': 'Network',
+            'terminal.catSystem': 'System',
+            'terminal.catDisk': 'Disk',
+            'terminal.catLog': 'Log',
+            'terminal.catJava': 'Java',
+            'terminal.catDangerous': 'Dangerous',
+            'terminal.tplCheckPortName': 'Check Port Usage',
+            'terminal.tplCheckPortDesc': 'Check the process occupying the specified port',
+            'terminal.tplTopCpuName': 'CPU Top Processes',
+            'terminal.tplTopCpuDesc': 'View the processes with highest CPU usage',
+            'terminal.tplTopMemName': 'Memory Top Processes',
+            'terminal.tplTopMemDesc': 'View the processes with highest memory usage',
+            'terminal.tplFindLargeName': 'Find Large Files',
+            'terminal.tplFindLargeDesc': 'Search files by size or filename',
+            'terminal.tplGrepLogName': 'Search Logs by Keyword',
+            'terminal.tplGrepLogDesc': 'Search for keywords in log files with context',
+            'terminal.tplJavaDumpName': 'Export Java Thread Dump',
+            'terminal.tplJavaDumpDesc': 'Capture thread dump for a Java process',
+            'terminal.tplJvmHistoName': 'View JVM Object Distribution',
+            'terminal.tplJvmHistoDesc': 'Show top JVM heap object distribution',
+            'terminal.tplKillJarName': 'Kill All JAR Processes',
+            'terminal.tplKillJarDesc': 'For manual copy only, one-click execution disabled',
+            'terminal.opType_database': 'Database',
+            'terminal.opType_file': 'File System',
+            'terminal.opType_system': 'System',
+            'terminal.opType_pipe': 'Pipe',
+            'terminal.opType_archive': 'Archive',
+            'terminal.opType_network': 'Network',
+            'terminal.themeDark': 'Black on White',
+            'terminal.themeGreenOnBlack': 'Green on Black',
+            'terminal.themeLight': 'White on Black',
+            'terminal.themeAmberOnBlack': 'Amber on Black',
+            'terminal.themeDracula': 'Dracula',
+            'terminal.themeNord': 'Nord',
+            'terminal.themeSolarizedDark': 'Solarized Dark',
+            'terminal.themeSolarizedLight': 'Solarized Light'
+        };
+
+        var zhTermTexts = {
+            'terminal.copyIpTip': '点击复制IP:',
+            'terminal.terminalSettings': '终端显示设置',
+            'terminal.charset': '终端字符集',
+            'terminal.commandTemplate': '命令模板库',
+            'terminal.template': '模板',
+            'terminal.expandSidebar': '展开文件浏览器',
+            'terminal.collapseSidebar': '折叠文件浏览器',
+            'terminal.collapse': '折叠',
+            'terminal.fileDirectory': '文件目录',
+            'terminal.switching': '切换中',
+            'terminal.switchedUser': '当前使用:',
+            'terminal.switchSftpUser': '切换SFTP用户',
+            'terminal.switchedToUser': '检测到SSH用户切换为:',
+            'terminal.enterPasswordToSync': '请输入该用户的密码以同步切换SFTP访问权限',
+            'terminal.currentSshUser': '当前SSH登录用户:',
+            'terminal.currentSftpUser': '当前SFTP用户:',
+            'terminal.newUsername': '新用户名',
+            'terminal.enterNewUsername': '输入要切换到的用户名',
+            'terminal.password': '密码',
+            'terminal.enterPassword': '输入该用户的密码',
+            'terminal.switchTip': '提示：切换用户后，文件浏览器将使用新用户的权限访问文件，但SSH终端连接不会改变。',
+            'terminal.restoreAccount': '恢复原账号',
+            'terminal.cancel': '取消',
+            'terminal.confirmSwitch': '确认切换',
+            'terminal.dangerWarning': '危险命令警告',
+            'terminal.operating': '正在操作:',
+            'terminal.executingHighRisk': '你正在服务器上执行以下高危命令！',
+            'terminal.mayCauseDamage': '此命令可能会造成数据丢失或系统损坏！',
+            'terminal.cancelExecute': '取消执行',
+            'terminal.confirmExecute': '确定要继续执行',
+            'terminal.scriptSecurityWarning': '脚本安全警告',
+            'terminal.operatingServer': '正在操作服务器:',
+            'terminal.scriptPath': '当前脚本路径:',
+            'terminal.scriptCommand': '脚本命令',
+            'terminal.detectedDangerousOps': '检测到执行脚本中的危险操作（共',
+            'terminal.level': '等级',
+            'terminal.opType': '类型',
+            'terminal.description': '描述',
+            'terminal.suggestion': '建议',
+            'terminal.operation': '操作:',
+            'terminal.cancelScript': '取消执行',
+            'terminal.confirmScript': '确认执行脚本',
+            'terminal.commandTemplateLib': '命令模板库',
+            'terminal.searchTemplate': '按模板名、描述、命令关键字快速检索...',
+            'terminal.allCategories': '全部分类',
+            'terminal.selectTemplate': '选择模板',
+            'terminal.pleaseSelect': '请选择命令模板',
+            'terminal.noMatchingTemplate': '未找到匹配的模板，请调整关键词或分类。',
+            'terminal.templateContent': '模板内容',
+            'terminal.manualCopyNote': '该模板仅供人工复制后自行执行，不支持一键执行。',
+            'terminal.parameters': '参数',
+            'terminal.enterParam': '请输入',
+            'terminal.executionPreview': '执行预览',
+            'terminal.copyCommand': '复制命令',
+            'terminal.executeCommand': '执行命令',
+            'terminal.loadingFile': '正在加载文件...',
+            'terminal.close': '关闭',
+            'terminal.saving': '保存中...',
+            'terminal.save': '保存',
+            'terminal.download': '下载',
+            'terminal.upload': '上传',
+            'terminal.downloadFolder': '下载选中文件夹',
+            'terminal.downloadFile': '下载选中文件',
+            'terminal.selectFileToDownload': '请选择文件或文件夹',
+            'terminal.uploadFile': '上传文件',
+            'terminal.uploadFolder': '上传文件夹',
+            'terminal.refresh': '刷新',
+            'terminal.enterPath': '输入目录路径...',
+            'terminal.searchFiles': '在当前目录搜索文件...',
+            'terminal.onlineEdit': '在线编辑',
+            'terminal.copySuccess': '已复制到剪贴板',
+            'terminal.copyFailed': '复制失败',
+            'terminal.savedSuccess': '文件保存成功',
+            'terminal.saveFailed': '文件保存失败',
+            'terminal.uploadSuccess': '上传成功',
+            'terminal.uploadFailed': '上传失败',
+            'terminal.downloadFailed': '下载失败',
+            'terminal.highRisk': '高危',
+            'terminal.mediumRisk': '中危',
+            'terminal.lowRisk': '低危',
+            'terminal.safe': '安全',
+            'terminal.criticalRisk': '极高危',
+            'terminal.manualCopyOnlyAlert': '该模板仅供人工复制后自行执行，不支持一键执行。',
+            'terminal.copiedToClipboard': '已复制:',
+            'terminal.saveSuccess': '文件保存成功',
+            'terminal.enterUsernamePassword': '请输入用户名和密码',
+            'terminal.catNetwork': '网络',
+            'terminal.catSystem': '系统',
+            'terminal.catDisk': '磁盘',
+            'terminal.catLog': '日志',
+            'terminal.catJava': 'Java',
+            'terminal.catDangerous': '高危',
+            'terminal.tplCheckPortName': '检查端口占用',
+            'terminal.tplCheckPortDesc': '检查指定端口当前占用进程',
+            'terminal.tplTopCpuName': 'CPU 占用 Top 进程',
+            'terminal.tplTopCpuDesc': '查看 CPU 占用最高的进程',
+            'terminal.tplTopMemName': '内存占用 Top 进程',
+            'terminal.tplTopMemDesc': '查看内存占用最高的进程',
+            'terminal.tplFindLargeName': '查找大文件',
+            'terminal.tplFindLargeDesc': '按文件大小或文件名检索文件',
+            'terminal.tplGrepLogName': '按关键字检索日志',
+            'terminal.tplGrepLogDesc': '在日志中检索关键字并显示上下文',
+            'terminal.tplJavaDumpName': '导出 Java 线程栈',
+            'terminal.tplJavaDumpDesc': '抓取指定 Java 进程线程栈',
+            'terminal.tplJvmHistoName': '查看 JVM 对象分布',
+            'terminal.tplJvmHistoDesc': '统计 JVM 堆对象分布 Top',
+            'terminal.tplKillJarName': '一键查杀所有 JAR 进程',
+            'terminal.tplKillJarDesc': '仅展示供人工复制，禁止一键执行',
+            'terminal.opType_database': '数据库',
+            'terminal.opType_file': '文件系统',
+            'terminal.opType_system': '系统',
+            'terminal.opType_pipe': '管道',
+            'terminal.opType_archive': '压缩包',
+            'terminal.opType_network': '网络',
+            'terminal.themeDark': '黑底白字',
+            'terminal.themeGreenOnBlack': '黑底绿字',
+            'terminal.themeLight': '白底黑字',
+            'terminal.themeAmberOnBlack': '黑底琥珀',
+            'terminal.themeDracula': 'Dracula',
+            'terminal.themeNord': 'Nord',
+            'terminal.themeSolarizedDark': 'Solarized Dark',
+            'terminal.themeSolarizedLight': 'Solarized Light'
+        };
+
+        var termLocaleMessages = {};
+        async function loadTermLocaleMessages(locale) {
+            try {
+                var res = await fetch('/js/locale/' + locale + '.json');
+                if (!res.ok) throw new Error('Failed to load locale');
+                termLocaleMessages = await res.json();
+            } catch (e) {
+                console.error('Failed to load locale:', e);
+            }
+        }
+        loadTermLocaleMessages(localStorage.getItem('locale') || 'en');
+
+        var termAllTexts = { 'en': enTermTexts, 'zh_CN': zhTermTexts };
+
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    locale: localStorage.getItem('locale') || 'en',
+                    serverInfo: null,
+                    socket: null,
+                    term: null,
+                    fitAddon: null,
+                    currentPath: '/',
+                    fileSearchQuery: '', // 文件搜索关键字
+                    files: [],
+                    connected: false,
+                    heartbeatTimer: null,  // 心跳定时器
+                    selectedFile: null,  // 当前选中的文件或目录
+                    // SFTP用户切换相关
+                    showSwitchUser: false,
+                    currentSftpUser: '',  // 当前SFTP使用的用户名
+                    switchUser: {
+                        username: '',
+                        password: ''
+                    },
+                    sftpCredentials: null,  // 当前SFTP使用的凭据
+                    isSidebarCollapsed: false,  // 文件浏览器折叠状态
+                    // 上传/下载进度跟踪
+                    transferProgress: {
+                        active: false,
+                        type: '', // 'upload' or 'download'
+                        current: 0,
+                        total: 0,
+                        currentFile: '',
+                        folderName: ''
+                    },
+                    csrfToken: null, // CSRF Token
+
+                    // 危险命令二次确认
+                    dangerousCommandEnabled: true, // 是否启用危险命令确认
+                    dangerousCommands: [], // 危险命令列表（从后端加载）
+                    commandBuffer: '', // 命令缓冲区，用于累积用户输入
+                    pendingCommand: null, // 等待确认的命令
+                    webSocketSessionId: null, // WebSocket真实会话ID（用于Token验证）
+                    /** 后端同步：当前是否在 vim/vi 编辑会话中（避免把编辑区回车当 shell 命令拦截） */
+                    remoteVimModeActive: false,
+
+                    showDangerousModal: false,
+                    dangerousCommandText: '',
+
+                    // 脚本安全确认
+                    showScriptConfirmModal: false,
+                    scriptConfirmText: '',
+                    scriptConfirmToken: '',
+                    scriptConfirmRiskLevel: 'high',
+                    scriptConfirmRiskLevelLabel: '高危',
+                    scriptConfirmRiskLevelColor: '#ff4d4f',
+                    scriptConfirmOperations: [],
+                    scriptConfirmMessage: '',
+                    scriptConfirmPath: '',  // 当前脚本路径
+                    /** 脚本确认前是否已向前端发 Ctrl+C（若为 true，确认执行时需重发整行命令） */
+                    scriptConfirmLineCleared: false,
+                    showCommandTemplateModal: false,
+                    selectedCommandTemplateId: '',
+                    commandTemplateSearch: '',
+                    commandTemplateCategory: '',
+                    templateParams: {},
+                    historyCommandMode: false,  // 是否处于方向键历史命令模式（commandBuffer已被清空）
+                    showFileEditor: false,
+                    editingFilePath: '',
+                    editingFileContent: '',
+                    editingFileOriginalContent: '', // 记录打开时的原始内容，用于判断是否有未保存修改
+                    isFileEditorLoading: false,
+                    isFileEditorSaving: false,
+                    commandTemplates: [
+
+                        {
+                            id: 'check-port',
+                            nameKey: 'terminal.tplCheckPortName',
+                            categoryKey: 'terminal.catNetwork',
+                            descriptionKey: 'terminal.tplCheckPortDesc',
+                            command: "ss -lntp | grep :${port}"
+                        },
+                        {
+                            id: 'top-cpu',
+                            nameKey: 'terminal.tplTopCpuName',
+                            categoryKey: 'terminal.catSystem',
+                            descriptionKey: 'terminal.tplTopCpuDesc',
+                            command: "ps -eo pid,ppid,cmd,%mem,%cpu --sort=-%cpu | head -n 15"
+                        },
+                        {
+                            id: 'top-memory',
+                            nameKey: 'terminal.tplTopMemName',
+                            categoryKey: 'terminal.catSystem',
+                            descriptionKey: 'terminal.tplTopMemDesc',
+                            command: "ps -eo pid,ppid,cmd,%mem,%cpu --sort=-%mem | head -n 15"
+                        },
+                        {
+                            id: 'find-large-files',
+                            nameKey: 'terminal.tplFindLargeName',
+                            categoryKey: 'terminal.catDisk',
+                            descriptionKey: 'terminal.tplFindLargeDesc',
+                            command: "find ${targetDir} -type f -size +${sizeMB}M -name '${fileName}' -exec ls -lh {} \\; | awk '{print $9, $5}'"
+                        },
+                        {
+                            id: 'grep-keyword',
+                            nameKey: 'terminal.tplGrepLogName',
+                            categoryKey: 'terminal.catLog',
+                            descriptionKey: 'terminal.tplGrepLogDesc',
+                            command: "grep -n -C 3 '${keyword}' ${logFile} | head -n ${limit}"
+                        },
+                        {
+                            id: 'java-thread-dump',
+                            nameKey: 'terminal.tplJavaDumpName',
+                            categoryKey: 'terminal.catJava',
+                            descriptionKey: 'terminal.tplJavaDumpDesc',
+                            command: "jstack ${pid} > ${outputFile}"
+                        },
+                        {
+                            id: 'java-heap-histo',
+                            nameKey: 'terminal.tplJvmHistoName',
+                            categoryKey: 'terminal.catJava',
+                            descriptionKey: 'terminal.tplJvmHistoDesc',
+                            command: "jmap -histo ${pid} | head -n ${limit}"
+                        },
+                        {
+                            id: 'kill-all-jar-processes',
+                            nameKey: 'terminal.tplKillJarName',
+                            categoryKey: 'terminal.catDangerous',
+                            descriptionKey: 'terminal.tplKillJarDesc',
+                            command: "ps -ef | grep '\\.jar' | grep -v grep | awk '{print $2}' | xargs -r kill -9",
+                            manualOnly: true
+                        }
+                    ],
+                    terminalThemeOptions: [
+                        { id: 'dark', name: this.t('terminal.themeDark') },
+                        { id: 'green-on-black', name: this.t('terminal.themeGreenOnBlack') },
+                        { id: 'light', name: this.t('terminal.themeLight') },
+                        { id: 'amber-on-black', name: this.t('terminal.themeAmberOnBlack') },
+                        { id: 'dracula', name: this.t('terminal.themeDracula') },
+                        { id: 'nord', name: this.t('terminal.themeNord') },
+                        { id: 'solarized-dark', name: this.t('terminal.themeSolarizedDark') },
+                        { id: 'solarized-light', name: this.t('terminal.themeSolarizedLight') }
+                    ],
+                    terminalCharsetOptions: [
+                        { id: 'UTF-8', name: 'UTF-8' },
+                        { id: 'GBK', name: 'GBK' },
+                        { id: 'GB2312', name: 'GB2312' },
+                        { id: 'GB18030', name: 'GB18030' }
+                    ],
+                    terminalPreferences: {
+                        theme: 'dark',
+                        fontSize: 14,
+                        charset: 'UTF-8'
+                    }
+                }
+            },
+            computed: {
+                filteredFiles() {
+                    if (!this.fileSearchQuery) return this.files;
+                    const query = this.fileSearchQuery.toLowerCase();
+                    return this.files.filter(file => file.name.toLowerCase().includes(query));
+                },
+                localizedCommandTemplates() {
+                    return this.commandTemplates.map(item => ({
+                        ...item,
+                        name: this.t(item.nameKey),
+                        category: this.t(item.categoryKey),
+                        description: this.t(item.descriptionKey)
+                    }));
+                },
+                selectedCommandTemplate() {
+                    return this.commandTemplates.find(item => item.id === this.selectedCommandTemplateId) || null;
+                },
+                localizedSelectedTemplate() {
+                    const tpl = this.selectedCommandTemplate;
+                    if (!tpl) return null;
+                    return {
+                        ...tpl,
+                        name: this.t(tpl.nameKey),
+                        category: this.t(tpl.categoryKey),
+                        description: this.t(tpl.descriptionKey)
+                    };
+                },
+                commandTemplateCategories() {
+                    const cats = this.commandTemplates.map(item => item.categoryKey).filter(Boolean);
+                    return [...new Set(cats)];
+                },
+                localizedCommandTemplateCategories() {
+                    return [...new Set(this.commandTemplates.map(item => item.categoryKey).filter(Boolean))]
+                        .map(key => ({ key, label: this.t(key) }));
+                },
+                filteredCommandTemplates() {
+                    const keyword = (this.commandTemplateSearch || '').trim().toLowerCase();
+                    const locTpls = this.localizedCommandTemplates;
+                    return locTpls.filter(item => {
+                        const categoryMatch = !this.commandTemplateCategory || item.categoryKey === this.commandTemplateCategory;
+                        if (!categoryMatch) return false;
+                        if (!keyword) return true;
+                        const searchable = `${item.name} ${item.description} ${item.command} ${item.category}`.toLowerCase();
+                        return searchable.includes(keyword);
+                    });
+                },
+                templateVariables() {
+                    const tpl = this.selectedCommandTemplate;
+                    if (!tpl || !tpl.command) {
+                        return [];
+                    }
+                    const result = [];
+                    const regex = /\$\{([a-zA-Z0-9_]+)\}/g;
+                    let match;
+                    while ((match = regex.exec(tpl.command)) !== null) {
+                        const key = match[1];
+                        if (!result.includes(key)) {
+                            result.push(key);
+                        }
+                    }
+                    return result;
+                },
+                renderedTemplateCommand() {
+                    const tpl = this.selectedCommandTemplate;
+                    if (!tpl) {
+                        return '';
+                    }
+                    if (tpl.id === 'find-large-files') {
+                        const targetDir = (this.templateParams.targetDir || '').trim();
+                        const sizeMB = (this.templateParams.sizeMB || '').trim();
+                        const fileName = (this.templateParams.fileName || '').trim();
+                        if (!targetDir) {
+                            return '';
+                        }
+                        if (sizeMB) {
+                            const safeFileName = fileName || '*';
+                            return `find ${targetDir} -type f -size +${sizeMB}M -name '${safeFileName}' -exec ls -lh {} \\; | awk '{print $9, $5}'`;
+                        }
+                        const fallbackName = fileName || '*';
+                        return `find ${targetDir} -type f -name '${fallbackName}' -exec ls -lh {} \\; | awk '{print $9, $5}'`;
+                    }
+                    let command = tpl.command;
+                    for (const key of this.templateVariables) {
+                        const rawValue = this.templateParams[key];
+                        const value = (rawValue === undefined || rawValue === null) ? '' : String(rawValue);
+                        command = command.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), value);
+                    }
+                    return command;
+                }
+            },
+            beforeUnmount() {
+                // 清除心跳定时器
+                if (this.heartbeatTimer) {
+                    clearInterval(this.heartbeatTimer);
+                }
+                // 关闭WebSocket连接
+                if (this.socket) {
+                    this.socket.close();
+                }
+            },
+            async mounted() {
+                // 配置axios CSRF拦截器
+                this.setupCsrfInterceptor();
+                // 获取CSRF Token
+                await this.getCsrfToken();
+
+                const serverJson = localStorage.getItem('currentServer');
+                if (!serverJson) {
+                    alert('No server selected');
+                    window.location.href = '/';
+                    return;
+                }
+                this.serverInfo = JSON.parse(serverJson);
+
+                // 动态设置页面标题为服务器IP，方便识别不同的终端标签页
+                document.title = `${this.serverInfo.host} - Terminal`;
+
+                // 初始化SFTP凭据为服务器登录凭据
+                this.sftpCredentials = {
+                    host: this.serverInfo.host,
+                    port: this.serverInfo.port,
+                    username: this.serverInfo.username,
+                    password: this.serverInfo.password
+                };
+                this.currentSftpUser = this.serverInfo.username;
+
+                // 加载危险命令配置
+                this.loadDangerousCommands();
+                this.loadTerminalPreferences();
+
+                this.safeInitTerminal();
+                this.initHomeDirectory();
+                this.updateTitle();
+            },
+            methods: {
+                t: function(key) {
+                    var merged = Object.assign({}, termAllTexts[this.locale] || termAllTexts['en'], termLocaleMessages);
+                    return merged[key] || key.split('.').pop();
+                },
+                updateTitle: function() {
+                    var merged = Object.assign({}, termAllTexts[this.locale] || termAllTexts['en'], termLocaleMessages);
+                    document.title = (merged['terminal.title'] || 'SSH Terminal') + ' - Web Tool';
+                },
+                setLanguage: function(locale) {
+                    this.locale = locale;
+                    localStorage.setItem('locale', locale);
+                    loadTermLocaleMessages(locale);
+                    this.updateTitle();
+                },
+                getThemeById(themeId) {
+                    const themes = {
+                        dark: { background: '#1e1e1e', foreground: '#ffffff' },
+                        'green-on-black': { background: '#000000', foreground: '#33ff33' },
+                        light: { background: '#ffffff', foreground: '#111111' },
+                        'amber-on-black': { background: '#000000', foreground: '#ffbf00' },
+                        dracula: { background: '#282a36', foreground: '#f8f8f2' },
+                        nord: { background: '#2e3440', foreground: '#d8dee9' },
+                        'solarized-dark': { background: '#002b36', foreground: '#93a1a1' },
+                        'solarized-light': { background: '#fdf6e3', foreground: '#586e75' }
+                    };
+                    return themes[themeId] || themes.dark;
+                },
+                loadTerminalPreferences() {
+                    const raw = localStorage.getItem('terminal_preferences');
+                    if (!raw) return;
+                    try {
+                        const parsed = JSON.parse(raw);
+                        const fontSize = Number(parsed.fontSize);
+                        if (parsed.theme && this.terminalThemeOptions.some(item => item.id === parsed.theme)) {
+                            this.terminalPreferences.theme = parsed.theme;
+                        }
+                        if (Number.isFinite(fontSize) && fontSize >= 10 && fontSize <= 28) {
+                            this.terminalPreferences.fontSize = Math.round(fontSize);
+                        }
+                        if (parsed.charset && this.terminalCharsetOptions.some(item => item.id === parsed.charset)) {
+                            this.terminalPreferences.charset = parsed.charset;
+                        }
+                    } catch (e) {
+                    }
+                },
+                persistTerminalPreferences() {
+                    localStorage.setItem('terminal_preferences', JSON.stringify(this.terminalPreferences));
+                },
+                applyTerminalPreferences() {
+                    let fontSize = Number(this.terminalPreferences.fontSize);
+                    if (!Number.isFinite(fontSize)) fontSize = 14;
+                    fontSize = Math.min(28, Math.max(10, Math.round(fontSize)));
+                    this.terminalPreferences.fontSize = fontSize;
+                    this.persistTerminalPreferences();
+                    if (!this.term) return;
+                    this.term.setOption('theme', this.getThemeById(this.terminalPreferences.theme));
+                    this.term.setOption('fontSize', fontSize);
+                    if (this.fitAddon) {
+                        this.fitAddon.fit();
+                    }
+                },
+                applyTerminalCharset() {
+                    if (!this.terminalCharsetOptions.some(item => item.id === this.terminalPreferences.charset)) {
+                        this.terminalPreferences.charset = 'UTF-8';
+                    }
+                    this.persistTerminalPreferences();
+                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                        this.socket.send(JSON.stringify({
+                            operate: 'charset',
+                            charset: this.terminalPreferences.charset
+                        }));
+                    }
+                },
+                safeInitTerminal() {
+                    try {
+                        this.initTerminal();
+                    } catch (e) {
+                        this.terminalPreferences.theme = 'dark';
+                        this.terminalPreferences.fontSize = 14;
+                        this.terminalPreferences.charset = 'UTF-8';
+                        this.persistTerminalPreferences();
+                        this.initTerminal();
+                    }
+                },
+                // 发送命令到服务器
+                sendCommandToServer(command, options = {}) {
+                    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                        const payload = {
+                            operate: 'command',
+                            command: command
+                        };
+                        if (options.commandText) {
+                            payload.commandText = options.commandText;
+                        }
+                        if (options.dangerousCommandToken) {
+                            payload.dangerousCommandToken = options.dangerousCommandToken;
+                        }
+                        if (options.dangerousCommandText) {
+                            payload.dangerousCommandText = options.dangerousCommandText;
+                        }
+                        if (options.scriptConfirmToken) {
+                            payload.scriptConfirmToken = options.scriptConfirmToken;
+                        }
+                        if (options.scriptConfirmText) {
+                            payload.scriptConfirmText = options.scriptConfirmText;
+                        }
+                        this.socket.send(JSON.stringify({
+                            ...payload
+                        }));
+                    }
+                },
+
+                // 加载危险命令配置
+                async loadDangerousCommands() {
+                    try {
+                        const res = await axios.get('/api/ssh/security/dangerous-commands');
+                        if (res.data) {
+                            this.dangerousCommandEnabled = res.data.enabled || false;
+                            this.dangerousCommands = res.data.commands || [];
+                            console.log('危险命令配置已加载:', this.dangerousCommands);
+                        }
+                    } catch (error) {
+                        console.error('加载危险命令配置失败:', error);
+                        // 使用默认配置
+                        this.dangerousCommandEnabled = true;
+                        this.dangerousCommands = ['rm', 'rmdir', 'dd', 'mkfs', 'shutdown', 'reboot'];
+                    }
+                },
+
+                // 检测是否是危险命令
+                isDangerousCommand(command) {
+                    // 如果未启用危险命令确认，直接返回false
+                    if (!this.dangerousCommandEnabled) {
+                        return false;
+                    }
+
+                    if (!command || command.trim().length === 0) {
+                        return false;
+                    }
+
+                    const cmd = command.trim().toLowerCase();
+                    // 检查命令是否以危险命令开头
+                    for (const dangerous of this.dangerousCommands) {
+                        if (cmd.startsWith(dangerous + ' ') || cmd === dangerous) {
+                            return true;
+                        }
+                    }
+                    return false;
+                },
+
+                // 检测是否是脚本执行命令（sh/bash/zsh/./source 等）
+                isScriptExecCommand(command) {
+                    if (!command || command.trim().length === 0) {
+                        return false;
+                    }
+                    const trimmed = command.trim();
+                    // 检测常见的脚本执行格式
+                    return trimmed.match(/^(sh|bash|zsh|dash|ksh|source|\.)\s+/) !== null ||
+                           trimmed.match(/^\.\//) !== null ||
+                           trimmed.match(/^bash\s+/) !== null ||
+                           trimmed.match(/^sh\s+/) !== null ||
+                           trimmed.match(/^zsh\s+/) !== null ||
+                           trimmed.match(/^source\s+/) !== null;
+                },
+
+                // 显示危险命令确认对话框
+                showDangerousCommandConfirm(command, sendMode = 'enter_only') {
+                    this.dangerousCommandText = command;
+                    this.pendingCommand = { text: command, sendMode: sendMode };
+                    this.showDangerousModal = true;
+                },
+
+                // 确认执行危险命令
+                async confirmDangerousCommand() {
+                    const command = this.dangerousCommandText;
+                    this.showDangerousModal = false;
+                    const sendMode = this.pendingCommand?.sendMode || 'enter_only';
+
+                    try {
+                        // 用户确认，请求Token
+                        const res = await axios.post('/api/ssh/security/generate-token', null, {
+                            params: {
+                                sessionId: this.webSocketSessionId,
+                                command: command
+                            }
+                        });
+
+                        if (res.data && res.data.success) {
+                            // 获取Token成功，发送带Token的命令
+                            const token = res.data.token;
+                            const commandToSend = sendMode === 'direct' ? (command + '\r') : '\r';
+                            this.sendCommandToServer(commandToSend, {
+                                commandText: command,
+                                dangerousCommandToken: token,
+                                dangerousCommandText: command
+                            });
+                            this.pendingCommand = null;
+                            // 清空命令缓冲区
+                            this.commandBuffer = '';
+                            console.log('危险命令已发送，Token验证通过');
+                        } else {
+                            console.error('获取Token失败');
+                            this.sendCommandToServer('\x03');
+                            this.commandBuffer = '';
+                        }
+                    } catch (error) {
+                        console.error('请求Token失败:', error);
+                        // Token获取失败，发Ctrl+C{{ t('terminal.cancel') }}命令
+                        this.sendCommandToServer('\x03');
+                        this.pendingCommand = null;
+                        this.commandBuffer = '';
+                    }
+                },
+
+                // {{ t('terminal.cancel') }}执行危险命令
+                cancelDangerousCommand() {
+                    this.showDangerousModal = false;
+
+                    // 输入态危险命令{{ t('terminal.cancel') }}时发送 Ctrl+C；模板直发模式无需中断
+                    if (this.pendingCommand?.sendMode !== 'direct') {
+                        this.sendCommandToServer('\x03');
+                    }
+                    this.pendingCommand = null;
+                    this.commandBuffer = '';
+                    console.log('命令已取消，已发送Ctrl+C中断信号');
+                },
+
+                // ============================================================
+                // 脚本安全扫描和确认
+                // ============================================================
+
+                /**
+                 * 显示脚本安全确认对话框
+                 * 由后端 WebSocket 发送的 script_confirm_required 消息触发
+                 */
+                showScriptConfirmDialog(data) {
+                    this.scriptConfirmLineCleared = false;
+                    this.scriptConfirmText = data.commandText || '';
+                    this.scriptConfirmToken = '';
+                    this.scriptConfirmRiskLevel = data.riskLevel || 'high';
+                    this.scriptConfirmRiskLevelLabel = data.riskLevelLabel || '高危';
+                    this.scriptConfirmRiskLevelColor = data.riskLevelColor || '#ff4d4f';
+                    this.scriptConfirmOperations = data.operations || [];
+                    this.scriptConfirmMessage = data.message || '';
+                    this.scriptConfirmPath = data.scriptPath || '';
+                    this.showScriptConfirmModal = true;
+                    console.log('脚本安全警告已弹出: riskLevel=' + this.scriptConfirmRiskLevel + ', path=' + this.scriptConfirmPath);
+                },
+
+                /**
+                 * 确认执行脚本（用户点击"确认执行"按钮）
+                 */
+                async confirmScriptExecution() {
+                    const commandText = this.scriptConfirmText;
+                    this.showScriptConfirmModal = false;
+
+                    // 调用后端 API 验证并获取执行 Token
+                    try {
+                        const res = await axios.post('/api/ssh/security/scan-script', null, {
+                            params: {
+                                scriptContent: commandText,
+                                scriptPreviewContent: commandText
+                            }
+                        });
+
+                        if (res.data && res.data.confirmToken) {
+                            // 行未被 Ctrl+C 清空时，远端已有逐字符输入，只发回车；否则补发整行
+                            const opts = {
+                                commandText: commandText,
+                                scriptConfirmToken: res.data.confirmToken,
+                                scriptConfirmText: commandText
+                            };
+                            if (this.scriptConfirmLineCleared) {
+                                this.sendCommandToServer(commandText + '\r', opts);
+                            } else {
+                                this.sendCommandToServer('\r', opts);
+                            }
+                            console.log('脚本确认 Token 获取成功，已发送执行');
+                        } else if (res.data && res.data.passed) {
+                            if (this.scriptConfirmLineCleared) {
+                                this.sendCommandToServer(commandText + '\r', { commandText: commandText });
+                            } else {
+                                this.sendCommandToServer('\r', { commandText: commandText });
+                            }
+                        } else {
+                            // 扫描失败
+                            console.warn('脚本扫描失败: ', res.data);
+                            this.sendCommandToServer('\x03');
+                        }
+                    } catch (error) {
+                        console.error('获取脚本确认 Token 失败:', error);
+                        this.sendCommandToServer('\x03');
+                    }
+
+                    this.scriptConfirmText = '';
+                    this.scriptConfirmToken = '';
+                    this.scriptConfirmLineCleared = false;
+                },
+
+                /**
+                 * 从脚本执行命令中提取脚本文件路径
+                 * 支持: bash test.sh, sh script.sh, ./run.sh, source env.sh, bash /path/to/script.sh
+                 */
+                extractScriptPath(command) {
+                    if (!command || !command.trim()) return null;
+                    const trimmed = command.trim();
+                    // 匹配: sh/bash/zsh/dash/ksh/source/. 后的脚本路径（相对或绝对）
+                    const match = trimmed.match(/^(sh|bash|zsh|dash|ksh|source|\.)\s+['"]?([^\s'"]+)['"]?/i);
+                    if (match && match[2]) {
+                        let path = match[2];
+                        // 如果是相对路径，结合当前目录构建完整路径
+                        if (!path.startsWith('/')) {
+                            const baseDir = this.currentPath || '/';
+                            path = baseDir.endsWith('/') ? baseDir + path : baseDir + '/' + path;
+                        }
+                        return path;
+                    }
+                    // ./script.sh 形式（无前面的sh/bash）
+                    const dotMatch = trimmed.match(/^\.\/([^\s'"]+)/);
+                    if (dotMatch && dotMatch[1]) {
+                        let path = dotMatch[1];
+                        if (!path.startsWith('/')) {
+                            const baseDir = this.currentPath || '/';
+                            path = baseDir.endsWith('/') ? baseDir + path : baseDir + '/' + path;
+                        }
+                        return path;
+                    }
+                    return null;
+                },
+
+                /**
+                 * 脚本执行前端预扫描
+                 * 在用户执行脚本命令时，先调用后端 API 进行危险操作扫描
+                 * 后端会通过SFTP读取远程脚本文件内容进行深度扫描
+                 * 如果发现危险操作，弹出确认对话框；如果极高危，直接阻断
+                 */
+                async preScanScript(command, sendMode = 'enter_only') {
+                    // 提取脚本文件路径（用于后端读取脚本内容）
+                    const scriptPath = this.extractScriptPath(command);
+
+                    try {
+                        const res = await axios.post('/api/ssh/security/scan-script', null, {
+                            params: {
+                                scriptContent: command,
+                                scriptPreviewContent: command,
+                                sessionId: this.webSocketSessionId,
+                                scriptPath: scriptPath || ''
+                            }
+                        });
+
+                        if (res.data) {
+                            if (res.data.passed) {
+                                // 脚本安全：远端已有逐字符输入，只提交回车（避免重复回显整行）
+                                this.sendCommandToServer('\r', { commandText: command });
+                                this.commandBuffer = '';
+                            } else if (res.data.needConfirm) {
+                                // high/medium：需要用户确认
+                                this.scriptConfirmLineCleared = false;
+                                this.scriptConfirmText = command;
+                                this.scriptConfirmToken = res.data.confirmToken || '';
+                                this.scriptConfirmRiskLevel = res.data.riskLevel || 'high';
+                                this.scriptConfirmRiskLevelLabel = res.data.riskLevelLabel || this.getRiskLevelLabel(res.data.riskLevel);
+                                this.scriptConfirmRiskLevelColor = res.data.riskLevelColor || this.getRiskLevelColor(res.data.riskLevel);
+                                this.scriptConfirmOperations = res.data.dangerousOperations || [];
+                                this.scriptConfirmMessage = res.data.message || '';
+                                this.showScriptConfirmModal = true;
+                            }
+                            // needConfirm=false 且 passed=false（后端阻断）由 checkScriptExecution 在 WebSocket 层处理
+                        }
+                    } catch (error) {
+                        console.error('脚本预扫描失败，将直接发送命令:', error);
+                        // 扫描失败时，只补发回车提交当前行（避免重复发送命令文本）
+                        this.sendCommandToServer('\r', { commandText: command });
+                        this.commandBuffer = '';
+                    }
+                },
+
+                /**
+                 * {{ t('terminal.cancel') }}脚本执行（用户点击"{{ t('terminal.cancel') }}执行"或"我已知悉"按钮）
+                 */
+                cancelScriptConfirm() {
+                    this.showScriptConfirmModal = false;
+                    this.scriptConfirmText = '';
+                    this.scriptConfirmToken = '';
+                    this.scriptConfirmLineCleared = false;
+                    // 关键：清空悬停命令，防止第二次执行时被错误复用
+                    this.pendingCommand = null;
+                    // 发送 Ctrl+C 中断信号
+                    this.sendCommandToServer('\x03');
+                    this.commandBuffer = '';
+                    console.log('脚本执行已取消');
+                },
+
+                /**
+                 * 获取危险等级对应的中文标签
+                 */
+                getRiskLevelLabel(level) {
+                    const labels = {
+                        'none': this.t('terminal.safe') || 'Safe',
+                        'low': this.t('terminal.lowRisk') || 'Low Risk',
+                        'medium': this.t('terminal.mediumRisk') || 'Medium Risk',
+                        'high': this.t('terminal.highRisk') || 'High Risk',
+                        'critical': this.t('terminal.criticalRisk') || 'Critical Risk'
+                    };
+                    return labels[level] || level;
+                },
+
+                /**
+                 * 获取危险等级对应的颜色
+                 */
+                getRiskLevelColor(level) {
+                    const colors = {
+                        'none': '#52c41a',
+                        'low': '#1890ff',
+                        'medium': '#faad14',
+                        'high': '#ff4d4f',
+                        'critical': '#cf1322'
+                    };
+                    return colors[level] || '#999999';
+                },
+
+                /**
+                 * 获取危险操作类型的标签
+                 */
+                getOpTypeLabel(type) {
+                    return this.t('terminal.opType_' + type) || type;
+                },
+                openCommandTemplateModal() {
+                    this.showCommandTemplateModal = true;
+                    if (!this.selectedCommandTemplateId && this.filteredCommandTemplates.length > 0) {
+                        this.selectedCommandTemplateId = this.filteredCommandTemplates[0].id;
+                    }
+                    if (this.selectedCommandTemplateId && !this.commandTemplates.some(item => item.id === this.selectedCommandTemplateId)) {
+                        this.selectedCommandTemplateId = this.filteredCommandTemplates.length > 0 ? this.filteredCommandTemplates[0].id : '';
+                    }
+                    for (const key of this.templateVariables) {
+                        if (this.templateParams[key] === undefined) {
+                            this.templateParams[key] = '';
+                        }
+                    }
+                },
+                closeCommandTemplateModal() {
+                    this.showCommandTemplateModal = false;
+                },
+                executeTemplateCommand() {
+                    if (!this.selectedCommandTemplate) {
+                        return;
+                    }
+                    if (this.selectedCommandTemplate.manualOnly) {
+                        alert(this.t('terminal.manualCopyOnlyAlert'));
+                        return;
+                    }
+                    if (this.selectedCommandTemplate.id === 'find-large-files') {
+                        const targetDir = (this.templateParams.targetDir || '').trim();
+                        const sizeMB = (this.templateParams.sizeMB || '').trim();
+                        const fileName = (this.templateParams.fileName || '').trim();
+                        if (!targetDir) {
+                            alert('请先填写参数: targetDir');
+                            return;
+                        }
+                        if (!sizeMB && !fileName) {
+                            alert('size 为空时，请输入 fileName 作为查询文件');
+                            return;
+                        }
+                    }
+                    const missing = this.templateVariables.filter(key => {
+                        if (this.selectedCommandTemplate.id === 'find-large-files' && key === 'sizeMB') {
+                            return false;
+                        }
+                        const value = this.templateParams[key];
+                        return value === undefined || value === null || String(value).trim() === '';
+                    });
+                    if (missing.length > 0) {
+                        alert('请先填写参数: ' + missing.join(', '));
+                        return;
+                    }
+                    const command = this.renderedTemplateCommand.trim();
+                    if (!command) {
+                        alert('命令不能为空');
+                        return;
+                    }
+                    this.closeCommandTemplateModal();
+                    if (this.isDangerousCommand(command)) {
+                        this.showDangerousCommandConfirm(command, 'direct');
+                        return;
+                    }
+                    this.sendCommandToServer(command + '\r');
+                    if (this.term) {
+                        this.term.focus();
+                    }
+                },
+
+                // 配置axios CSRF拦截器
+                setupCsrfInterceptor() {
+                    axios.interceptors.request.use(config => {
+                        // 如果是POST/PUT/DELETE/PATCH请求，添加CSRF Token
+                        const modifyingMethods = ['post', 'put', 'delete', 'patch'];
+                        if (config.method && modifyingMethods.includes(config.method.toLowerCase())) {
+                            if (this.csrfToken) {
+                                config.headers['X-CSRF-Token'] = this.csrfToken;
+                            }
+                        }
+                        return config;
+                    }, error => {
+                        return Promise.reject(error);
+                    });
+
+                    // 响应拦截器：如果Token过期，自动刷新
+                    axios.interceptors.response.use(
+                        response => response,
+                        async error => {
+                            if (error.response && error.response.status === 403) {
+                                const errorMsg = error.response.data?.message || '';
+                                // 如果是CSRF Token过期，尝试刷新Token
+                                if (errorMsg.includes('CSRF') || errorMsg.includes('Token')) {
+                                    console.log('CSRF Token无效，重新获取...');
+                                    await this.getCsrfToken();
+                                    // 重试原请求
+                                    const config = error.config;
+                                    if (this.csrfToken) {
+                                        config.headers['X-CSRF-Token'] = this.csrfToken;
+                                    }
+                                    return axios.request(config);
+                                }
+                            }
+                            return Promise.reject(error);
+                        }
+                    );
+                },
+                // 获取CSRF Token
+                async getCsrfToken() {
+                    try {
+                        const res = await axios.get('/api/csrf/token');
+                        if (res.data && res.data.success) {
+                            this.csrfToken = res.data.token;
+                            console.log('CSRF Token已获取');
+                        } else {
+                            console.warn('CSRF Token获取失败');
+                        }
+                    } catch (e) {
+                        console.error('获取CSRF Token异常:', e);
+                    }
+                },
+                handlePathEnter() {
+                    // 解析用户输入的路径
+                    let inputPath = this.currentPath.trim();
+                    if (!inputPath) {
+                        inputPath = '/';
+                    }
+
+                    // 检查是否是尝试访问文件（简单启发式：如果路径以非 / 结尾，且看起来像文件名）
+                    // 更好的方式是交给 listFiles 处理，如果报错 NO_SUCH_FILE 或不是目录，我们再尝试提示
+                    this.listFiles(inputPath);
+                },
+                initTerminal() {
+                    const term = new Terminal({
+                        cursorBlink: true,
+                        fontSize: this.terminalPreferences.fontSize,
+                        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                        theme: this.getThemeById(this.terminalPreferences.theme),
+                        // 优化终端渲染性能和尺寸适配
+                        scrollback: 5000,  // 滚动回溯行数
+                        convertEol: true   // 自动转换换行符
+                    });
+                    const fitAddon = new FitAddon.FitAddon();
+                    this.fitAddon = fitAddon;
+
+                    term.loadAddon(fitAddon);
+                    term.open(document.getElementById('terminal'));
+
+                    this.term = term;
+
+                    // 防抖处理函数，避免频繁调整尺寸
+                    let resizeTimeout = null;
+                    const sendResize = () => {
+                        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                            const cols = term.cols;
+                            const rows = term.rows;
+                            this.socket.send(JSON.stringify({
+                                operate: 'resize',
+                                cols: cols,
+                                rows: rows
+                            }));
+                            console.log(`Terminal resized to: ${cols}x${rows}`);
+                        }
+                    };
+
+                    const debouncedResize = () => {
+                        fitAddon.fit();
+                        if (resizeTimeout) {
+                            clearTimeout(resizeTimeout);
+                        }
+                        resizeTimeout = setTimeout(sendResize, 100);
+                    };
+
+                    // 使用 ResizeObserver 监听终端容器大小变化（比 window.resize 更准确）
+                    const terminalContainer = document.getElementById('terminal');
+                    let lastCopiedSelection = '';
+                    terminalContainer.addEventListener('mouseup', (event) => {
+                        if (event.button !== 0) {
+                            return;
+                        }
+                        setTimeout(() => {
+                            const selectedText = term.getSelection();
+                            if (!selectedText || !selectedText.trim()) {
+                                return;
+                            }
+                            if (selectedText === lastCopiedSelection) {
+                                return;
+                            }
+                            lastCopiedSelection = selectedText;
+                            this.copyToClipboard(selectedText, false);
+                        }, 0);
+                    });
+                    if (window.ResizeObserver) {
+                        const resizeObserver = new ResizeObserver(() => {
+                            debouncedResize();
+                        });
+                        resizeObserver.observe(terminalContainer);
+                    }
+
+                    // 同时监听窗口大小变化作为后备
+                    window.addEventListener('resize', debouncedResize);
+
+                    // 初始化时延迟多次调整尺寸，确保容器完全渲染后获取正确尺寸
+                    setTimeout(() => {
+                        fitAddon.fit();
+                        console.log(`Initial fit: ${term.cols}x${term.rows}`);
+                    }, 50);
+                    setTimeout(() => {
+                        fitAddon.fit();
+                        console.log(`Second fit: ${term.cols}x${term.rows}`);
+                    }, 200);
+
+                    // WebSocket
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    this.socket = new WebSocket(`${protocol}//${window.location.host}/webssh`);
+
+                    // WebSocket握手失败时会触发onerror和onclose
+                    // 用于标记连接是否成功建立过
+                    let connectionEstablished = false;
+
+                    this.socket.onopen = () => {
+                        connectionEstablished = true;
+                        this.connected = true;
+
+                        // 【关键】立即保存 WebSocket Session ID，用于后续 API 调用（如脚本安全扫描）
+                        // Socket.io 的 id 在连接建立时就确定，无需等待后端发送
+                        this.webSocketSessionId = this.socket.id;
+                        console.log('WebSocket连接已建立，Session ID:', this.webSocketSessionId);
+
+                        // 在发送connect之前先计算终端尺寸
+                        fitAddon.fit();
+                        const initialCols = term.cols;
+                        const initialRows = term.rows;
+
+                        // 关键修复：connect 时同步发送真实终端尺寸给后端
+                        // 后端会用此尺寸初始化 PTY，确保 PTY 列数 = xterm.js 显示列数
+                        // 若两者不一致，MySQL/readline 等交互程序在粘贴长命令时
+                        // 会按 PTY 的列数 (200) 计算光标位置，而 xterm.js 按实际列数渲染，
+                        // 导致 ANSI 光标移动码错位，字符互相覆盖，显示乱码（但执行正常）
+                        this.socket.send(JSON.stringify({
+                            operate: 'connect',
+                            host: this.serverInfo.host,
+                            port: this.serverInfo.port,
+                            username: this.serverInfo.username,
+                            password: this.serverInfo.password,
+                            cols: initialCols,   // 携带真实列数，后端 PTY 用此值初始化
+                            rows: initialRows,   // 携带真实行数，后端 PTY 用此值初始化
+                            charset: this.terminalPreferences.charset
+                        }));
+                        console.log(`Connect sent with terminal size: ${initialCols}x${initialRows}`);
+
+                        term.focus();
+
+                        // 等待终端渲染完成后再次发送实际的终端大小
+                        // 多次发送确保远程端收到正确尺寸
+                        const sendInitialSize = (delay) => {
+                            setTimeout(() => {
+                                fitAddon.fit();  // 先重新计算尺寸
+                                const cols = term.cols;
+                                const rows = term.rows;
+                                if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                                    this.socket.send(JSON.stringify({
+                                        operate: 'resize',
+                                        cols: cols,
+                                        rows: rows
+                                    }));
+                                    console.log(`Terminal size sent (after ${delay}ms): ${cols}x${rows}`);
+                                }
+                            }, delay);
+                        };
+
+                        // 分别在100ms、300ms、800ms后发送尺寸，确保远程端收到
+                        // 调整时间点，更早且更密集地发送
+                        sendInitialSize(100);
+                        sendInitialSize(300);
+                        sendInitialSize(800);
+
+                        // 启动心跳定时器,每30秒发送一次ping
+                        this.heartbeatTimer = setInterval(() => {
+                            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                                this.socket.send(JSON.stringify({
+                                    operate: 'ping'
+                                }));
+                                console.log('Heartbeat ping sent');
+                            }
+                        }, 30000); // 30秒
+                    };
+
+                    this.socket.onmessage = (event) => {
+                        // 如果收到pong消息,不显示在终端
+                        if (event.data === 'pong') {
+                            console.log('Heartbeat pong received');
+                            return;
+                        }
+
+                        // 提取会话ID（后端发送的格式：会话ID: xxx）
+                        try {
+                            const sessionIdMatch = event.data.match(/会话ID:\s*([a-f0-9-]+)/);
+                            if (sessionIdMatch) {
+                                this.webSocketSessionId = sessionIdMatch[1];
+                                console.log('WebSocket会话ID已保存:', this.webSocketSessionId);
+                                // 会话ID消息仍然显示在终端，让用户知道
+                            }
+                        } catch (e) {
+                            // 忽略解析错误
+                        }
+
+                        // 用户切换自动检测功能已禁用
+                        // 检测是否是用户切换通知(JSON格式)
+                        // try {
+                        //     const data = JSON.parse(event.data);
+                        //     console.log('Parsed JSON message:', data);
+                        //     if (data.type === 'user_switch' && data.username) {
+                        //         console.log('User switch detected:', data.username);
+                        //         // 自动切换SFTP用户
+                        //         this.autoSwitchSftpUser(data.username);
+                        //         return; // 不显示JSON消息在终端
+                        //     }
+                        // } catch (e) {
+                        //     // 不是JSON,继续正常处理
+                        //     // console.log('Not JSON message, length:', event.data.length);
+                        // }
+
+                        // 脚本安全确认消息检测（后端发送的 JSON 格式）
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.type === 'script_confirm_required') {
+                                console.log('收到脚本确认请求:', data);
+                                this.showScriptConfirmDialog(data);
+                                return; // JSON消息不显示在终端
+                            }
+                            if (data.type === 'vim_mode') {
+                                this.remoteVimModeActive = !!data.active;
+                                return;
+                            }
+                        } catch (e) {
+                            // 不是JSON,继续正常处理
+                        }
+
+                        term.write(event.data);
+                    };
+
+                    this.socket.onclose = (event) => {
+                        this.connected = false;
+                        this.remoteVimModeActive = false;
+
+                        // 如果连接从未成功建立过（握手失败），说明是连接被拒绝
+                        // 由于首页已经做了连接数检查，正常情况下不应该走到这里
+                        // 但如果存在竞态条件导致握手失败，仍然在终端显示错误
+                        if (!connectionEstablished) {
+                            term.write('\r\n\x1b[31m连接失败：当前服务器连接数已达上限\x1b[0m\r\n');
+                            term.write('\r\n\x1b[33m请关闭部分连接后重试\x1b[0m\r\n');
+                            console.error('WebSocket connection rejected during handshake');
+                            return;
+                        }
+
+                        // 正常断开连接
+                        term.write('\r\n\x1b[31mConnection closed.\x1b[0m\r\n');
+                        // 清除心跳定时器
+                        if (this.heartbeatTimer) {
+                            clearInterval(this.heartbeatTimer);
+                            this.heartbeatTimer = null;
+                        }
+                    };
+
+                    this.socket.onerror = (error) => {
+                        this.connected = false;
+                        console.error('WebSocket error:', error);
+
+                        // 如果连接从未成功建立过，这是握手失败
+                        if (!connectionEstablished) {
+                            // 已经在onclose中处理了提示，这里只记录日志
+                            console.error('WebSocket connection failed during handshake');
+                            return;
+                        }
+
+                        // 连接建立后的错误
+                        term.write('\r\n\x1b[31mConnection error.\x1b[0m\r\n');
+                        // 清除心跳定时器
+                        if (this.heartbeatTimer) {
+                            clearInterval(this.heartbeatTimer);
+                            this.heartbeatTimer = null;
+                        }
+                    };
+
+                    // 粘贴缓冲处理
+                    let pasteBuffer = '';
+                    let pasteTimer = null;
+
+
+                    // 修复：浏览器原生粘贴后 xterm.js 会保留粘贴文本的选中高亮（白色背景）
+                    // 在 paste 事件处理完成后（使用 requestAnimationFrame 等一帧）清除选区
+                    document.getElementById('terminal').addEventListener('paste', () => {
+                        requestAnimationFrame(() => term.clearSelection());
+                    }, true); // 捕获阶段，确保在 xterm.js 处理之后执行
+
+                    term.onData(async (data) => {
+                        if (this.socket.readyState === WebSocket.OPEN) {
+                            // 检测回车键
+                            const hasEnter = data.includes('\r') || data.includes('\n');
+
+                            // 检测是否是粘贴操作（一次性输入大量数据）
+                            if (data.length > 10) {
+                                // 累积粘贴数据
+                                pasteBuffer += data;
+                                // 清除之前的定时器
+                                if (pasteTimer) {
+                                    clearTimeout(pasteTimer);
+                                }
+                                // 设置延迟发送，等待所有粘贴数据到齐
+                                pasteTimer = setTimeout(() => {
+                                    if (pasteBuffer) {
+                                        this.sendCommandToServer(pasteBuffer);
+                                        pasteBuffer = '';
+                                    }
+                                }, 50);
+                            } else {
+                                // 普通输入
+                                if (pasteBuffer) {
+                                    // 如果有粘贴缓冲数据，先发送缓冲
+                                    this.sendCommandToServer(pasteBuffer + data);
+                                    pasteBuffer = '';
+                                    if (pasteTimer) {
+                                        clearTimeout(pasteTimer);
+                                        pasteTimer = null;
+                                    }
+                                } else {
+                                    // 检测是否按下回车键
+                                    let realCommand = '';
+                                    if (hasEnter) {
+                                        // ================================================================
+                                        // 核心修复：从 xterm.js buffer 实时读取当前行真实命令内容
+                                        // 相比维护前端 commandBuffer，这种方式天然支持:
+                                        //   1. Tab 补全（PTY已补全，buffer里有完整结果）
+                                        //   2. 方向键历史命令（同上）
+                                        //   3. 光标移动后编辑（同上）
+                                        // Vim 内回车仅为换行，不能按 shell 行做危险/脚本拦截（由后端 vim 检测同步 remoteVimModeActive）
+                                        // ================================================================
+                                        if (!this.remoteVimModeActive) {
+                                            try {
+                                                const buffer = term.buffer.active;
+                                                const cursorRow = buffer.cursorY + buffer.viewportY;
+                                                const line = buffer.getLine(cursorRow);
+                                                if (line) {
+                                                    const lineText = line.translateToString(true).trimEnd();
+                                                    // 去掉命令行提示符前缀（取最后一个 '# ' 或 '$ ' 之后的内容）
+                                                    const promptIdx = Math.max(
+                                                        lineText.lastIndexOf('# '),
+                                                        lineText.lastIndexOf('$ ')
+                                                    );
+                                                    realCommand = promptIdx >= 0
+                                                        ? lineText.substring(promptIdx + 2).trim()
+                                                        : lineText.trim();
+                                                }
+                                            } catch (e) {
+                                                console.warn('[XjTool] 读取xterm buffer失败:', e);
+                                            }
+
+                                            // 用从终端buffer读到的真实命令做危险命令判断
+                                            if (realCommand && this.isDangerousCommand(realCommand)) {
+                                                // 是危险命令 → 拦截，直接显示确认框
+                                                // 注意：SSH PTY里已有命令文本（含Tab补全结果）
+                                                // 用户确认后只需发 \r 即可，不能重复发文本！
+                                                this.showDangerousCommandConfirm(realCommand, 'enter_only');
+                                                return; // 不发送回车，等待用户确认
+                                            }
+
+                                            // 脚本执行命令检测（sh/bash/zsh/./source）
+                                            if (realCommand && hasEnter && this.isScriptExecCommand(realCommand)) {
+                                                // 先做前端预扫
+                                                await this.preScanScript(realCommand, 'enter_only');
+                                                return; // 不发送回车，等待预扫结果或用户确认
+                                            }
+
+                                            // 非危险命令，清空本地状态
+                                            this.commandBuffer = '';
+                                        } else {
+                                            this.commandBuffer = '';
+                                        }
+                                    }
+
+                                    // 正常发送（普通字符 或 非危险命令回车）
+                                    this.sendCommandToServer(data, {
+                                        commandText: (hasEnter && !this.remoteVimModeActive) ? realCommand : ''
+                                    });
+                                }
+                            }
+                        }
+                    });
+                },
+                async initHomeDirectory() {
+                    try {
+                        // 获取用户家目录
+                        const res = await axios.post('/api/sftp/home', {
+                            host: this.sftpCredentials.host,
+                            port: this.sftpCredentials.port,
+                            username: this.sftpCredentials.username,
+                            password: this.sftpCredentials.password
+                        });
+                        const homeDir = res.data;
+                        // 设置当前路径为家目录
+                        this.currentPath = homeDir;
+                        // 加载家目录的文件列表
+                        await this.listFiles(homeDir);
+                    } catch (e) {
+                        console.error('Failed to get home directory', e);
+                        // 如果获取家目录失败，使用根目录作为后备方案
+                        this.currentPath = '/';
+                        this.listFiles('/');
+                    }
+                },
+                async extractSftpErrorPayload(error) {
+                    const data = error?.response?.data;
+                    if (!data) {
+                        return null;
+                    }
+                    if (typeof data === 'object' && !(data instanceof Blob)) {
+                        return data;
+                    }
+                    if (data instanceof Blob) {
+                        try {
+                            const text = await data.text();
+                            if (!text) return null;
+                            return JSON.parse(text);
+                        } catch (e) {
+                            return null;
+                        }
+                    }
+                    if (typeof data === 'string') {
+                        try {
+                            return JSON.parse(data);
+                        } catch (e) {
+                            return null;
+                        }
+                    }
+                    return null;
+                },
+                async formatSftpError(error, fallbackPrefix) {
+                    const payload = await this.extractSftpErrorPayload(error);
+                    if (payload && payload.errorCode) {
+                        const path = payload.path || '';
+                        switch (payload.errorCode) {
+                            case 'PATH_NOT_FOUND':
+                                return `路径不存在: ${path}`;
+                            case 'IS_DIRECTORY':
+                                return `目标是目录: ${path}`;
+                            case 'NOT_DIRECTORY':
+                                return `目标不是目录: ${path}`;
+                            case 'PERMISSION_DENIED':
+                                return `权限不足: ${path}`;
+                            default:
+                                return payload.message || `${fallbackPrefix}: ${error.message}`;
+                        }
+                    }
+                    const raw = error?.response?.data;
+                    if (typeof raw === 'string') {
+                        return `${fallbackPrefix}: ${raw}`;
+                    }
+                    return `${fallbackPrefix}: ${error.message}`;
+                },
+                async listFiles(path = this.currentPath) {
+                    // 确保凭据已初始化
+                    if (!this.sftpCredentials) {
+                        console.error('SFTP credentials not initialized');
+                        alert('SFTP凭据未初始化，请刷新页面重试');
+                        return;
+                    }
+
+                    try {
+                        console.log('Listing files with credentials:', {
+                            host: this.sftpCredentials.host,
+                            port: this.sftpCredentials.port,
+                            username: this.sftpCredentials.username,
+                            path: path
+                        });
+
+                        const res = await axios.post('/api/sftp/list', {
+                            host: this.sftpCredentials.host,
+                            port: this.sftpCredentials.port,
+                            username: this.sftpCredentials.username,
+                            password: this.sftpCredentials.password,
+                            path: path
+                        });
+                        this.files = res.data.sort((a, b) => {
+                            if (a.dir === b.dir) return a.name.localeCompare(b.name);
+                            return a.dir ? -1 : 1;
+                        });
+                        this.currentPath = path;
+                        // 切换目录时清除选中状态
+                        this.selectedFile = null;
+                        // 切换目录时清空搜索框
+                        this.fileSearchQuery = '';
+                    } catch (e) {
+                        console.error('Failed to list files', e);
+                        const payload = await this.extractSftpErrorPayload(e);
+                        const errorCode = payload?.errorCode || '';
+                        const errorMsg = await this.formatSftpError(e, '访问目录失败');
+
+                        if (errorCode === 'PATH_NOT_FOUND' || errorCode === 'NOT_DIRECTORY') {
+                            // 尝试回退到上一级目录，并自动将文件名填入搜索框
+                            const lastSlashIndex = path.lastIndexOf('/');
+                            if (lastSlashIndex > 0) {
+                                const parentDir = path.substring(0, lastSlashIndex);
+                                const fileName = path.substring(lastSlashIndex + 1);
+
+                                alert(`路径 [${path}] 不是一个目录或不存在。\n已为您回退到上级目录并搜索该文件。`);
+
+                                // 回退并搜索
+                                await this.listFiles(parentDir);
+                                this.fileSearchQuery = fileName;
+                            } else {
+                                alert('访问目录失败: 该路径不存在或不是一个有效目录');
+                            }
+                        } else {
+                            alert(errorMsg);
+                        }
+
+                        // 如果当前路径彻底无效，重置为之前的有效路径（这里简单处理为恢复UI显示，实际应保存上一个正确路径）
+                        // this.currentPath = ...
+                    }
+                },
+                selectFile(file) {
+                    // 单击选中文件或目录
+                    this.selectedFile = file;
+                },
+                buildPathByName(name) {
+                    return this.currentPath.endsWith('/') ? this.currentPath + name : this.currentPath + '/' + name;
+                },
+                isEditableFileName(fileName) {
+                    const lower = (fileName || '').toLowerCase().trim();
+                    const textExtensions = [
+                        '.txt', '.log', '.md', '.json', '.xml', '.yml', '.yaml',
+                        '.properties', '.ini', '.conf', '.cfg', '.sh', '.sql',
+                        '.js', '.ts', '.java', '.py', '.go', '.html', '.css', '.vue'
+                    ];
+                    return textExtensions.some(ext => lower.endsWith(ext) || lower.includes(ext + '.'));
+                },
+                async openTextFile(file) {
+                    if (!file || file.dir) {
+                        return;
+                    }
+                    const path = this.buildPathByName(file.name);
+                    if (!this.isEditableFileName(file.name)) {
+                        try {
+                            const probe = await axios.post('/api/sftp/probe-text', {
+                                host: this.sftpCredentials.host,
+                                port: this.sftpCredentials.port,
+                                username: this.sftpCredentials.username,
+                                password: this.sftpCredentials.password,
+                                path: path
+                            });
+                            if (!probe.data?.editable) {
+                                alert('该文件类型暂不支持在线编辑');
+                                return;
+                            }
+                        } catch (e) {
+                            alert(await this.formatSftpError(e, '文件类型探测失败'));
+                            return;
+                        }
+                    }
+                    this.showFileEditor = true;
+                    this.isFileEditorLoading = true;
+                    this.isFileEditorSaving = false;
+                    this.editingFilePath = path;
+                    this.editingFileContent = '';
+                    try {
+                        const res = await axios.post('/api/sftp/read-text', {
+                            host: this.sftpCredentials.host,
+                            port: this.sftpCredentials.port,
+                            username: this.sftpCredentials.username,
+                            password: this.sftpCredentials.password,
+                            path: path
+                        });
+                        this.editingFileContent = res.data?.content || '';
+                        this.editingFileOriginalContent = this.editingFileContent; // 记录原始内容
+                    } catch (e) {
+                        alert(await this.formatSftpError(e, '读取文件失败'));
+                        this.showFileEditor = false;
+                    } finally {
+                        this.isFileEditorLoading = false;
+                    }
+                },
+                async saveTextFile() {
+                    if (!this.editingFilePath) {
+                        return;
+                    }
+                    this.isFileEditorSaving = true;
+                    try {
+                        await axios.post('/api/sftp/save-text', {
+                            host: this.sftpCredentials.host,
+                            port: this.sftpCredentials.port,
+                            username: this.sftpCredentials.username,
+                            password: this.sftpCredentials.password,
+                            path: this.editingFilePath,
+                            content: this.editingFileContent
+                        });
+                        // 保存成功后同步原始内容，避免关闭时误报"未保存修改"
+                        this.editingFileOriginalContent = this.editingFileContent;
+                        alert(this.t('terminal.saveSuccess'));
+                    } catch (e) {
+                        alert(await this.formatSftpError(e, '保存失败'));
+                    } finally {
+                        this.isFileEditorSaving = false;
+                    }
+                },
+                // 直接关闭（无确认），用于保存成功后内部调用
+                closeFileEditor() {
+                    this.showFileEditor = false;
+                    this.editingFilePath = '';
+                    this.editingFileContent = '';
+                    this.editingFileOriginalContent = '';
+                    this.isFileEditorLoading = false;
+                    this.isFileEditorSaving = false;
+                },
+                // 带未保存检测的关闭，供关闭按钮调用
+                confirmCloseFileEditor() {
+                    if (!this.isFileEditorLoading && this.editingFileContent !== this.editingFileOriginalContent) {
+                        if (!confirm('文件内容已修改但尚未保存，确认关闭并放弃修改吗？')) {
+                            return;
+                        }
+                    }
+                    this.closeFileEditor();
+                },
+                // 下载选中的文件或文件夹
+                downloadSelectedItem() {
+                    if (!this.selectedFile) return;
+                    if (this.selectedFile.dir) {
+                        this.downloadFolder(this.selectedFile.name);
+                    } else {
+                        this.downloadFile(this.selectedFile.name);
+                    }
+                },
+                navigate(name) {
+                    let targetPath;
+                    if (name === '..') {
+                        const parts = this.currentPath.split('/').filter(p => p);
+                        parts.pop();
+                        targetPath = '/' + parts.join('/');
+                        if (targetPath === '') targetPath = '/';
+                    } else {
+                        targetPath = this.currentPath.endsWith('/') ? this.currentPath + name : this.currentPath + '/' + name;
+                    }
+                    this.listFiles(targetPath);
+                },
+                async fetchPathStat(path) {
+                    const res = await axios.post('/api/sftp/stat', {
+                        host: this.sftpCredentials.host,
+                        port: this.sftpCredentials.port,
+                        username: this.sftpCredentials.username,
+                        password: this.sftpCredentials.password,
+                        path: path
+                    });
+                    return res.data;
+                },
+                submitSftpDownloadForm(action, payload) {
+                    const finalPayload = {
+                        ...payload,
+                        csrfToken: this.csrfToken || ''
+                    };
+                    const iframeName = 'sftpDownloadFrame_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+                    const iframe = document.createElement('iframe');
+                    iframe.id = iframeName;
+                    iframe.name = iframeName;
+                    iframe.style.display = 'none';
+                    document.body.appendChild(iframe);
+
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = action;
+                    form.target = iframeName;
+                    form.style.display = 'none';
+                    Object.entries(finalPayload).forEach(([k, v]) => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = k;
+                        input.value = v == null ? '' : String(v);
+                        form.appendChild(input);
+                    });
+                    document.body.appendChild(form);
+                    form.submit();
+                    document.body.removeChild(form);
+
+                    // 清理不再需要且不影响下载的 iframe，5分钟后清理可防止内存泄漏
+                    setTimeout(() => {
+                        if (document.body.contains(iframe)) {
+                            document.body.removeChild(iframe);
+                        }
+                    }, 5 * 60 * 1000);
+                },
+                async downloadFile(name) {
+                    const path = this.currentPath.endsWith('/') ? this.currentPath + name : this.currentPath + '/' + name;
+
+                    try {
+                        this.transferProgress = {
+                            active: true,
+                            type: 'download',
+                            current: 5,
+                            total: 100,
+                            currentFile: '校验文件信息...',
+                            folderName: name
+                        };
+                        const stat = await this.fetchPathStat(path);
+                        if (stat?.directory) {
+                            this.transferProgress.active = false;
+                            alert('目标是目录，请使用“下载文件夹”');
+                            return;
+                        }
+                        this.transferProgress.current = 30;
+                        this.transferProgress.currentFile = '已提交浏览器下载...';
+                        this.submitSftpDownloadForm('/api/sftp/download-direct', {
+                            host: this.sftpCredentials.host,
+                            port: this.sftpCredentials.port,
+                            username: this.sftpCredentials.username,
+                            password: this.sftpCredentials.password,
+                            path: path
+                        });
+                        this.transferProgress.current = 100;
+                        setTimeout(() => {
+                            this.transferProgress.active = false;
+                        }, 4000);
+                    } catch (e) {
+                        this.transferProgress.active = false;
+                        alert(await this.formatSftpError(e, '下载失败'));
+                    }
+                },
+                // 文件夹下载（打包为 ZIP）
+                async downloadFolder(folderName) {
+                    const folderPath = this.currentPath.endsWith('/')
+                        ? this.currentPath + folderName
+                        : this.currentPath + '/' + folderName;
+
+                    try {
+                        this.transferProgress = {
+                            active: true,
+                            type: 'download',
+                            current: 5,
+                            total: 100,
+                            currentFile: '校验目录信息...',
+                            folderName: folderName
+                        };
+                        const stat = await this.fetchPathStat(folderPath);
+                        if (!stat?.directory) {
+                            this.transferProgress.active = false;
+                            alert('目标不是目录，请使用“下载文件”');
+                            return;
+                        }
+                        this.transferProgress.current = 30;
+                        this.transferProgress.currentFile = '已提交浏览器下载，服务器正在打包...';
+                        this.submitSftpDownloadForm('/api/sftp/download-folder-direct', {
+                            host: this.sftpCredentials.host,
+                            port: this.sftpCredentials.port,
+                            username: this.sftpCredentials.username,
+                            password: this.sftpCredentials.password,
+                            path: folderPath
+                        });
+                        this.transferProgress.current = 100;
+                        setTimeout(() => {
+                            this.transferProgress.active = false;
+                        }, 8000);
+                    } catch (e) {
+                        this.transferProgress.active = false;
+                        alert(await this.formatSftpError(e, '下载文件夹失败'));
+                    }
+                },
+                uploadFileClick() {
+                    this.$refs.fileInput.click();
+                },
+                // 点击上传文件夹按钮
+                uploadFolderClick() {
+                    this.$refs.folderInput.click();
+                },
+                async handleFileUpload() {
+                    const files = this.$refs.fileInput.files;
+                    if (!files || files.length === 0) return;
+
+                    // 支持多文件上传
+                    let successCount = 0;
+                    let failedFiles = [];
+
+                    this.transferProgress = {
+                        active: true,
+                        type: 'upload',
+                        current: 0,
+                        total: files.length,
+                        currentFile: '',
+                        folderName: files.length === 1 ? files[0].name : `多文件 (${files.length})`
+                    };
+
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        this.transferProgress.currentFile = file.name;
+                        this.transferProgress.current = i;
+
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('path', this.currentPath);
+                        formData.append('host', this.sftpCredentials.host);
+                        formData.append('port', this.sftpCredentials.port);
+                        formData.append('username', this.sftpCredentials.username);
+                        formData.append('password', this.sftpCredentials.password);
+
+                        try {
+                            await axios.post('/api/sftp/upload', formData, {
+                                headers: {
+                                    'Content-Type': 'multipart/form-data'
+                                },
+                                onUploadProgress: progressEvent => {
+                                    if (progressEvent.total) {
+                                        const percentCompleted = progressEvent.loaded / progressEvent.total;
+                                        this.transferProgress.current = i + percentCompleted;
+                                    }
+                                }
+                            });
+                            this.transferProgress.current = i + 1;
+                            successCount++;
+                        } catch (e) {
+                            this.transferProgress.current = i + 1;
+                            failedFiles.push(file.name);
+                        }
+                    }
+
+                    this.transferProgress.active = false;
+                    this.listFiles();
+                    this.$refs.fileInput.value = '';
+
+                    if (failedFiles.length > 0) {
+                        alert(`上传完成: 成功 ${successCount}/${files.length}\n失败: ${failedFiles.join(', ')}`);
+                    }
+                },
+                // 处理文件夹上传
+                async handleFolderUpload() {
+                    const files = this.$refs.folderInput.files;
+                    if (!files || files.length === 0) return;
+
+                    // 获取文件夹名称（第一个文件的相对路径的第一部分）
+                    const firstFile = files[0];
+                    const relativePath = firstFile.webkitRelativePath;
+                    const folderName = relativePath.split('/')[0];
+
+                    // 初始化进度
+                    this.transferProgress = {
+                        active: true,
+                        type: 'upload',
+                        current: 0,
+                        total: files.length,
+                        currentFile: '',
+                        folderName: folderName
+                    };
+
+                    let successCount = 0;
+                    let failedFiles = [];
+
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        const fileRelativePath = file.webkitRelativePath;
+
+                        this.transferProgress.current = i;
+                        this.transferProgress.currentFile = fileRelativePath;
+
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('path', this.currentPath);
+                        formData.append('relativePath', fileRelativePath);
+                        formData.append('host', this.sftpCredentials.host);
+                        formData.append('port', this.sftpCredentials.port);
+                        formData.append('username', this.sftpCredentials.username);
+                        formData.append('password', this.sftpCredentials.password);
+
+                        try {
+                            await axios.post('/api/sftp/upload-with-path', formData, {
+                                headers: {
+                                    'Content-Type': 'multipart/form-data'
+                                },
+                                onUploadProgress: progressEvent => {
+                                    if (progressEvent.total) {
+                                        const percentCompleted = progressEvent.loaded / progressEvent.total;
+                                        this.transferProgress.current = i + percentCompleted;
+                                    }
+                                }
+                            });
+                            this.transferProgress.current = i + 1;
+                            successCount++;
+                        } catch (e) {
+                            this.transferProgress.current = i + 1;
+                            console.error('上传失败:', fileRelativePath, e);
+                            failedFiles.push(fileRelativePath);
+                        }
+                    }
+
+                    this.transferProgress.active = false;
+                    this.listFiles();
+                    this.$refs.folderInput.value = '';
+
+                    if (failedFiles.length > 0) {
+                        alert(`文件夹上传完成: 成功 ${successCount}/${files.length}\n失败: ${failedFiles.slice(0, 5).join(', ')}${failedFiles.length > 5 ? '...' : ''}`);
+                    } else {
+                        alert(`文件夹上传完成: ${successCount} 个文件`);
+                    }
+                },
+                formatSize(bytes) {
+                    if (bytes === 0) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                },
+                // 显示切换用户对话框
+                showSwitchUserModal() {
+                    this.switchUser.username = '';
+                    this.switchUser.password = '';
+                    this.showSwitchUser = true;
+                    // 等待DOM更新后聚焦密码输入框
+                    this.$nextTick(() => {
+                        if (this.$refs.passwordInput) {
+                            this.$refs.passwordInput.focus();
+                        }
+                    });
+                },
+                // 应用切换用户
+                async applySwitchUser() {
+                    if (!this.switchUser.username || !this.switchUser.password) {
+                        alert(this.t('terminal.enterUsernamePassword'));
+                        return;
+                    }
+
+                    try {
+                        // 测试新凭据是否有效
+                        const testCredentials = {
+                            host: this.serverInfo.host,
+                            port: this.serverInfo.port,
+                            username: this.switchUser.username,
+                            password: this.switchUser.password
+                        };
+
+                        // 尝试获取家目录来验证凭据
+                        const res = await axios.post('/api/sftp/home', testCredentials);
+
+                        // 凭据有效，更新SFTP凭据
+                        this.sftpCredentials = testCredentials;
+                        this.currentSftpUser = this.switchUser.username;
+
+                        // 关闭对话框
+                        this.showSwitchUser = false;
+
+                        // 切换到新用户的家目录
+                        const homeDir = res.data;
+                        this.currentPath = homeDir;
+                        await this.listFiles(homeDir);
+
+                        console.log(`SFTP用户已切换到: ${this.currentSftpUser}`);
+                    } catch (e) {
+                        alert('切换用户失败，请检查用户名和密码: ' + (e.response?.data || e.message));
+                    }
+                },
+                // 恢复到原始用户
+                async resetToOriginalUser() {
+                    this.sftpCredentials = {
+                        host: this.serverInfo.host,
+                        port: this.serverInfo.port,
+                        username: this.serverInfo.username,
+                        password: this.serverInfo.password
+                    };
+                    this.currentSftpUser = this.serverInfo.username;
+                    this.showSwitchUser = false;
+
+                    // 重新加载家目录
+                    await this.initHomeDirectory();
+                    console.log(`SFTP用户已恢复到原始账号: ${this.currentSftpUser}`);
+                },
+                // 自动切换SFTP用户(当检测到su命令时)
+                async autoSwitchSftpUser(newUsername) {
+                    // 如果新用户名与当前SFTP用户相同,不需要切换
+                    if (newUsername === this.currentSftpUser) {
+                        console.log('SFTP用户已经是:', newUsername);
+                        return;
+                    }
+
+                    console.log(`自动切换SFTP用户: ${this.currentSftpUser} -> ${newUsername}`);
+
+                    // 如果切换回原始用户,直接使用原始密码
+                    if (newUsername === this.serverInfo.username) {
+                        await this.resetToOriginalUser();
+                        return;
+                    }
+
+                    // 对于其他用户,尝试使用相同的密码(通常su后密码相同)
+                    // 如果失败,会在控制台提示用户手动切换
+                    try {
+                        const testCredentials = {
+                            host: this.serverInfo.host,
+                            port: this.serverInfo.port,
+                            username: newUsername,
+                            password: this.serverInfo.password // 先尝试使用原始密码
+                        };
+
+                        // 尝试获取家目录来验证凭据
+                        const res = await axios.post('/api/sftp/home', testCredentials);
+
+                        // 凭据有效,更新SFTP凭据
+                        this.sftpCredentials = testCredentials;
+                        this.currentSftpUser = newUsername;
+
+                        // 切换到新用户的家目录
+                        const homeDir = res.data;
+                        this.currentPath = homeDir;
+                        await this.listFiles(homeDir);
+
+                        console.log(`SFTP用户自动切换成功: ${newUsername}`);
+                    } catch (e) {
+                        console.warn(`自动切换SFTP用户失败(${newUsername}),密码不匹配，弹出切换对话框`, e);
+                        // 自动弹出切换用户对话框，并预填充用户名
+                        this.switchUser.username = newUsername;
+                        this.switchUser.password = '';
+                        this.showSwitchUser = true;
+
+                        // 等待DOM更新后聚焦密码输入框
+                        this.$nextTick(() => {
+                            if (this.$refs.passwordInput) {
+                                this.$refs.passwordInput.focus();
+                            }
+                        });
+
+                        // 在终端显示提示信息
+                        if (this.term) {
+                            this.term.write('\r\n\x1b[33m[提示] SFTP用户切换需要密码，请在文件浏览器中输入密码\x1b[0m\r\n');
+                        }
+                    }
+                },
+                // 复制到剪贴板
+                copyToClipboard(text, notify = true) {
+                    const fallbackCopy = () => {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text || '';
+                        textarea.style.position = 'fixed';
+                        textarea.style.opacity = '0';
+                        document.body.appendChild(textarea);
+                        textarea.focus();
+                        textarea.select();
+                        const copied = document.execCommand('copy');
+                        document.body.removeChild(textarea);
+                        return copied;
+                    };
+
+                    const clipboard = navigator && navigator.clipboard;
+                    if (clipboard && typeof clipboard.writeText === 'function') {
+                        clipboard.writeText(text || '').then(() => {
+                            if (notify) {
+                                alert(this.t('terminal.copiedToClipboard') + ' ' + text);
+                            }
+                        }).catch(err => {
+                            console.error('复制失败:', err);
+                            const copied = fallbackCopy();
+                            if (notify && copied) {
+                                alert(this.t('terminal.copiedToClipboard') + ' ' + text);
+                            }
+                        });
+                    } else {
+                        const copied = fallbackCopy();
+                        if (notify && copied) {
+                            alert(this.t('terminal.copiedToClipboard') + ' ' + text);
+                        }
+                        if (!copied) {
+                            console.error('复制失败: 当前浏览器不支持 Clipboard API');
+                        }
+                    }
+                },
+                closeWindow() {
+                    if (this.socket) {
+                        this.socket.close();
+                    }
+                    window.open('', '_self');
+                    window.close();
+                    setTimeout(() => {
+                        if (!window.closed) {
+                            window.location.replace('about:blank');
+                        }
+                    }, 100);
+                },
+                // 切换文件浏览器折叠状态
+                toggleSidebar() {
+                    this.isSidebarCollapsed = !this.isSidebarCollapsed;
+                    // 等待DOM更新后，重新调整终端尺寸以适应新布局
+                    this.$nextTick(() => {
+                        setTimeout(() => {
+                            if (this.fitAddon) {
+                                this.fitAddon.fit();
+                                // 发送新的尺寸到服务器
+                                if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                                    this.socket.send(JSON.stringify({
+                                        operate: 'resize',
+                                        cols: this.term.cols,
+                                        rows: this.term.rows
+                                    }));
+                                }
+                            }
+                        }, 300); // 等待CSS过渡动画完成
+                    });
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>

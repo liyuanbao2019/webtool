@@ -1,0 +1,304 @@
+:root {
+    --primary-color: #4a90e2;
+    --secondary-color: #6c757d;
+    --background-color: #f4f6f9;
+    --card-bg: #ffffff;
+    --text-color: #333333;
+    --sidebar-width: 280px;
+    --header-height: 60px;
+}
+
+body {
+    background-color: var(--background-color);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: var(--text-color);
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Header */
+.app-header {
+    height: var(--header-height);
+    background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    justify-content: space-between;
+    z-index: 1000;
+    position: relative;
+}
+
+.brand {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+}
+
+/* Layout */
+.main-container {
+    display: flex;
+    height: calc(100vh - var(--header-height));
+}
+
+.content-area {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+/* Cards */
+.server-card {
+    background: var(--card-bg);
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s, box-shadow 0.2s;
+    margin-bottom: 20px;
+    cursor: pointer;
+}
+
+.server-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.server-card .card-body {
+    padding: 20px;
+}
+
+.server-icon {
+    width: 48px;
+    height: 48px;
+    background: #e3f2fd;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+    font-size: 24px;
+    margin-bottom: 15px;
+}
+
+.server-status {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #ddd;
+    display: inline-block;
+    margin-right: 5px;
+}
+
+.server-status.online {
+    background-color: #28a745;
+}
+
+/* Terminal Page Layout */
+.terminal-layout {
+    display: flex;
+    height: calc(100vh - 50px);
+    /* 减去header的高度50px */
+    width: 100%;
+    overflow: hidden;
+    /* 防止内容溢出 */
+}
+
+.file-sidebar {
+    width: var(--sidebar-width);
+    background: #fff;
+    border-right: 1px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease;
+    overflow: hidden;
+}
+
+/* 折叠状态的文件浏览器 */
+.file-sidebar.collapsed {
+    width: 50px;
+    min-width: 50px;
+}
+
+/* 折叠状态下隐藏面包屑和文件列表 */
+.file-sidebar.collapsed .file-list,
+.file-sidebar.collapsed .p-2.border-bottom.bg-white {
+    display: none;
+}
+
+.file-header {
+    padding: 15px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #f8f9fa;
+}
+
+/* 折叠/展开按钮样式 - 醒目设计 */
+.toggle-sidebar-btn {
+    background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.25);
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.toggle-sidebar-btn:hover {
+    background: linear-gradient(135deg, #357abd 0%, #2868a8 100%);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4);
+    transform: translateY(-1px);
+}
+
+.toggle-sidebar-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.3);
+}
+
+.toggle-sidebar-btn i {
+    font-size: 12px;
+}
+
+/* 当侧边栏折叠时，按钮样式调整 */
+.file-sidebar.collapsed .toggle-sidebar-btn {
+    padding: 6px 10px;
+    background: linear-gradient(135deg, #28a745 0%, #1e8038 100%);
+    box-shadow: 0 2px 6px rgba(40, 167, 69, 0.25);
+}
+
+.file-sidebar.collapsed .toggle-sidebar-btn:hover {
+    background: linear-gradient(135deg, #1e8038 0%, #17632d 100%);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+}
+
+.file-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 0;
+}
+
+.file-item {
+    padding: 8px 15px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 0.9rem;
+}
+
+.file-item:hover {
+    background-color: #f0f7ff;
+}
+
+.file-item i {
+    margin-right: 10px;
+    width: 20px;
+    text-align: center;
+}
+
+.file-item .actions {
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.file-item:hover .actions {
+    opacity: 1;
+}
+
+.file-item.selected {
+    background-color: #4a90e2;
+    color: white;
+}
+
+.file-item.selected i {
+    color: white !important;
+}
+
+.file-item.selected .text-muted {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.file-item.selected:hover {
+    background-color: #3a7bc8;
+}
+
+.terminal-wrapper {
+    flex: 1;
+    background: #1e1e1e;
+    display: flex;
+    flex-direction: column;
+    padding: 5px;
+    /* 减小内边距让终端有更多空间 */
+    overflow: hidden;
+    /* 防止溢出 */
+    box-sizing: border-box;
+}
+
+#terminal {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+/* 确保xterm内部元素正确填充 */
+#terminal .xterm {
+    height: 100%;
+}
+
+#terminal .xterm-viewport {
+    overflow-y: auto !important;
+}
+
+#terminal .xterm-screen {
+    height: 100%;
+}
+
+/* Utility */
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.text-muted-sm {
+    font-size: 0.85rem;
+    color: #888;
+}
+
+.modal-content {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+    border-bottom: 1px solid #f0f0f0;
+    background: #f8f9fa;
+    border-radius: 12px 12px 0 0;
+}
+
+.form-control {
+    border-radius: 8px;
+    padding: 10px 15px;
+}
+
+.breadcrumb-custom {
+    padding: 8px 15px;
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+}

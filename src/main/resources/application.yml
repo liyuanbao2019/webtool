@@ -1,0 +1,207 @@
+# ============================================
+# XjTool - 轻量级 Web SSH 终端与服务器管理工具
+# 作者: 李金才 (li.jc)
+# 版本: 1.0.0-SNAPSHOT
+# ============================================
+
+server:
+  port: 9090
+  servlet:
+    session:
+      timeout: 60m  # 会话超时时间30分钟
+
+# 登录认证配置（支持多用户）
+auth:
+  enabled: true  # 是否启用登录认证
+  users:
+    # 项目经理
+    jkyw: "123456Wp!@#"
+    
+    # 开发团队（根据实际情况添加）
+    lijincai: "123456Wp!@#"
+    # dev_li: "DevLi#2024"
+    # dev_wang: "DevWang$2024"
+    
+    # 测试团队
+    # test_user1: "TestUser1@2024"
+    # test_user2: "TestUser2@2024"
+    
+    # DBA团队
+    # dba_admin: "DBAAdmin&2024"
+    
+    # 注意：
+    # 1. 取消注释并修改密码以添加新用户
+    # 2. 密码建议包含大小写字母、数字和特殊字符
+    # 3. 添加用户后需要重启应用
+
+# SSH性能配置
+ssh:
+  max-connections: 100     # 最大并发SSH连接数
+  connection-timeout: 60000  # 连接超时时间（毫秒）
+  keepalive-interval: 60   # 保活间隔时间（秒），定期发送换行符防止超时
+spring:
+  mvc:
+    async:
+      request-timeout: -1 # 禁用异步请求超时，防止大文件下载被Spring中断
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
+  # 禁用Thymeleaf模板缓存（开发环境）
+  thymeleaf:
+    cache: false
+  # 禁用静态资源缓存
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-cache: true
+          no-store: true
+
+app:
+  servers-config-file: servers.xlsx
+  default-group-name: Default Group
+  common-websites-enabled: true
+  common-websites:
+      # icon 使用 FontAwesome class，可参考以下常用图标（按需复制到网站配置里）
+      # 运维/系统: fas fa-server | fas fa-terminal | fas fa-shield-alt | fas fa-cogs
+      # 监控告警: fas fa-chart-line | fas fa-heartbeat | fas fa-bell | fas fa-gauge-high
+      # 日志检索: fas fa-search | fas fa-file-lines | fas fa-book
+      # 数据平台: fas fa-database | fas fa-table | fas fa-code-branch
+      # 中间件云原生: fas fa-cube | fas fa-network-wired | fas fa-layer-group
+      # DevOps常用品牌: fab fa-jenkins | fab fa-gitlab | fab fa-github | fab fa-docker
+      # 办公门户: fas fa-globe | fas fa-link | fas fa-sitemap | fas fa-compass
+      # - name: 堡垒机
+      #   url: http://10.0.0.10
+      #   icon: fas fa-shield-alt
+      - name: Grafana
+        url: http://10.0.0.20:3000
+        icon: fas fa-chart-line
+      - name: Kibana
+        url: http://10.0.0.30:5601
+        icon: fas fa-search
+      - name: Jenkins
+        url: http://10.0.0.40:8080
+        icon: fab fa-jenkins
+# 数据库配置（SQL 执行器）支持 Oracle、达梦、MySQL
+oracle:
+  # 连接池配置
+  pool:
+    maximum-pool-size: 10         # 每个数据源最大连接数（并发SQL较多时建议适当提高）
+    minimum-idle: 2               # 最小空闲连接数
+    connection-timeout: 120000    # 从连接池获取连接超时（毫秒）
+    idle-timeout: 600000          # 空闲连接超时（10分钟）
+    max-lifetime: 1800000         # 连接最大生命周期（30分钟）
+  
+  # 查询保护配置（防止OOM和慢查询）
+  query:
+    max-query-timeout: 300        # 查询超时时间（秒）
+    fetch-size: 500               # 每次从数据库fetch的行数
+    
+  datasources:
+    # Oracle 数据库示例
+    - name: yingke19c
+      type: ORACLE                # 数据库类型: ORACLE、DM、MYSQL
+      url: jdbc:oracle:thin:@//10.238.89.31:1521/db19c
+      username: netmaintain
+      password: zhdw_netmaintain
+      slave: 10.238.89.32,10.238.89.30
+    # 达梦数据库示例
+    - name: 达梦测试库
+      type: DM
+      url: jdbc:dm://10.238.89.71:5236
+      username: sysdba
+      password: 123456Wp
+    # MySQL 数据库示例（注释掉，需要时取消注释）
+    - name: MySQL测试库
+      type: MYSQL
+      url: jdbc:mysql://10.238.89.59:3306/tm_xj?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
+      username: root
+      password: Lctmn!23
+    # PostgreSQL 数据库示例
+    - name: PostgreSQL测试库
+      type: POSTGRESQL
+      url: jdbc:postgresql://10.238.89.101:5432/mydb
+      username: test
+      password: Lctmn123
+    - name: 盈科Pxc1
+      type: MYSQL
+      url: jdbc:mysql://10.238.89.40:3306/information_schema?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
+      username: root
+      password: Lctmn123
+# 审计日志配置
+audit:
+  # SQL审计
+  log:
+    directory: ./logs/sql_audit  # SQL审计日志目录
+
+  # SSH审计
+  ssh:
+    enabled: true                  # 是否启用SSH审计
+    directory: ./logs/ssh_audit    # SSH审计日志目录
+    log-commands: true             # 是否记录用户命令详情
+    dangerous-command-confirm: true # 是否对危险命令进行二次确认
+    dangerous-commands:            # 危险命令列表（需要二次确认）
+      - rm
+      - rmdir
+      - dd
+      - mkfs
+      - fdisk
+      - parted
+      - shutdown
+      - reboot
+      - halt
+      - poweroff
+      - init
+      # - kill
+      # - pkill
+      # - killall
+    # 脚本执行安全扫描配置
+    script-scan-enabled: true       # 是否启用脚本执行安全扫描
+    block-critical-script-ops: true # 是否阻断极高危脚本操作（极高危直接阻断，不给确认机会）
+    script-exec-triggers:          # 脚本执行触发命令（检测到这些命令时进行脚本内容扫描）
+      - sh
+      - bash
+      - zsh
+      - dash
+      - ksh
+      - source
+      - .
+
+# 安全防护配置
+security:
+  # CSRF防护
+  csrf:
+    enabled: true
+    token-timeout: 1800  # Token有效期（秒，30分钟）
+    
+  # 请求限流
+  rate-limit:
+    enabled: true
+    per-user: 60         # 每用户每分钟请求数（平均1秒1次）
+    per-ip: 100          # 每IP每分钟请求数
+    
+  # SQL安全检查
+  sql-check:
+    enabled: true
+    block-keywords:      # 危险关键词黑名单
+      - DROP
+      - TRUNCATE
+      - ALTER TABLE
+      # - CREATE USER
+      # - GRANT
+      # - REVOKE
+    admin-users:         # 管理员白名单（可执行危险SQL）
+      - jkyw
+      
+  # 来源验证
+  origin-check:
+    enabled: false       # 暂不启用，避免影响现有功能
+    allowed-origins:
+      - http://localhost:9090
+      - http://127.0.0.1:9090
+
+# 日志配置
+logging:
+  level:
+    com.gxcj.xjtool.service.impl.SshServiceImpl: DEBUG
