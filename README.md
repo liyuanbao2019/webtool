@@ -247,10 +247,10 @@ oracle:
   datasources:
     - name: production-oracle
       type: ORACLE
-      url: jdbc:oracle:thin:@//10.238.89.31:1521/db19c
+      url: jdbc:oracle:thin:@//192.168.1.1:1521/db19c
       username: netmaintain
       password: encrypted_password
-      slave: 10.238.89.32,10.238.89.30   # read replicas
+      slave: 192.168.1.12,192.168.1.10   # read replicas
 ```
 
 #### 4. SSH Dangerous Command List

@@ -59,7 +59,7 @@ spring:
           no-store: true
 
 app:
-  servers-config-file: servers.xlsx
+  servers-config-file: servers.en.csv
   default-group-name: Default Group
   common-websites-enabled: true
   common-websites:
@@ -102,31 +102,31 @@ oracle:
     # Oracle 数据库示例
     - name: yingke19c
       type: ORACLE                # 数据库类型: ORACLE、DM、MYSQL
-      url: jdbc:oracle:thin:@//10.238.89.31:1521/db19c
+      url: jdbc:oracle:thin:@//192.168.1.31:1521/db19c
       username: netmaintain
       password: zhdw_netmaintain
-      slave: 10.238.89.32,10.238.89.30
+      slave: 192.168.1.32,192.168.1.30
     # 达梦数据库示例
     - name: 达梦测试库
       type: DM
-      url: jdbc:dm://10.238.89.71:5236
+      url: jdbc:dm://192.168.1.71:5236
       username: sysdba
       password: 123456Wp
     # MySQL 数据库示例（注释掉，需要时取消注释）
     - name: MySQL测试库
       type: MYSQL
-      url: jdbc:mysql://10.238.89.59:3306/tm_xj?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
+      url: jdbc:mysql://192.168.1.59:3306/tm_xj?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
       username: root
       password: Lctmn!23
     # PostgreSQL 数据库示例
     - name: PostgreSQL测试库
       type: POSTGRESQL
-      url: jdbc:postgresql://10.238.89.101:5432/mydb
+      url: jdbc:postgresql://192.168.1.101:5432/mydb
       username: test
       password: Lctmn123
     - name: 盈科Pxc1
       type: MYSQL
-      url: jdbc:mysql://10.238.89.40:3306/information_schema?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
+      url: jdbc:mysql://192.168.1.40:3306/information_schema?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
       username: root
       password: Lctmn123
 # 审计日志配置
