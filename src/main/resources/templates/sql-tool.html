@@ -1167,7 +1167,10 @@
                             {{ pendingSql }}
                         </div>
                         <div v-if="dangerousSqlReason" class="text-secondary small text-center mb-3">
-                            ({{ t('sql.blockedReason') }}: {{ dangerousSqlReason }})
+                            ({{ t('sql.blockedReason') }}: {{ dangerousSqlReasonKey ? t(dangerousSqlReasonKey) : dangerousSqlReason }})
+                        </div>
+                        <div v-if="dangerousSqlSuggestionKey" class="text-secondary small text-center mb-3">
+                            {{ t(dangerousSqlSuggestionKey) }}
                         </div>
                         <div class="text-center text-danger mb-2">
                             <i class="fas fa-skull-crossbones fa-2x mb-2"></i>
@@ -1665,6 +1668,12 @@
             'sql.mayCauseDamage': 'This command may cause data loss or database corruption!',
             'sql.cancelExecute': 'Cancel',
             'sql.confirmExecute': 'Confirm Execute',
+            'sql.dangerReason_blockKeyword': 'Detected dangerous keyword, requires admin confirmation',
+            'sql.dangerSugg_blockKeyword': 'Confirm if this operation is necessary; contact DBA for authorization if needed',
+            'sql.dangerReason_deleteAll': 'Detected full table delete operation (DELETE without WHERE), data will be irrecoverable',
+            'sql.dangerSugg_deleteAll': 'Add a WHERE clause or confirm if full table deletion is necessary',
+            'sql.dangerReason_updateAll': 'Detected full table update operation (UPDATE without WHERE), will update all rows in the table',
+            'sql.dangerSugg_updateAll': 'Add a WHERE clause or confirm if full table update is necessary',
             'sql.sqlTemplateLib': 'SQL Template Library',
             'sql.searchTemplate': 'Search by template name, description, or SQL keywords...',
             'sql.allCategories': 'All Categories',
@@ -1868,6 +1877,12 @@
             'sql.mayCauseDamage': '此命令可能会造成数据丢失或数据库损坏！',
             'sql.cancelExecute': '取消执行',
             'sql.confirmExecute': '确定要继续执行',
+            'sql.dangerReason_blockKeyword': '检测到包含危险关键词，需管理员确认',
+            'sql.dangerSugg_blockKeyword': '请确认是否必须执行该操作，如必须执行请联系 DBA 授权后执行',
+            'sql.dangerReason_deleteAll': '检测到全表删除操作（DELETE without WHERE），数据将不可恢复',
+            'sql.dangerSugg_deleteAll': '请添加 WHERE 条件或确认是否必须执行全表删除',
+            'sql.dangerReason_updateAll': '检测到全表更新操作（UPDATE without WHERE），将更新整表数据',
+            'sql.dangerSugg_updateAll': '请添加 WHERE 条件或确认是否必须执行全表更新',
             'sql.sqlTemplateLib': 'SQL 模板库',
             'sql.searchTemplate': '按模板名、说明、SQL关键字检索...',
             'sql.allCategories': '全部分类',
@@ -2112,6 +2127,8 @@
                     startResizeY: 0,
                     startResizeHeight: 0,
                     dangerousSqlReason: '',
+                    dangerousSqlReasonKey: '',
+                    dangerousSqlSuggestionKey: '',
                     pendingSql: '',
                     generatingToken: false,
                     pendingDatasourceIdx: null,
@@ -3418,6 +3435,8 @@
                             this.pendingSql = sql;
                             this.pendingDatasourceIdx = datasourceIdx;
                             this.dangerousSqlReason = res.data.errorMessage;
+                            this.dangerousSqlReasonKey = res.data.reasonKey || '';
+                            this.dangerousSqlSuggestionKey = res.data.suggestionKey || '';
 
                             const modal = new bootstrap.Modal(document.getElementById('dangerousSqlModal'));
                             modal.show();
@@ -3494,6 +3513,8 @@
                 cancelDangerousSql() {
                     this.pendingSql = '';
                     this.dangerousSqlReason = '';
+                    this.dangerousSqlReasonKey = '';
+                    this.dangerousSqlSuggestionKey = '';
                     this.pendingDatasourceIdx = null;
                     const modalEl = document.getElementById('dangerousSqlModal');
                     const modal = bootstrap.Modal.getInstance(modalEl);

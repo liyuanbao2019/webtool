@@ -151,6 +151,12 @@ public class ScriptScanResult {
         @JsonIgnore
         private String dedupeKey;
 
+        /** 描述 i18n key（格式: terminal.desc_xxx） */
+        private String descriptionKey;
+
+        /** 建议 i18n key（格式: terminal.sugg_xxx） */
+        private String suggestionKey;
+
         public DangerousOperation() {}
 
         public DangerousOperation(String type, String subType, String originalText,
@@ -219,6 +225,22 @@ public class ScriptScanResult {
 
         public void setDedupeKey(String dedupeKey) {
             this.dedupeKey = dedupeKey;
+        }
+
+        public String getDescriptionKey() {
+            return descriptionKey;
+        }
+
+        public void setDescriptionKey(String descriptionKey) {
+            this.descriptionKey = descriptionKey;
+        }
+
+        public String getSuggestionKey() {
+            return suggestionKey;
+        }
+
+        public void setSuggestionKey(String suggestionKey) {
+            this.suggestionKey = suggestionKey;
         }
     }
 }

@@ -204,7 +204,11 @@ public class OracleServiceImpl implements OracleService {
 
             // 如果没 Token，返回需要确认
             if (token == null || token.isEmpty()) {
-                return SqlResultResponse.confirmationNeeded(securityCheck.getReason());
+                return SqlResultResponse.confirmationNeeded(
+                        securityCheck.getReason(),
+                        securityCheck.getReasonKey(),
+                        securityCheck.getSuggestionKey(),
+                        null);
             }
 
             // 验证 Token

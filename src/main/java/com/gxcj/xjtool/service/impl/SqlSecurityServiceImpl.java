@@ -53,7 +53,10 @@ public class SqlSecurityServiceImpl implements SqlSecurityService {
             if (Pattern.compile(regex).matcher(normalized).find()) {
                 if (isAdmin) {
                     log.warn("管理员 {} 执行包含危险关键词 {} 的SQL，需二次确认", username, keyword);
-                    return SqlCheckResult.needConfirm("包含危险关键词: " + keyword);
+                    return SqlCheckResult.needConfirm(
+                            "包含危险关键词: " + keyword,
+                            "sql.dangerReason_blockKeyword",
+                            "sql.dangerSugg_blockKeyword");
                 } else {
                     log.warn("用户 {} 尝试执行包含危险关键词 {} 的SQL", username, keyword);
                     return SqlCheckResult.unsafe("非管理员权限无法执行包含危险关键词的SQL: " + keyword);
@@ -63,24 +66,30 @@ public class SqlSecurityServiceImpl implements SqlSecurityService {
 
         // 检查DELETE不带WHERE
         if (hasDeleteWithoutWhere(normalized, sql)) {
-            if (isAdmin) {
-                log.warn("管理员 {} 执行不带WHERE的DELETE，需二次确认", username);
-                return SqlCheckResult.needConfirm("检测到全表删除操作(DELETE without WHERE)");
-            } else {
-                log.warn("用户 {} 尝试执行不带WHERE的DELETE", username);
-                return SqlCheckResult.unsafe("非管理员权限无法执行不带WHERE条件的DELETE语句");
-            }
+                if (isAdmin) {
+                    log.warn("管理员 {} 执行不带WHERE的DELETE，需二次确认", username);
+                    return SqlCheckResult.needConfirm(
+                            "检测到全表删除操作(DELETE without WHERE)",
+                            "sql.dangerReason_deleteAll",
+                            "sql.dangerSugg_deleteAll");
+                } else {
+                    log.warn("用户 {} 尝试执行不带WHERE的DELETE", username);
+                    return SqlCheckResult.unsafe("非管理员权限无法执行不带WHERE条件的DELETE语句");
+                }
         }
 
         // 检查UPDATE不带WHERE
         if (hasUpdateWithoutWhere(normalized, sql)) {
-            if (isAdmin) {
-                log.warn("管理员 {} 执行不带WHERE的UPDATE，需二次确认", username);
-                return SqlCheckResult.needConfirm("检测到全表更新操作(UPDATE without WHERE)");
-            } else {
-                log.warn("用户 {} 尝试执行不带WHERE的UPDATE", username);
-                return SqlCheckResult.unsafe("非管理员权限无法执行不带WHERE条件的UPDATE语句");
-            }
+                if (isAdmin) {
+                    log.warn("管理员 {} 执行不带WHERE的UPDATE，需二次确认", username);
+                    return SqlCheckResult.needConfirm(
+                            "检测到全表更新操作(UPDATE without WHERE)",
+                            "sql.dangerReason_updateAll",
+                            "sql.dangerSugg_updateAll");
+                } else {
+                    log.warn("用户 {} 尝试执行不带WHERE的UPDATE", username);
+                    return SqlCheckResult.unsafe("非管理员权限无法执行不带WHERE条件的UPDATE语句");
+                }
         }
 
         return SqlCheckResult.safe();

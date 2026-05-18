@@ -62,6 +62,21 @@ public class SqlResultResponse {
     private boolean needConfirm;
 
     /**
+     * 危险原因国际化 key（前端展示用）
+     */
+    private String reasonKey;
+
+    /**
+     * 处置建议国际化 key（前端展示用）
+     */
+    private String suggestionKey;
+
+    /**
+     * 处置建议文本（后端回传，供前端展示）
+     */
+    private String suggestion;
+
+    /**
      * 是否是批量执行结果
      */
     private boolean isBatch;
@@ -139,11 +154,22 @@ public class SqlResultResponse {
     /**
      * 创建需要确认的响应
      */
-    public static SqlResultResponse confirmationNeeded(String message) {
+    public static SqlResultResponse confirmationNeeded(String message, String reasonKey, String suggestionKey) {
+        return confirmationNeeded(message, reasonKey, suggestionKey, null);
+    }
+
+    public static SqlResultResponse confirmationNeeded(String message, String reasonKey, String suggestionKey, String suggestion) {
         return SqlResultResponse.builder()
                 .success(false)
-                .needConfirm(true) // 标记为需要确认
+                .needConfirm(true)
                 .errorMessage(message)
+                .reasonKey(reasonKey)
+                .suggestionKey(suggestionKey)
+                .suggestion(suggestion)
                 .build();
+    }
+
+    public static SqlResultResponse confirmationNeeded(String message) {
+        return confirmationNeeded(message, null, null, null);
     }
 }

@@ -22,6 +22,8 @@ public interface SqlSecurityService {
         private boolean safe;
         private boolean needConfirm;
         private String reason;
+        private String reasonKey;
+        private String suggestionKey;
 
         public SqlCheckResult(boolean safe, String reason) {
             this.safe = safe;
@@ -40,6 +42,14 @@ public interface SqlSecurityService {
             return reason;
         }
 
+        public String getReasonKey() {
+            return reasonKey;
+        }
+
+        public String getSuggestionKey() {
+            return suggestionKey;
+        }
+
         public static SqlCheckResult safe() {
             return new SqlCheckResult(true, null);
         }
@@ -48,9 +58,11 @@ public interface SqlSecurityService {
             return new SqlCheckResult(false, reason);
         }
 
-        public static SqlCheckResult needConfirm(String reason) {
+        public static SqlCheckResult needConfirm(String reason, String reasonKey, String suggestionKey) {
             SqlCheckResult result = new SqlCheckResult(false, reason);
             result.needConfirm = true;
+            result.reasonKey = reasonKey;
+            result.suggestionKey = suggestionKey;
             return result;
         }
     }

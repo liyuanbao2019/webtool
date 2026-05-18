@@ -344,7 +344,7 @@
                                     </div>
                                 </div>
                                 <div class="badge fs-6 px-3 py-2" :style="{ backgroundColor: scriptConfirmRiskLevelColor, color: '#fff' }">
-                                    <i class="fas fa-exclamation-circle me-1"></i>{{ scriptConfirmRiskLevelLabel }}
+                                    <i class="fas fa-exclamation-circle me-1"></i>{{ t('terminal.' + scriptConfirmRiskLevel + 'Risk') || scriptConfirmRiskLevelLabel }}
                                 </div>
                             </div>
                         </div>
@@ -383,21 +383,21 @@
                                                     color: '#fff',
                                                     fontSize: '0.7rem'
                                                 }">
-                                                    {{ getRiskLevelLabel(op.riskLevel) }}
+                                                    {{ t('terminal.' + op.riskLevel + 'Risk') || getRiskLevelLabel(op.riskLevel) }}
                                                 </span>
                                             </td>
                                             <td>
                                                 <span class="badge bg-secondary">
-                                                    {{ getOpTypeLabel(op.type) }}
+                                                    {{ getOpTypeLabel(op) }}
                                                 </span>
                                             </td>
                                             <td class="small">
-                                                <div class="fw-bold text-danger">{{ op.description }}</div>
+                                                <div class="fw-bold text-danger">{{ t('terminal.desc_' + op.type + (op.subType ? '_' + op.subType : '')) || op.description }}</div>
                                                 <div v-if="op.originalText" class="text-muted font-monospace mt-1" style="font-size: 0.75rem;">
                                                     {{ t('terminal.operation') }} {{ op.originalText }}
                                                 </div>
                                             </td>
-                                            <td class="small text-muted">{{ op.suggestion }}</td>
+                                            <td class="small text-muted">{{ t('terminal.sugg_' + op.type + (op.subType ? '_' + op.subType : '')) || op.suggestion }}</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -406,7 +406,11 @@
 
                         <!-- 扫描消息 -->
                         <div v-if="scriptConfirmMessage" class="mt-3 alert alert-info mb-0">
-                            <i class="fas fa-info-circle me-1"></i>{{ scriptConfirmMessage }}
+                            <i class="fas fa-info-circle me-1"></i>
+                            <span v-if="scriptConfirmOperations && scriptConfirmOperations.length > 0">
+                                {{ t('terminal.scriptConfirmMessageNoOp').replace('{count}', scriptConfirmOperations.length) }}
+                            </span>
+                            <span v-else>{{ scriptConfirmMessage }}</span>
                         </div>
                     </div>
                     <!-- 模态框底部 -->
@@ -849,7 +853,7 @@
                     scriptConfirmText: '',
                     scriptConfirmToken: '',
                     scriptConfirmRiskLevel: 'high',
-                    scriptConfirmRiskLevelLabel: '高危',
+                    scriptConfirmRiskLevelLabel: 'high',
                     scriptConfirmRiskLevelColor: '#ff4d4f',
                     scriptConfirmOperations: [],
                     scriptConfirmMessage: '',
@@ -1326,7 +1330,7 @@
                     this.scriptConfirmText = data.commandText || '';
                     this.scriptConfirmToken = '';
                     this.scriptConfirmRiskLevel = data.riskLevel || 'high';
-                    this.scriptConfirmRiskLevelLabel = data.riskLevelLabel || '高危';
+                    this.scriptConfirmRiskLevelLabel = data.riskLevelLabel || data.riskLevel || 'high';
                     this.scriptConfirmRiskLevelColor = data.riskLevelColor || '#ff4d4f';
                     this.scriptConfirmOperations = data.operations || [];
                     this.scriptConfirmMessage = data.message || '';
@@ -1509,9 +1513,15 @@
 
                 /**
                  * 获取危险操作类型的标签
+                 * 优先匹配 type_subType 组合键（精确到具体操作），其次匹配 type 顶层类型
                  */
-                getOpTypeLabel(type) {
-                    return this.t('terminal.opType_' + type) || type;
+                getOpTypeLabel(op) {
+                    if (!op) return '';
+                    const subType = op.subType || '';
+                    const type = op.type || '';
+                    const combinedKey = type && subType ? type + '_' + subType : type;
+                    return this.t('terminal.opType_' + combinedKey)
+                        || (subType ? this.t('terminal.opType_' + type) || type : type);
                 },
                 openCommandTemplateModal() {
                     this.showCommandTemplateModal = true;
