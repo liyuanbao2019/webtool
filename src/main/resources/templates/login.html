@@ -338,7 +338,7 @@
 
 <body>
     <div class="lang-switcher">
-        <button class="lang-btn active" id="langEn" onclick="setLanguage('en')">EN</button>
+        <button class="lang-btn" id="langEn" onclick="setLanguage('en')">EN</button>
         <button class="lang-btn" id="langZh" onclick="setLanguage('zh_CN')">中文</button>
     </div>
 
@@ -413,23 +413,36 @@
     <!-- Axios -->
     <script src="/js/axios.min.js"></script>
     <script>
+        var localeCache = {};
         var currentLocale = localStorage.getItem('locale') || 'en';
-        var messages = {};
 
-        async function loadMessages(locale) {
-            try {
-                var res = await fetch('/js/locale/' + locale + '.json');
-                if (!res.ok) throw new Error('Failed to load locale');
-                messages = await res.json();
+        function loadMessages(locale) {
+            if (localeCache[locale]) {
+                currentLocale = locale;
+                localStorage.setItem('locale', locale);
                 applyTranslations();
-            } catch (e) {
-                console.error('Failed to load locale:', e);
+                updateLangButtons();
+                return;
             }
+            fetch('/js/locale/' + locale + '.json')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    localeCache[locale] = data;
+                    currentLocale = locale;
+                    localStorage.setItem('locale', locale);
+                    applyTranslations();
+                    updateLangButtons();
+                })
+                .catch(function(e) {
+                    console.error('Failed to load locale:', e);
+                });
         }
 
         function getMessage(key) {
-            var keys = key.split('.');
+            var messages = localeCache[currentLocale] || {};
+            if (key in messages) return messages[key];
             var value = messages;
+            var keys = key.split('.');
             for (var i = 0; i < keys.length; i++) {
                 if (value == null) return keys[keys.length - 1];
                 value = value[keys[i]];
@@ -465,11 +478,12 @@
             });
         }
 
+        function updateLangButtons() {
+            document.getElementById('langEn').classList.toggle('active', currentLocale === 'en');
+            document.getElementById('langZh').classList.toggle('active', currentLocale === 'zh_CN');
+        }
+
         function setLanguage(locale) {
-            currentLocale = locale;
-            localStorage.setItem('locale', locale);
-            document.getElementById('langEn').classList.toggle('active', locale === 'en');
-            document.getElementById('langZh').classList.toggle('active', locale === 'zh_CN');
             loadMessages(locale);
         }
 
@@ -530,8 +544,7 @@
 
         document.getElementById('username').focus();
 
-        // Initialize language
-        setLanguage(currentLocale);
+        loadMessages(currentLocale);
     </script>
 </body>
 
