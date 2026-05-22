@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpSession;
 import java.util.*;
 
 /**
@@ -60,5 +61,78 @@ public class DatabaseLockController {
             @RequestParam("datasourceIndex") int datasourceIndex) {
         log.info("解锁请求: SID={}, Serial={}, datasource={}", sid, serial, datasourceIndex);
         return oracleService.unlockSession(sid, serial, datasourceIndex);
+    }
+
+    /**
+     * Query MySQL wsrep process list for process killing.
+     */
+    @GetMapping("/mysql-processes")
+    public Map<String, Object> getMysqlProcesses(
+            @RequestParam("datasourceIndex") int datasourceIndex,
+            @RequestParam("database") String database) {
+        try {
+            List<Map<String, Object>> rows = oracleService.getMysqlWsrepProcesses(datasourceIndex, database);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("data", rows);
+            result.put("count", rows.size());
+            return result;
+        } catch (Exception e) {
+            log.error("Query MySQL process list failed datasourceIndex={}, database={}", datasourceIndex, database, e);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", false);
+            result.put("message", "Query MySQL process list failed: " + e.getMessage());
+            result.put("data", Collections.emptyList());
+            result.put("count", 0);
+            return result;
+        }
+    }
+
+    /**
+     * Batch kill selected MySQL processes.
+     */
+    @PostMapping("/mysql-processes/kill")
+    public Map<String, Object> killMysqlProcesses(@RequestBody MysqlProcessKillRequest request, HttpSession session) {
+        String username = (String) session.getAttribute("LOGIN_USER");
+        if (username == null || username.trim().isEmpty()) {
+            username = "unknown";
+        }
+        log.info("MySQL kill process request datasource={}, database={}, ids={}, user={}",
+                request.getDatasourceIndex(), request.getDatabase(), request.getIds(), username);
+        return oracleService.killMysqlProcesses(
+                request.getDatasourceIndex(),
+                request.getDatabase(),
+                request.getIds(),
+                username);
+    }
+
+    public static class MysqlProcessKillRequest {
+        private int datasourceIndex;
+        private String database;
+        private List<Long> ids;
+
+        public int getDatasourceIndex() {
+            return datasourceIndex;
+        }
+
+        public void setDatasourceIndex(int datasourceIndex) {
+            this.datasourceIndex = datasourceIndex;
+        }
+
+        public String getDatabase() {
+            return database;
+        }
+
+        public void setDatabase(String database) {
+            this.database = database;
+        }
+
+        public List<Long> getIds() {
+            return ids;
+        }
+
+        public void setIds(List<Long> ids) {
+            this.ids = ids;
+        }
     }
 }

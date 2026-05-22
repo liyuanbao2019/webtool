@@ -2182,4 +2182,150 @@ public class OracleServiceImpl implements OracleService {
         }
         return res;
     }
+
+    private static final Set<String> MYSQL_PROCESS_DATABASE_WHITELIST =
+            new HashSet<>(Arrays.asList("tm_xj", "tm_xj_jike", "ingp_auth", "ingp_auth_jike"));
+
+    @Override
+    public List<Map<String, Object>> getMysqlWsrepProcesses(int datasourceIndex, String databaseName) {
+        validateMysqlProcessDatasource(datasourceIndex, databaseName);
+
+        String sql = "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO " +
+                "FROM information_schema.PROCESSLIST " +
+                "WHERE DB = ? AND STATE LIKE ? AND COMMAND = 'Query' " +
+                "ORDER BY TIME DESC, ID DESC";
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        try (Connection conn = getConnectionByIndex(datasourceIndex);
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setQueryTimeout(15);
+            stmt.setString(1, databaseName);
+            stmt.setString(2, "%wsrep:%");
+            try (ResultSet rs = stmt.executeQuery()) {
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnCount = metaData.getColumnCount();
+                List<String> columns = new ArrayList<>();
+                for (int i = 1; i <= columnCount; i++) {
+                    columns.add(metaData.getColumnLabel(i));
+                }
+                while (rs.next()) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    for (int i = 1; i <= columnCount; i++) {
+                        row.put(columns.get(i - 1), getColumnValue(rs, i, metaData.getColumnType(i)));
+                    }
+                    rows.add(row);
+                }
+            }
+            log.info("MySQL wsrep process query success datasource={}, database={}, rows={}",
+                    datasourceIndex, databaseName, rows.size());
+        } catch (SQLException e) {
+            log.error("MySQL wsrep process query failed datasource={}, database={}", datasourceIndex, databaseName, e);
+            throw new IllegalStateException(e.getMessage(), e);
+        }
+        return rows;
+    }
+
+    @Override
+    public Map<String, Object> killMysqlProcesses(int datasourceIndex, String databaseName, List<Long> processIds, String username) {
+        validateMysqlProcessDatasource(datasourceIndex, databaseName);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<Long> requestedIds = processIds == null
+                ? Collections.emptyList()
+                : processIds.stream()
+                        .filter(Objects::nonNull)
+                        .filter(id -> id > 0)
+                        .distinct()
+                        .collect(Collectors.toList());
+
+        if (requestedIds.isEmpty()) {
+            result.put("success", false);
+            result.put("message", "No process selected");
+            result.put("killedIds", Collections.emptyList());
+            result.put("failed", Collections.emptyList());
+            return result;
+        }
+
+        List<Long> killedIds = new ArrayList<>();
+        List<Map<String, Object>> failed = new ArrayList<>();
+        String validateSql = "SELECT COUNT(*) FROM information_schema.PROCESSLIST " +
+                "WHERE ID = ? AND DB = ? AND STATE LIKE ? AND COMMAND = 'Query'";
+
+        try (Connection conn = getConnectionByIndex(datasourceIndex);
+                PreparedStatement validateStmt = conn.prepareStatement(validateSql);
+                Statement killStmt = conn.createStatement()) {
+            validateStmt.setQueryTimeout(10);
+            killStmt.setQueryTimeout(10);
+
+            for (Long processId : requestedIds) {
+                try {
+                    validateStmt.setLong(1, processId);
+                    validateStmt.setString(2, databaseName);
+                    validateStmt.setString(3, "%wsrep:%");
+                    boolean allowed = false;
+                    try (ResultSet rs = validateStmt.executeQuery()) {
+                        allowed = rs.next() && rs.getInt(1) > 0;
+                    }
+
+                    if (!allowed) {
+                        failed.add(buildMysqlKillFailure(processId, "Process no longer matches the kill filter"));
+                        continue;
+                    }
+
+                    killStmt.execute("KILL " + processId);
+                    killedIds.add(processId);
+                    log.info("MySQL process killed datasource={}, database={}, processId={}, user={}",
+                            datasourceIndex, databaseName, processId, username);
+                } catch (SQLException e) {
+                    failed.add(buildMysqlKillFailure(processId, e.getMessage()));
+                    log.warn("MySQL process kill failed datasource={}, database={}, processId={}: {}",
+                            datasourceIndex, databaseName, processId, e.getMessage());
+                }
+            }
+        } catch (SQLException e) {
+            log.error("MySQL process batch kill failed datasource={}, database={}, ids={}",
+                    datasourceIndex, databaseName, requestedIds, e);
+            throw new IllegalStateException(e.getMessage(), e);
+        }
+
+        try {
+            OracleConfig.OracleDataSource dsConfig = getDataSourceConfig(datasourceIndex);
+            sqlAuditService.logSqlExecution(
+                    username,
+                    "KILL MYSQL PROCESS IDS " + requestedIds + " ON " + databaseName,
+                    failed.isEmpty(),
+                    failed.isEmpty() ? null : failed.toString(),
+                    0,
+                    killedIds.size(),
+                    dsConfig != null ? dsConfig.getName() : String.valueOf(datasourceIndex));
+        } catch (Exception e) {
+            log.error("Record MySQL process kill audit failed", e);
+        }
+
+        result.put("success", failed.isEmpty());
+        result.put("message", "Killed " + killedIds.size() + " process(es), failed " + failed.size());
+        result.put("killedIds", killedIds);
+        result.put("failed", failed);
+        return result;
+    }
+
+    private void validateMysqlProcessDatasource(int datasourceIndex, String databaseName) {
+        OracleConfig.OracleDataSource ds = getDataSourceConfig(datasourceIndex);
+        if (ds == null) {
+            throw new IllegalArgumentException("Datasource does not exist");
+        }
+        if (!"MYSQL".equalsIgnoreCase(ds.getType())) {
+            throw new IllegalArgumentException("Only MySQL datasource supports process killing");
+        }
+        if (databaseName == null || !MYSQL_PROCESS_DATABASE_WHITELIST.contains(databaseName)) {
+            throw new IllegalArgumentException("Unsupported database: " + databaseName);
+        }
+    }
+
+    private Map<String, Object> buildMysqlKillFailure(Long processId, String message) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", processId);
+        row.put("message", message);
+        return row;
+    }
 }

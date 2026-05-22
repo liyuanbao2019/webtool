@@ -32,6 +32,11 @@
     <style>
         :root {
             --base-font-size: 14px;
+            --workspace-primary: #6366f1;
+            --workspace-bg: #f8fafc;
+            --workspace-border: #e5e7eb;
+            --workspace-text-main: #1f2937;
+            --workspace-text-sub: #64748b;
         }
 
         body {
@@ -227,6 +232,182 @@
             color: #0d6efd;
             font-weight: 600;
             line-height: 1.4;
+        }
+
+        .mysql-process-modal {
+            height: min(760px, 92vh);
+            border: 1px solid var(--workspace-border);
+            border-radius: 8px;
+            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+            overflow: hidden;
+        }
+
+        .mysql-process-header {
+            min-height: 58px;
+            background: #fff;
+            border-bottom: 1px solid var(--workspace-border);
+            color: var(--workspace-text-main);
+            padding: 10px 14px;
+        }
+
+        .mysql-process-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .mysql-process-title-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: var(--workspace-primary);
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.28);
+            flex-shrink: 0;
+        }
+
+        .mysql-process-title-text {
+            font-weight: 700;
+            font-size: 1rem;
+            line-height: 1.1;
+        }
+
+        .mysql-process-title-sub {
+            color: var(--workspace-text-sub);
+            font-size: 0.76rem;
+            margin-top: 3px;
+        }
+
+        .mysql-process-body {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+            padding: 12px;
+            background: var(--workspace-bg);
+        }
+
+        .mysql-process-toolbar {
+            flex-shrink: 0;
+        }
+
+        .mysql-process-filterbar {
+            background: #fff;
+            border: 1px solid var(--workspace-border);
+            border-radius: 8px;
+            box-shadow: 0 1px 5px rgba(15, 23, 42, 0.05);
+            padding: 10px;
+        }
+
+        .mysql-process-filterbar .form-select {
+            border-color: var(--workspace-border);
+            border-radius: 6px;
+            font-size: 0.84rem;
+        }
+
+        .mysql-process-source {
+            background: #fff;
+            border: 1px solid var(--workspace-border);
+            border-radius: 8px;
+            padding: 7px 10px;
+            color: var(--workspace-text-sub);
+            box-shadow: 0 1px 5px rgba(15, 23, 42, 0.04);
+        }
+
+        .mysql-process-table-wrap {
+            flex: 1;
+            min-height: 260px;
+            overflow: auto;
+            border: 1px solid var(--workspace-border);
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 1px 5px rgba(15, 23, 42, 0.05);
+        }
+
+        .mysql-process-table {
+            min-width: 1100px;
+            font-size: 0.78rem;
+            table-layout: fixed;
+        }
+
+        .mysql-process-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f8fafc;
+            color: #475569;
+            border-bottom-color: var(--workspace-border);
+            white-space: nowrap;
+            font-weight: 700;
+        }
+
+        .mysql-process-table tbody td {
+            border-color: #eef2f7;
+            color: #334155;
+            vertical-align: middle;
+        }
+
+        .mysql-process-table tbody tr:hover {
+            background: #f8fafc;
+        }
+
+        .mysql-process-db-badge {
+            background: #eef2ff;
+            color: #3730a3;
+            border: 1px solid #c7d2fe;
+            border-radius: 999px;
+            font-weight: 600;
+            padding: 3px 8px;
+        }
+
+        .mysql-process-time-warn {
+            color: #b45309;
+            font-weight: 700;
+        }
+
+        .mysql-process-pagination {
+            flex-shrink: 0;
+            border: 1px solid var(--workspace-border);
+            border-radius: 8px;
+            background: #fff;
+            padding: 8px 10px;
+            margin-top: 8px;
+            gap: 8px;
+            box-shadow: 0 1px 5px rgba(15, 23, 42, 0.04);
+        }
+
+        .mysql-process-pagination .page-link {
+            color: var(--workspace-primary);
+            border-color: var(--workspace-border);
+        }
+
+        .mysql-process-pagination .page-item.disabled .page-link {
+            color: #94a3b8;
+            background: #f8fafc;
+        }
+
+        .mysql-process-primary-btn {
+            border-color: #c7d2fe;
+            color: #4f46e5;
+            background: #eef2ff;
+            font-weight: 600;
+        }
+
+        .mysql-process-primary-btn:hover {
+            border-color: var(--workspace-primary);
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .mysql-process-danger-btn {
+            background: #dc2626;
+            border-color: #dc2626;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.18);
         }
 
         /* Sidebar toggle button */
@@ -852,14 +1033,15 @@
                     </div>
                     <div class="sidebar-tools-grid">
                         <button type="button" class="sidebar-tool-card"
-                            v-for="tool in commonTools"
+                            v-for="tool in visibleCommonTools"
                             :key="tool.id"
-                            :disabled="selectedDataSourceIdx === null || (tool.requireOracle && !isOracleDb)"
+                            :disabled="selectedDataSourceIdx === null || (tool.requireOracle && !isOracleDb) || (tool.requireMysql && !isMysqlDb)"
                             :title="t(tool.descKey)"
                             @click="onCommonTool(tool)">
                             <span class="sidebar-tool-card-icon"><i :class="tool.icon"></i></span>
                             <span class="sidebar-tool-card-label">{{ t(tool.labelKey) }}</span>
                             <span v-if="tool.requireOracle" class="sidebar-tool-card-badge">Oracle</span>
+                            <span v-if="tool.requireMysql" class="sidebar-tool-card-badge">MySQL</span>
                         </button>
                     </div>
                 </div>
@@ -1378,6 +1560,144 @@
             </div>
         </div>
 
+        <div class="modal fade" id="mysqlProcessKillModal" tabindex="-1" ref="mysqlProcessKillModal">
+            <div class="modal-dialog modal-dialog-centered" style="max-width: min(1180px, 96vw);">
+                <div class="modal-content mysql-process-modal">
+                    <div class="modal-header mysql-process-header">
+                        <div class="mysql-process-title">
+                            <span class="mysql-process-title-icon"><i class="fas fa-ban"></i></span>
+                            <div>
+                                <div class="mysql-process-title-text">{{ t('sql.mysqlProcessKill') }}</div>
+                                <div class="mysql-process-title-sub">{{ t('sql.mysqlProcessKillDesc') }}</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body mysql-process-body">
+                        <div class="row g-2 align-items-end mb-2 mysql-process-toolbar mysql-process-filterbar">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold mb-1">{{ t('sql.database') }}</label>
+                                <select class="form-select form-select-sm" v-model="mysqlProcessData.database"
+                                    @change="fetchMysqlProcesses">
+                                    <option v-for="db in mysqlProcessDatabases" :key="db" :value="db">{{ db }}</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8 d-flex gap-2 justify-content-md-end">
+                                <button class="btn btn-sm mysql-process-primary-btn" @click="fetchMysqlProcesses"
+                                    :disabled="mysqlProcessData.loading">
+                                    <i class="fas fa-redo me-1"></i>{{ t('sql.refresh') }}
+                                </button>
+                                <button class="btn btn-danger btn-sm mysql-process-danger-btn" @click="killSelectedMysqlProcesses"
+                                    :disabled="mysqlProcessData.killing || mysqlProcessData.selectedIds.length === 0">
+                                    <span v-if="mysqlProcessData.killing" class="spinner-border spinner-border-sm me-1"></span>
+                                    <i v-else class="fas fa-ban me-1"></i>
+                                    {{ t('sql.killSelectedProcesses') }} ({{ mysqlProcessData.selectedIds.length }})
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="small mb-2 mysql-process-toolbar mysql-process-source">
+                            {{ t('sql.currentDatasource') }}<strong>{{ currentDatabaseName }}</strong>
+                        </div>
+
+                        <div v-if="mysqlProcessData.loading" class="text-center py-5">
+                            <div class="spinner-border mb-2" style="color: var(--workspace-primary);"></div>
+                            <div class="text-muted small">{{ t('sql.queryingProcessInfo') }}</div>
+                        </div>
+                        <div v-else-if="mysqlProcessData.error">
+                            <div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{{ mysqlProcessData.error }}</div>
+                        </div>
+                        <div v-else-if="mysqlProcessData.rows.length === 0" class="text-center py-4 text-muted">
+                            <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                            <div>{{ t('sql.noMysqlProcesses') }}</div>
+                        </div>
+                        <div v-else class="mysql-process-table-wrap">
+                            <table class="table table-bordered table-hover table-sm mb-0 mysql-process-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:36px;">
+                                            <input class="form-check-input" type="checkbox"
+                                                :checked="allMysqlProcessesSelected"
+                                                @change="toggleAllMysqlProcesses($event.target.checked)">
+                                        </th>
+                                        <th style="width:50px;">#</th>
+                                        <th style="width:90px;">ID</th>
+                                        <th style="width:110px;">{{ t('sql.user') }}</th>
+                                        <th style="width:170px;">HOST</th>
+                                        <th style="width:130px;">DB</th>
+                                        <th style="width:100px;">COMMAND</th>
+                                        <th style="width:80px;">TIME</th>
+                                        <th style="width:220px;">STATE</th>
+                                        <th style="width:360px;">INFO</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(row, idx) in paginatedMysqlProcessRows" :key="row.ID || idx">
+                                        <td>
+                                            <input class="form-check-input" type="checkbox"
+                                                v-model="mysqlProcessData.selectedIds" :value="Number(row.ID)">
+                                        </td>
+                                        <td class="text-muted">{{ mysqlProcessPageStart + idx }}</td>
+                                        <td><code>{{ row.ID }}</code></td>
+                                        <td>{{ row.USER }}</td>
+                                        <td class="text-truncate" style="max-width: 160px;" :title="row.HOST">{{ row.HOST }}</td>
+                                        <td><span class="mysql-process-db-badge">{{ row.DB }}</span></td>
+                                        <td>{{ row.COMMAND }}</td>
+                                        <td><span :class="Number(row.TIME) > 60 ? 'mysql-process-time-warn' : 'text-muted'">{{ row.TIME }}</span></td>
+                                        <td class="text-truncate" style="max-width: 220px;" :title="row.STATE">{{ row.STATE }}</td>
+                                        <td class="text-truncate" style="max-width: 360px;" :title="row.INFO">{{ row.INFO }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div v-if="!mysqlProcessData.loading && !mysqlProcessData.error && mysqlProcessData.rows.length > 0"
+                            class="d-flex align-items-center justify-content-between mysql-process-pagination flex-wrap">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="small text-muted">
+                                    {{ t('sql.showing') }} {{ mysqlProcessPageStart }} {{ t('sql.to') }}
+                                    {{ mysqlProcessPageEnd }} {{ t('sql.of') }}
+                                    <strong>{{ mysqlProcessData.rows.length }}</strong> {{ t('sql.processRecords') }}
+                                </span>
+                                <select class="form-select form-select-sm" style="width:auto;"
+                                    v-model.number="mysqlProcessData.pageSize" @change="mysqlProcessData.currentPage = 1">
+                                    <option v-for="size in mysqlProcessData.pageSizeOptions" :key="size" :value="size">
+                                        {{ size }}
+                                    </option>
+                                </select>
+                            </div>
+                            <nav>
+                                <ul class="pagination pagination-sm mb-0">
+                                    <li class="page-item" :class="{ disabled: mysqlProcessData.currentPage === 1 }">
+                                        <button class="page-link" @click="changeMysqlProcessPage(1)">
+                                            <i class="fas fa-angle-double-left"></i>
+                                        </button>
+                                    </li>
+                                    <li class="page-item" :class="{ disabled: mysqlProcessData.currentPage === 1 }">
+                                        <button class="page-link" @click="changeMysqlProcessPage(mysqlProcessData.currentPage - 1)">
+                                            <i class="fas fa-angle-left"></i>
+                                        </button>
+                                    </li>
+                                    <li class="page-item disabled">
+                                        <span class="page-link text-dark">{{ mysqlProcessData.currentPage }} / {{ mysqlProcessTotalPages }}</span>
+                                    </li>
+                                    <li class="page-item" :class="{ disabled: mysqlProcessData.currentPage === mysqlProcessTotalPages }">
+                                        <button class="page-link" @click="changeMysqlProcessPage(mysqlProcessData.currentPage + 1)">
+                                            <i class="fas fa-angle-right"></i>
+                                        </button>
+                                    </li>
+                                    <li class="page-item" :class="{ disabled: mysqlProcessData.currentPage === mysqlProcessTotalPages }">
+                                        <button class="page-link" @click="changeMysqlProcessPage(mysqlProcessTotalPages)">
+                                            <i class="fas fa-angle-double-right"></i>
+                                        </button>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="modal fade" id="tableStructureModal" tabindex="-1" ref="tableStructureModal">
             <div class="modal-dialog modal-xl modal-dialog-scrollable">
                 <div class="modal-content">
@@ -1731,6 +2051,19 @@
             'sql.healthCheckDesc': 'Database health and config inspection (pending)',
             'sql.awrReport': 'AWR Report',
             'sql.awrReportDesc': 'Export Oracle AWR performance report (pending)',
+            'sql.mysqlProcessKill': 'Process Kill',
+            'sql.mysqlProcessKillDesc': 'Query wsrep-related MySQL processes and kill selected sessions',
+            'sql.database': 'Database',
+            'sql.killSelectedProcesses': 'Kill Selected',
+            'sql.queryingProcessInfo': 'Querying process list...',
+            'sql.noMysqlProcesses': 'No matching MySQL processes',
+            'sql.processRecords': 'process records',
+            'sql.onlyMysqlProcessKill': 'Process kill is only available for MySQL datasources',
+            'sql.confirmKillMysqlProcesses': 'Confirm killing {0} selected MySQL process(es)?',
+            'sql.mysqlKillResult': 'Killed {0}, failed {1}',
+            'sql.killSuccess': 'Kill Success',
+            'sql.killPartialFailed': 'Partial Kill Failed',
+            'sql.killFailed': 'Kill Failed',
             'sql.tabTitle': 'Query',
             'sql.pivotRowCol': 'Row to Column (CASE WHEN)',
             'sql.pivotRowColCategory': 'Row/Column Transform',
@@ -1940,6 +2273,19 @@
             'sql.healthCheckDesc': '数据库健康与配置巡检（待接入）',
             'sql.awrReport': 'AWR报告',
             'sql.awrReportDesc': '导出 Oracle AWR 性能报告（待接入）',
+            'sql.mysqlProcessKill': '进程查杀',
+            'sql.mysqlProcessKillDesc': '查询 MySQL wsrep 相关进程并批量终止',
+            'sql.database': '数据库',
+            'sql.killSelectedProcesses': '批量杀进程',
+            'sql.queryingProcessInfo': '正在查询进程列表...',
+            'sql.noMysqlProcesses': '暂无匹配的 MySQL 进程',
+            'sql.processRecords': '条进程记录',
+            'sql.onlyMysqlProcessKill': '进程查杀仅支持 MySQL 数据源',
+            'sql.confirmKillMysqlProcesses': '确认终止选中的 {0} 个 MySQL 进程吗？',
+            'sql.mysqlKillResult': '已终止 {0} 个，失败 {1} 个',
+            'sql.killSuccess': '查杀成功',
+            'sql.killPartialFailed': '部分查杀失败',
+            'sql.killFailed': '查杀失败',
             'sql.tabTitle': '查询',
             'sql.pivotRowCol': '行转列（CASE WHEN）',
             'sql.pivotRowColCategory': '行列转换',
@@ -2091,6 +2437,25 @@
                         error: null,
                         unlocking: null
                     },
+                    mysqlProcessData: {
+                        loading: false,
+                        killing: false,
+                        rows: [],
+                        error: null,
+                        database: 'tm_xj',
+                        selectedIds: [],
+                        currentPage: 1,
+                        pageSize: 20,
+                        pageSizeOptions: [20, 50, 100, 200]
+                    },
+                    mysqlProcessDatabases: ['tm_xj', 'tm_xj_jike', 'ingp_auth', 'ingp_auth_jike'],
+                    mysqlProcessTool: {
+                        id: 'mysql_process_kill',
+                        labelKey: 'sql.mysqlProcessKill',
+                        descKey: 'sql.mysqlProcessKillDesc',
+                        icon: 'fas fa-ban',
+                        requireMysql: true
+                    },
                     // 左侧「常用工具」配置（仅前端入口，后续接后端）
                     commonTools: [
                         { id: 'large_table_query',    labelKey: 'sql.largeTableQuery',     descKey: 'sql.largeTableQueryDesc',    icon: 'fas fa-th-large',    requireOracle: false },
@@ -2224,6 +2589,36 @@
                 /** 当前为 Oracle（AWR 等仅 Oracle 特性） */
                 isOracleDb() {
                     return (this.currentDbType || '').toUpperCase() === 'ORACLE';
+                },
+                isMysqlDb() {
+                    return (this.currentDbType || '').toUpperCase() === 'MYSQL';
+                },
+                visibleCommonTools() {
+                    return this.isMysqlDb ? [this.mysqlProcessTool] : this.commonTools;
+                },
+                allMysqlProcessesSelected() {
+                    const pageIds = this.paginatedMysqlProcessRows.map(row => Number(row.ID)).filter(id => Number.isFinite(id));
+                    return pageIds.length > 0 && pageIds.every(id => this.mysqlProcessData.selectedIds.includes(id));
+                },
+                mysqlProcessTotalPages() {
+                    const total = this.mysqlProcessData.rows.length;
+                    const size = this.mysqlProcessData.pageSize || 20;
+                    return Math.max(1, Math.ceil(total / size));
+                },
+                paginatedMysqlProcessRows() {
+                    const page = Math.min(this.mysqlProcessData.currentPage, this.mysqlProcessTotalPages);
+                    const size = this.mysqlProcessData.pageSize || 20;
+                    const start = (page - 1) * size;
+                    return this.mysqlProcessData.rows.slice(start, start + size);
+                },
+                mysqlProcessPageStart() {
+                    if (this.mysqlProcessData.rows.length === 0) return 0;
+                    return (this.mysqlProcessData.currentPage - 1) * this.mysqlProcessData.pageSize + 1;
+                },
+                mysqlProcessPageEnd() {
+                    if (this.mysqlProcessData.rows.length === 0) return 0;
+                    return Math.min(this.mysqlProcessData.currentPage * this.mysqlProcessData.pageSize,
+                        this.mysqlProcessData.rows.length);
                 },
                 currentResult() {
                     if (this.result && this.result.batch && this.result.multiResults) {
@@ -2989,8 +3384,11 @@
                 onCommonTool(tool) {
                     if (this.selectedDataSourceIdx === null) return;
                     if (tool.requireOracle && !this.isOracleDb) return;
+                    if (tool.requireMysql && !this.isMysqlDb) return;
                     if (tool.id === 'unlock_tables') {
                         this.openUnlockModal();
+                    } else if (tool.id === 'mysql_process_kill') {
+                        this.openMysqlProcessKillModal();
                     } else {
                         this.showToast(this.t('sql.pendingFeature'), this.t('sql.featureInDevelopment', this.t(tool.labelKey), this.currentDatabaseName), 'success');
                     }
@@ -3047,6 +3445,86 @@
                         this.showToast(this.t('sql.unlockFailed'), e.response?.data?.message || e.message, 'error');
                     } finally {
                         this.lockData.unlocking = null;
+                    }
+                },
+                /** MySQL 进程查杀弹窗 */
+                openMysqlProcessKillModal() {
+                    this.mysqlProcessData.loading = false;
+                    this.mysqlProcessData.killing = false;
+                    this.mysqlProcessData.rows = [];
+                    this.mysqlProcessData.error = null;
+                    this.mysqlProcessData.selectedIds = [];
+                    this.mysqlProcessData.currentPage = 1;
+                    if (!this.mysqlProcessDatabases.includes(this.mysqlProcessData.database)) {
+                        this.mysqlProcessData.database = 'tm_xj';
+                    }
+                    const modal = new bootstrap.Modal(document.getElementById('mysqlProcessKillModal'));
+                    modal.show();
+                    this.$nextTick(() => this.fetchMysqlProcesses());
+                },
+                async fetchMysqlProcesses() {
+                    if (!this.isMysqlDb) {
+                        this.mysqlProcessData.error = this.t('sql.onlyMysqlProcessKill');
+                        return;
+                    }
+                    this.mysqlProcessData.loading = true;
+                    this.mysqlProcessData.error = null;
+                    this.mysqlProcessData.selectedIds = [];
+                    this.mysqlProcessData.currentPage = 1;
+                    try {
+                        const res = await axios.get('/api/database/lock/mysql-processes', {
+                            params: {
+                                datasourceIndex: this.selectedDataSourceIdx,
+                                database: this.mysqlProcessData.database
+                            }
+                        });
+                        if (res.data.success) {
+                            this.mysqlProcessData.rows = res.data.data || [];
+                        } else {
+                            this.mysqlProcessData.error = res.data.message || this.t('sql.loadingFailed');
+                        }
+                    } catch (e) {
+                        this.mysqlProcessData.error = e.response?.data?.message || e.message;
+                    } finally {
+                        this.mysqlProcessData.loading = false;
+                    }
+                },
+                toggleAllMysqlProcesses(checked) {
+                    const pageIds = this.paginatedMysqlProcessRows.map(row => Number(row.ID)).filter(id => Number.isFinite(id));
+                    const current = new Set(this.mysqlProcessData.selectedIds.map(id => Number(id)));
+                    if (checked) {
+                        pageIds.forEach(id => current.add(id));
+                    } else {
+                        pageIds.forEach(id => current.delete(id));
+                    }
+                    this.mysqlProcessData.selectedIds = Array.from(current);
+                },
+                changeMysqlProcessPage(page) {
+                    const target = Math.max(1, Math.min(page, this.mysqlProcessTotalPages));
+                    this.mysqlProcessData.currentPage = target;
+                },
+                async killSelectedMysqlProcesses() {
+                    const ids = this.mysqlProcessData.selectedIds.map(id => Number(id)).filter(id => Number.isFinite(id));
+                    if (ids.length === 0) return;
+                    if (!confirm(this.t('sql.confirmKillMysqlProcesses', ids.length))) return;
+
+                    this.mysqlProcessData.killing = true;
+                    try {
+                        const res = await axios.post('/api/database/lock/mysql-processes/kill', {
+                            datasourceIndex: this.selectedDataSourceIdx,
+                            database: this.mysqlProcessData.database,
+                            ids
+                        });
+                        const killedCount = (res.data.killedIds || []).length;
+                        const failedCount = (res.data.failed || []).length;
+                        const message = this.t('sql.mysqlKillResult', killedCount, failedCount);
+                        this.showToast(res.data.success ? this.t('sql.killSuccess') : this.t('sql.killPartialFailed'),
+                            message, res.data.success ? 'success' : 'error');
+                        await this.fetchMysqlProcesses();
+                    } catch (e) {
+                        this.showToast(this.t('sql.killFailed'), e.response?.data?.message || e.message, 'error');
+                    } finally {
+                        this.mysqlProcessData.killing = false;
                     }
                 },
                 /** 格式化锁定时长 */

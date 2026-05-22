@@ -138,4 +138,25 @@ public interface OracleService {
      * @return 操作结果
      */
     Map<String, Object> unlockSession(String sid, String serial, int datasourceIndex);
+
+    /**
+     * Query MySQL wsrep-related running processes for the selected database.
+     *
+     * @param datasourceIndex datasource index
+     * @param databaseName    database name
+     * @return process list rows
+     */
+    List<Map<String, Object>> getMysqlWsrepProcesses(int datasourceIndex, String databaseName);
+
+    /**
+     * Kill MySQL processes after re-validating each selected process still matches
+     * the wsrep query filter.
+     *
+     * @param datasourceIndex datasource index
+     * @param databaseName    database name
+     * @param processIds      MySQL process IDs
+     * @param username        current login user for audit
+     * @return operation result
+     */
+    Map<String, Object> killMysqlProcesses(int datasourceIndex, String databaseName, List<Long> processIds, String username);
 }
