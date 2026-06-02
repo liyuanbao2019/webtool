@@ -1575,14 +1575,31 @@
                     </div>
                     <div class="modal-body mysql-process-body">
                         <div class="row g-2 align-items-end mb-2 mysql-process-toolbar mysql-process-filterbar">
-                            <div class="col-md-4">
+                            <div class="col-md-2">
                                 <label class="form-label small fw-bold mb-1">{{ t('sql.database') }}</label>
                                 <select class="form-select form-select-sm" v-model="mysqlProcessData.database"
                                     @change="fetchMysqlProcesses">
                                     <option v-for="db in mysqlProcessDatabases" :key="db" :value="db">{{ db }}</option>
                                 </select>
                             </div>
-                            <div class="col-md-8 d-flex gap-2 justify-content-md-end">
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold mb-1">状态</label>
+                                <select class="form-select form-select-sm" v-model="mysqlProcessData.command"
+                                    @change="fetchMysqlProcesses">
+                                    <option value="">全部</option>
+                                    <option value="Query">Query</option>
+                                    <option value="Sleep">Sleep</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold mb-1">事件类型</label>
+                                <select class="form-select form-select-sm" v-model="mysqlProcessData.eventType"
+                                    @change="fetchMysqlProcesses">
+                                    <option value="all">全部</option>
+                                    <option value="cluster_wait">集群等待</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 d-flex gap-2 justify-content-md-end">
                                 <button class="btn btn-sm mysql-process-primary-btn" @click="fetchMysqlProcesses"
                                     :disabled="mysqlProcessData.loading">
                                     <i class="fas fa-redo me-1"></i>{{ t('sql.refresh') }}
@@ -2133,7 +2150,7 @@
             'sql.tokenRequestFailed': 'Token request failed: {0}',
             'sql.serverSidePaging': 'Server-side paging',
             'sql.unknownDatabase': 'Unknown database',
-            'sql.langZh': 'CN'
+            'sql.langZh': '中文'
         };
 
         var zhSqlTexts = {
@@ -2357,17 +2374,28 @@
             'sql.langZh': '中文',
         };
 
+        var sqlLocaleCache = {};
         var sqlLocaleMessages = {};
-        async function loadSqlLocaleMessages(locale) {
-            try {
-                var res = await fetch('/js/locale/' + locale + '.json');
-                if (!res.ok) throw new Error('Failed to load locale');
-                sqlLocaleMessages = await res.json();
-            } catch (e) {
-                console.error('Failed to load locale:', e);
-            }
+
+        function preloadSqlLocales() {
+            return Promise.all([
+                fetch('/js/locale/en.json').then(function(r) { return r.json(); }),
+                fetch('/js/locale/zh_CN.json').then(function(r) { return r.json(); })
+            ]).then(function(results) {
+                sqlLocaleCache['en'] = results[0];
+                sqlLocaleCache['zh_CN'] = results[1];
+                var savedLocale = localStorage.getItem('locale') || 'en';
+                sqlLocaleMessages = sqlLocaleCache[savedLocale] || {};
+            }).catch(function(e) {
+                console.error('Failed to preload locale files:', e);
+            });
         }
-        loadSqlLocaleMessages(localStorage.getItem('locale') || 'en');
+
+        function loadSqlLocaleMessages(locale) {
+            sqlLocaleMessages = sqlLocaleCache[locale] || {};
+        }
+
+        preloadSqlLocales();
 
         var sqlAllTexts = { 'en': enSqlTexts, 'zh_CN': zhSqlTexts };
 
@@ -2443,6 +2471,8 @@
                         rows: [],
                         error: null,
                         database: 'tm_xj',
+                        command: 'Query',
+                        eventType: 'cluster_wait',
                         selectedIds: [],
                         currentPage: 1,
                         pageSize: 20,
@@ -3475,7 +3505,9 @@
                         const res = await axios.get('/api/database/lock/mysql-processes', {
                             params: {
                                 datasourceIndex: this.selectedDataSourceIdx,
-                                database: this.mysqlProcessData.database
+                                database: this.mysqlProcessData.database,
+                                command: this.mysqlProcessData.command,
+                                eventType: this.mysqlProcessData.eventType
                             }
                         });
                         if (res.data.success) {
@@ -3513,6 +3545,8 @@
                         const res = await axios.post('/api/database/lock/mysql-processes/kill', {
                             datasourceIndex: this.selectedDataSourceIdx,
                             database: this.mysqlProcessData.database,
+                            command: this.mysqlProcessData.command,
+                            eventType: this.mysqlProcessData.eventType,
                             ids
                         });
                         const killedCount = (res.data.killedIds || []).length;

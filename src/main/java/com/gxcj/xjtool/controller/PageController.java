@@ -35,4 +35,9 @@ public class PageController {
     public String auditDashboard() {
         return "audit-dashboard";
     }
+
+    @GetMapping("/presentation")
+    public String presentation() {
+        return "presentation";
+    }
 }

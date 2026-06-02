@@ -144,9 +144,11 @@ public interface OracleService {
      *
      * @param datasourceIndex datasource index
      * @param databaseName    database name
+     * @param command        filter by COMMAND column (e.g. "Query", "Sleep"), null means no filter
+     * @param eventType      event type: "all" means no STATE filter, "cluster_wait" means STATE LIKE '%wsrep:%'
      * @return process list rows
      */
-    List<Map<String, Object>> getMysqlWsrepProcesses(int datasourceIndex, String databaseName);
+    List<Map<String, Object>> getMysqlWsrepProcesses(int datasourceIndex, String databaseName, String command, String eventType);
 
     /**
      * Kill MySQL processes after re-validating each selected process still matches
@@ -154,9 +156,11 @@ public interface OracleService {
      *
      * @param datasourceIndex datasource index
      * @param databaseName    database name
+     * @param command        command filter used when querying (for kill validation)
+     * @param eventType      event type filter used when querying (for kill validation)
      * @param processIds      MySQL process IDs
      * @param username        current login user for audit
      * @return operation result
      */
-    Map<String, Object> killMysqlProcesses(int datasourceIndex, String databaseName, List<Long> processIds, String username);
+    Map<String, Object> killMysqlProcesses(int datasourceIndex, String databaseName, String command, String eventType, List<Long> processIds, String username);
 }

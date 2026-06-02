@@ -69,9 +69,11 @@ public class DatabaseLockController {
     @GetMapping("/mysql-processes")
     public Map<String, Object> getMysqlProcesses(
             @RequestParam("datasourceIndex") int datasourceIndex,
-            @RequestParam("database") String database) {
+            @RequestParam("database") String database,
+            @RequestParam(value = "command", required = false) String command,
+            @RequestParam(value = "eventType", required = false, defaultValue = "cluster_wait") String eventType) {
         try {
-            List<Map<String, Object>> rows = oracleService.getMysqlWsrepProcesses(datasourceIndex, database);
+            List<Map<String, Object>> rows = oracleService.getMysqlWsrepProcesses(datasourceIndex, database, command, eventType);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("data", rows);
@@ -102,6 +104,8 @@ public class DatabaseLockController {
         return oracleService.killMysqlProcesses(
                 request.getDatasourceIndex(),
                 request.getDatabase(),
+                request.getCommand(),
+                request.getEventType(),
                 request.getIds(),
                 username);
     }
@@ -109,6 +113,8 @@ public class DatabaseLockController {
     public static class MysqlProcessKillRequest {
         private int datasourceIndex;
         private String database;
+        private String command;
+        private String eventType;
         private List<Long> ids;
 
         public int getDatasourceIndex() {
@@ -125,6 +131,22 @@ public class DatabaseLockController {
 
         public void setDatabase(String database) {
             this.database = database;
+        }
+
+        public String getCommand() {
+            return command;
+        }
+
+        public void setCommand(String command) {
+            this.command = command;
+        }
+
+        public String getEventType() {
+            return eventType;
+        }
+
+        public void setEventType(String eventType) {
+            this.eventType = eventType;
         }
 
         public List<Long> getIds() {

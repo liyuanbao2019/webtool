@@ -2187,20 +2187,45 @@ public class OracleServiceImpl implements OracleService {
             new HashSet<>(Arrays.asList("tm_xj", "tm_xj_jike", "ingp_auth", "ingp_auth_jike"));
 
     @Override
-    public List<Map<String, Object>> getMysqlWsrepProcesses(int datasourceIndex, String databaseName) {
+    public List<Map<String, Object>> getMysqlWsrepProcesses(int datasourceIndex, String databaseName, String command, String eventType) {
         validateMysqlProcessDatasource(datasourceIndex, databaseName);
 
-        String sql = "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO " +
-                "FROM information_schema.PROCESSLIST " +
-                "WHERE DB = ? AND STATE LIKE ? AND COMMAND = 'Query' " +
-                "ORDER BY TIME DESC, ID DESC";
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO ");
+        sql.append("FROM information_schema.PROCESSLIST ");
+        sql.append("WHERE DB = ? ");
+
+        List<Object> params = new ArrayList<>();
+        params.add(databaseName);
+
+        // COMMAND 筛选条件
+        if (command != null && !command.trim().isEmpty()) {
+            sql.append("AND COMMAND = ? ");
+            params.add(command.trim());
+        }
+
+        // 事件类型筛选
+        if ("cluster_wait".equals(eventType)) {
+            sql.append("AND STATE LIKE ? ");
+            params.add("%wsrep:%");
+        }
+
+        sql.append("ORDER BY TIME DESC, ID DESC");
 
         List<Map<String, Object>> rows = new ArrayList<>();
         try (Connection conn = getConnectionByIndex(datasourceIndex);
-                PreparedStatement stmt = conn.prepareStatement(sql)) {
+                PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
             stmt.setQueryTimeout(15);
-            stmt.setString(1, databaseName);
-            stmt.setString(2, "%wsrep:%");
+            for (int i = 0; i < params.size(); i++) {
+                Object param = params.get(i);
+                if (param instanceof String) {
+                    stmt.setString(i + 1, (String) param);
+                } else if (param instanceof Integer) {
+                    stmt.setInt(i + 1, (Integer) param);
+                } else if (param instanceof Long) {
+                    stmt.setLong(i + 1, (Long) param);
+                }
+            }
             try (ResultSet rs = stmt.executeQuery()) {
                 ResultSetMetaData metaData = rs.getMetaData();
                 int columnCount = metaData.getColumnCount();
@@ -2226,7 +2251,7 @@ public class OracleServiceImpl implements OracleService {
     }
 
     @Override
-    public Map<String, Object> killMysqlProcesses(int datasourceIndex, String databaseName, List<Long> processIds, String username) {
+    public Map<String, Object> killMysqlProcesses(int datasourceIndex, String databaseName, String command, String eventType, List<Long> processIds, String username) {
         validateMysqlProcessDatasource(datasourceIndex, databaseName);
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -2246,22 +2271,48 @@ public class OracleServiceImpl implements OracleService {
             return result;
         }
 
+        // 构建验证 SQL，保持与查询条件一致
+        StringBuilder validateSql = new StringBuilder();
+        validateSql.append("SELECT COUNT(*) FROM information_schema.PROCESSLIST ");
+        validateSql.append("WHERE ID = ? AND DB = ? ");
+
+        List<Object> validateParams = new ArrayList<>();
+        validateParams.add(null); // ID placeholder
+        validateParams.add(databaseName);
+
+        // COMMAND 筛选条件
+        if (command != null && !command.trim().isEmpty()) {
+            validateSql.append("AND COMMAND = ? ");
+            validateParams.add(command.trim());
+        }
+
+        // 事件类型筛选（集群等待时添加 STATE LIKE 条件）
+        if ("cluster_wait".equals(eventType)) {
+            validateSql.append("AND STATE LIKE ? ");
+            validateParams.add("%wsrep:%");
+        }
+
         List<Long> killedIds = new ArrayList<>();
         List<Map<String, Object>> failed = new ArrayList<>();
-        String validateSql = "SELECT COUNT(*) FROM information_schema.PROCESSLIST " +
-                "WHERE ID = ? AND DB = ? AND STATE LIKE ? AND COMMAND = 'Query'";
 
         try (Connection conn = getConnectionByIndex(datasourceIndex);
-                PreparedStatement validateStmt = conn.prepareStatement(validateSql);
+                PreparedStatement validateStmt = conn.prepareStatement(validateSql.toString());
                 Statement killStmt = conn.createStatement()) {
             validateStmt.setQueryTimeout(10);
             killStmt.setQueryTimeout(10);
 
             for (Long processId : requestedIds) {
                 try {
+                    // 设置验证 SQL 参数
                     validateStmt.setLong(1, processId);
-                    validateStmt.setString(2, databaseName);
-                    validateStmt.setString(3, "%wsrep:%");
+                    for (int i = 2; i <= validateParams.size(); i++) {
+                        Object param = validateParams.get(i - 1);
+                        if (param instanceof String) {
+                            validateStmt.setString(i, (String) param);
+                        } else if (param instanceof Integer) {
+                            validateStmt.setInt(i, (Integer) param);
+                        }
+                    }
                     boolean allowed = false;
                     try (ResultSet rs = validateStmt.executeQuery()) {
                         allowed = rs.next() && rs.getInt(1) > 0;
