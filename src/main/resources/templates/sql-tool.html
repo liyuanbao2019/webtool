@@ -4096,53 +4096,55 @@
                     if (typeof val === 'object') return JSON.stringify(val);
                     return val;
                 },
-                downloadBlob(content, mimeType, fileName) {
-                    const blob = new Blob([content], { type: mimeType });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement("a");
-                    link.setAttribute("href", url);
-                    link.setAttribute("download", fileName);
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                },
                 exportCsv() {
                     if (!this.currentResult || !this.currentResult.columns || !this.currentResult.rows) return;
-                    this.fetchAllRowsForExport().then(allRows => {
-                        const headers = this.currentResult.columns.join(',');
-                        const rowsStr = allRows.map(row =>
-                            this.currentResult.columns.map(col => {
-                                let cell = row[col];
-                                if (cell === null || cell === undefined) cell = '';
-                                cell = String(cell).replace(/"/g, '""');
-                                return `"${cell}"`;
-                            }).join(',')
-                        ).join('\n');
-                        const csvContent = "\uFEFF" + headers + '\n' + rowsStr;
-                        this.downloadBlob(csvContent, 'text/csv;charset=utf-8;', "query_result_" + Date.now() + ".csv");
-                    });
+                    this.downloadServerExport('csv');
                 },
                 exportExcel() {
                     if (!this.currentResult || !this.currentResult.columns || !this.currentResult.rows) return;
-                    this.fetchAllRowsForExport().then(allRows => {
-                        const escapeHtml = (val) => String(val)
-                            .replace(/&/g, '&amp;')
-                            .replace(/</g, '&lt;')
-                            .replace(/>/g, '&gt;')
-                            .replace(/"/g, '&quot;')
-                            .replace(/'/g, '&#39;');
-                        const headerHtml = this.currentResult.columns.map(col => `<th>${escapeHtml(col)}</th>`).join('');
-                        const rowsHtml = allRows.map(row => {
-                            const cells = this.currentResult.columns.map(col => {
-                                const value = row[col] === null || row[col] === undefined ? '' : row[col];
-                                return `<td>${escapeHtml(value)}</td>`;
-                            }).join('');
-                            return `<tr>${cells}</tr>`;
-                        }).join('');
-                        const tableHtml = `\uFEFF<html><head><meta charset="UTF-8"></head><body><table border="1"><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
-                        this.downloadBlob(tableHtml, 'application/vnd.ms-excel;charset=utf-8;', "query_result_" + Date.now() + ".xls");
-                    });
+                    this.downloadServerExport('excel');
+                },
+                async downloadServerExport(format) {
+                    if (!this.lastExecutedSql || this.lastDatasourceIdx === null) return;
+                    const sqlForExport = (this.result && this.result.batch && this.currentResult && this.currentResult.sql)
+                        ? this.currentResult.sql
+                        : this.lastExecutedSql;
+                    try {
+                        this.showToast(this.t('sql.tip'), this.t('sql.exporting'), 'success');
+                        const res = await axios.post('/api/oracle/export/' + format, {
+                            datasourceIndex: this.lastDatasourceIdx,
+                            sql: sqlForExport,
+                            page: 1,
+                            pageSize: 0,
+                            exportAll: true
+                        }, { responseType: 'blob' });
+                        const disposition = res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition']);
+                        const fileName = this.extractDownloadFileName(disposition, format);
+                        const url = URL.createObjectURL(res.data);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                    } catch (e) {
+                        this.showToast(this.t('sql.exportFailed'), e.message || this.t('sql.fetchAllDataFailed', ''), 'error');
+                    }
+                },
+                extractDownloadFileName(disposition, format) {
+                    if (disposition) {
+                        const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+                        if (utf8Match && utf8Match[1]) {
+                            return decodeURIComponent(utf8Match[1]);
+                        }
+                        const match = disposition.match(/filename="?([^";]+)"?/i);
+                        if (match && match[1]) {
+                            return match[1];
+                        }
+                    }
+                    const ext = format === 'excel' ? 'xls' : (format === 'sql' ? 'sql' : 'csv');
+                    return 'query_result_' + Date.now() + '.' + ext;
                 },
                 /**
                  * 导出前获取全量数据：
@@ -4165,16 +4167,29 @@
                             datasourceIndex: this.lastDatasourceIdx,
                             sql: sqlForExport,
                             page: 1,
+                            exportAll: true,
                             pageSize: 0   // 0 = 不分页，返回全量
                         });
-                        if (res.data && res.data.success && res.data.rows) {
-                            return res.data.rows;
+                        if (res.data && res.data.success) {
+                            if (Array.isArray(res.data.rows)) {
+                                return res.data.rows;
+                            }
+                            if (res.data.batch && Array.isArray(res.data.multiResults)) {
+                                const matched = res.data.multiResults.find(r => r && r.sql === sqlForExport && Array.isArray(r.rows));
+                                const active = res.data.multiResults[this.activeResultTabIndex];
+                                const resultForExport = matched || (active && Array.isArray(active.rows) ? active : null)
+                                    || res.data.multiResults.find(r => r && Array.isArray(r.rows));
+                                if (resultForExport) {
+                                    return resultForExport.rows;
+                                }
+                            }
+                            throw new Error(this.t('sql.noDataToExport') || 'No rows returned for export');
                         }
+                        throw new Error(res.data?.errorMessage || this.t('sql.fetchAllDataFailed', ''));
                     } catch (e) {
                         this.showToast(this.t('sql.exportFailed'), this.t('sql.fetchAllDataFailed', e.message), 'error');
+                        throw e;
                     }
-                    // 降级：返回当前页数据
-                    return this.currentResult.rows;
                 },
                 inferExportTableName() {
                     const sqlText = (this.sql || '').trim();
@@ -4196,16 +4211,7 @@
                 },
                 exportInsertSql() {
                     if (!this.currentResult || !this.currentResult.columns || !this.currentResult.rows) return;
-                    const tableName = this.inferExportTableName();
-                    const columns = this.currentResult.columns.join(', ');
-                    this.fetchAllRowsForExport().then(allRows => {
-                        const lines = allRows.map(row => {
-                            const values = this.currentResult.columns.map(col => this.toSqlLiteral(row[col])).join(', ');
-                            return `INSERT INTO ${tableName} (${columns}) VALUES (${values});`;
-                        });
-                        const sqlScript = lines.join('\n');
-                        this.downloadBlob(sqlScript, 'text/plain;charset=utf-8;', "insert_script_" + Date.now() + ".sql");
-                    });
+                    this.downloadServerExport('sql');
                 },
                 // 显示右键菜单
                 showContextMenu(event, tableName) {

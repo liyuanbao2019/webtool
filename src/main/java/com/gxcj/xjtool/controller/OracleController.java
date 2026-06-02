@@ -7,6 +7,10 @@ import com.gxcj.xjtool.service.OracleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -59,6 +63,47 @@ public class OracleController {
         request.setUsername(username != null ? username : "unknown");
         request.setSessionId(session.getId()); // 设置会话ID用于安全验证
         return oracleService.executeSql(request);
+    }
+
+    @PostMapping("/export/{format}")
+    public void exportSql(@PathVariable String format,
+            @RequestBody ExecuteSqlRequest request,
+            javax.servlet.http.HttpSession session,
+            javax.servlet.http.HttpServletResponse servletResponse) throws IOException {
+        String username = (String) session.getAttribute("LOGIN_USER");
+        request.setUsername(username != null ? username : "unknown");
+        request.setSessionId(session.getId());
+        request.setPage(1);
+        request.setPageSize(0);
+        request.setExportAll(true);
+
+        SqlResultResponse executeResult = oracleService.executeSql(request);
+        SqlResultResponse exportResult = resolveExportResult(executeResult);
+        if (exportResult == null || !exportResult.isSuccess() || exportResult.getColumns() == null || exportResult.getRows() == null) {
+            String message = executeResult != null && executeResult.getErrorMessage() != null
+                    ? executeResult.getErrorMessage()
+                    : "Export query returned no data";
+            servletResponse.sendError(500, message);
+            return;
+        }
+
+        String normalizedFormat = format == null ? "csv" : format.toLowerCase();
+        String extension = "sql".equals(normalizedFormat) ? "sql" : ("excel".equals(normalizedFormat) ? "xls" : "csv");
+        String fileName = "query_result_" + System.currentTimeMillis() + "." + extension;
+        servletResponse.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        servletResponse.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"; filename*=UTF-8''"
+                + URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()));
+
+        if ("excel".equals(normalizedFormat)) {
+            servletResponse.setContentType("application/vnd.ms-excel;charset=UTF-8");
+            writeExcelHtml(servletResponse.getWriter(), exportResult);
+        } else if ("sql".equals(normalizedFormat)) {
+            servletResponse.setContentType("text/plain;charset=UTF-8");
+            writeInsertSql(servletResponse.getWriter(), exportResult, inferExportTableName(request.getSql()));
+        } else {
+            servletResponse.setContentType("text/csv;charset=UTF-8");
+            writeCsv(servletResponse.getWriter(), exportResult);
+        }
     }
 
     /**
@@ -190,5 +235,124 @@ public class OracleController {
             @PathVariable String tableName,
             @RequestParam("datasourceIndex") int datasourceIndex) {
         return oracleService.getTableTriggers(tableName, datasourceIndex);
+    }
+
+    private SqlResultResponse resolveExportResult(SqlResultResponse result) {
+        if (result == null) {
+            return null;
+        }
+        if (result.getRows() != null) {
+            return result;
+        }
+        if (result.getMultiResults() == null) {
+            return result;
+        }
+        for (SqlResultResponse item : result.getMultiResults()) {
+            if (item != null && item.getRows() != null) {
+                return item;
+            }
+        }
+        return result;
+    }
+
+    private void writeCsv(PrintWriter writer, SqlResultResponse result) {
+        writer.write('\uFEFF');
+        writer.println(joinCsvLine(result.getColumns(), null));
+        for (Map<String, Object> row : result.getRows()) {
+            writer.println(joinCsvLine(result.getColumns(), row));
+        }
+    }
+
+    private String joinCsvLine(List<String> columns, Map<String, Object> row) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < columns.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            Object value = row == null ? columns.get(i) : row.get(columns.get(i));
+            sb.append('"').append(csvEscape(value)).append('"');
+        }
+        return sb.toString();
+    }
+
+    private String csvEscape(Object value) {
+        if (value == null) {
+            return "";
+        }
+        return String.valueOf(value).replace("\"", "\"\"");
+    }
+
+    private void writeExcelHtml(PrintWriter writer, SqlResultResponse result) {
+        writer.write('\uFEFF');
+        writer.println("<html><head><meta charset=\"UTF-8\"></head><body><table border=\"1\"><thead><tr>");
+        for (String column : result.getColumns()) {
+            writer.print("<th>");
+            writer.print(htmlEscape(column));
+            writer.print("</th>");
+        }
+        writer.println("</tr></thead><tbody>");
+        for (Map<String, Object> row : result.getRows()) {
+            writer.println("<tr>");
+            for (String column : result.getColumns()) {
+                writer.print("<td>");
+                Object value = row.get(column);
+                writer.print(htmlEscape(value == null ? "" : String.valueOf(value)));
+                writer.print("</td>");
+            }
+            writer.println("</tr>");
+        }
+        writer.println("</tbody></table></body></html>");
+    }
+
+    private String htmlEscape(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+
+    private void writeInsertSql(PrintWriter writer, SqlResultResponse result, String tableName) {
+        String columns = String.join(", ", result.getColumns());
+        for (Map<String, Object> row : result.getRows()) {
+            writer.print("INSERT INTO ");
+            writer.print(tableName);
+            writer.print(" (");
+            writer.print(columns);
+            writer.print(") VALUES (");
+            for (int i = 0; i < result.getColumns().size(); i++) {
+                if (i > 0) {
+                    writer.print(", ");
+                }
+                writer.print(sqlLiteral(row.get(result.getColumns().get(i))));
+            }
+            writer.println(");");
+        }
+    }
+
+    private String sqlLiteral(Object value) {
+        if (value == null) {
+            return "NULL";
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            return String.valueOf(value);
+        }
+        return "'" + String.valueOf(value).replace("'", "''") + "'";
+    }
+
+    private String inferExportTableName(String sql) {
+        if (sql == null) {
+            return "export_table";
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("(?i)\\bfrom\\s+([`\"\\[]?[a-zA-Z0-9_.$]+[`\"\\]]?)")
+                .matcher(sql);
+        if (!matcher.find()) {
+            return "export_table";
+        }
+        return matcher.group(1).replaceAll("^[`\"\\[]|[`\"\\]]$", "");
     }
 }

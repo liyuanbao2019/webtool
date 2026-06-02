@@ -46,5 +46,10 @@ public class ExecuteSqlRequest {
      * 分页：每页行数（0或null表示不分页/取全量）
      */
     private Integer pageSize = 0;
+
+    /**
+     * Export should fetch all rows from the SQL result, without the normal default row cap.
+     */
+    private Boolean exportAll = false;
 }
 

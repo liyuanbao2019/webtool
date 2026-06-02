@@ -280,8 +280,12 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
     }
 
     private void loadFromExcel(String fileName) {
-        try (InputStream is = openInputStream(fileName);
-             Workbook workbook = new XSSFWorkbook(is)) {
+        // 使用字节数组方式打开，避免 Excel 中含特殊字符的超链接导致 URISyntaxException
+        try (InputStream is = openInputStream(fileName)) {
+            byte[] data = toByteArray(is);
+            try (org.apache.poi.openxml4j.opc.OPCPackage pkg =
+                         org.apache.poi.openxml4j.opc.OPCPackage.open(new ByteArrayInputStream(data));
+                 Workbook workbook = new XSSFWorkbook(pkg)) {
 
             Sheet sheet = workbook.getSheetAt(0);
             Row headerRow = sheet.getRow(0);
@@ -348,6 +352,7 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
             serverConfig.getServerGroups().addAll(groupMap.values());
             log.info("Excel 服务器配置加载完成，共 {} 个分组 {} 台服务器: {}", groupMap.size(), rowsRead, fileName);
 
+            } // 关闭内层 try (OPCPackage + Workbook)
         } catch (Exception e) {
             log.warn("加载 Excel 服务器配置失败 [{}]: {}", fileName, e.getMessage());
         }

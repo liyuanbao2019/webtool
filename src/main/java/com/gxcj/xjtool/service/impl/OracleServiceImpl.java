@@ -227,14 +227,16 @@ public class OracleServiceImpl implements OracleService {
         // 获取分页参数（pageSize <= 0 表示不分页）
         int page = request.getPage() != null ? request.getPage() : 1;
         int pageSize = request.getPageSize() != null ? request.getPageSize() : 0;
+        boolean exportAll = Boolean.TRUE.equals(request.getExportAll());
+        int maxRows = exportAll ? -1 : (request.getMaxRows() != null ? request.getMaxRows() : 0);
 
         // 如果只有一条SQL，按原流程执行
         if (validSqls.size() == 1) {
-            response = executeSingleSql(validSqls.get(0), request.getDatasourceIndex(), request.getMaxRows(), page, pageSize);
+            response = executeSingleSql(validSqls.get(0), request.getDatasourceIndex(), maxRows, page, pageSize);
         }
         // 如果有多条SQL，批量执行（每条 SELECT 也应用分页，避免全量拉取大表）
         else if (validSqls.size() > 1) {
-            response = executeBatchSql(validSqls, request.getDatasourceIndex(), request.getMaxRows(), page, pageSize);
+            response = executeBatchSql(validSqls, request.getDatasourceIndex(), maxRows, page, pageSize);
         } else {
             response = SqlResultResponse.error("SQL 语句不能为空");
         }
@@ -871,7 +873,7 @@ public class OracleServiceImpl implements OracleService {
 
         // ========== 非分页（全量/降级）逻辑 ==========
         try (Statement stmt = conn.createStatement()) {
-            int effectiveMaxRows = maxRows > 0 ? maxRows : queryConfig.getDefaultMaxRows();
+            int effectiveMaxRows = maxRows < 0 ? 0 : (maxRows > 0 ? maxRows : queryConfig.getDefaultMaxRows());
             stmt.setMaxRows(effectiveMaxRows);
             stmt.setQueryTimeout(queryConfig.getMaxQueryTimeout());
             stmt.setFetchSize(queryConfig.getFetchSize());
