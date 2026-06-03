@@ -100,22 +100,23 @@
             <!-- File Manager Sidebar -->
             <div class="file-sidebar" :class="{ 'collapsed': isSidebarCollapsed }">
                 <div class="file-header d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center flex-grow-1">
+                    <div class="d-flex align-items-center flex-grow-1 overflow-hidden me-2">
                         <button class="toggle-sidebar-btn" @click="toggleSidebar"
                             :title="isSidebarCollapsed ? t('terminal.expandSidebar') : t('terminal.collapseSidebar')">
                             <i class="fas" :class="isSidebarCollapsed ? 'fa-chevron-right' : 'fa-chevron-left'"></i>
                             <span v-show="!isSidebarCollapsed" class="ms-2">{{ t('terminal.collapse') }}</span>
                         </button>
-                        <span class="fw-bold small text-muted ms-3" v-show="!isSidebarCollapsed">
+                        <span class="fw-bold small text-muted ms-2 text-truncate" v-show="!isSidebarCollapsed"
+                            :title="t('terminal.fileDirectory') + (serverInfo ? ' (' + currentSftpUser + ')' : '')">
                             {{ t('terminal.fileDirectory') }}
                             <span v-if="serverInfo" class="text-primary">({{ currentSftpUser }})</span>
                         </span>
                         <span v-if="serverInfo && currentSftpUser !== serverInfo.username && !isSidebarCollapsed"
-                            class="badge bg-warning text-dark ms-2 small" style="font-size: 0.65rem;" :title="t('terminal.switching')">
+                            class="badge bg-warning text-dark ms-2 small flex-shrink-0" style="font-size: 0.65rem;" :title="t('terminal.switching')">
                             {{ t('terminal.switching') }}
                         </span>
                     </div>
-                    <div class="d-flex" v-show="!isSidebarCollapsed">
+                    <div class="d-flex flex-shrink-0" v-show="!isSidebarCollapsed">
                         <button class="btn btn-sm btn-link text-secondary p-0 me-2" @click="showSwitchUserModal"
                             :title="serverInfo && currentSftpUser !== serverInfo.username ? t('terminal.switchedUser') + ' ' + currentSftpUser : t('terminal.switchSftpUser')">
                             <i class="fas fa-user-cog"></i>

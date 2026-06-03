@@ -130,11 +130,32 @@ public class ServerController {
 
     @GetMapping("/{idOrHost}")
     public ServerInfo getById(@PathVariable String idOrHost) {
+        // 1. 先从 serverList 中按 ID 或 Host 查找
         for (ServerInfo s : serverList) {
-            if (idOrHost.equals(s.getId())) {
+            if (idOrHost.equals(s.getId()) || idOrHost.equals(s.getHost())) {
                 return s;
             }
         }
+        // 2. fallback: 从 serverConfig 中按 ID 或 Host 查找（覆盖 ExcelServerConfigLoader 后加载的服务器）
+        if (serverConfig.getServerGroups() != null) {
+            for (ServerGroup group : serverConfig.getServerGroups()) {
+                if (group.getServers() != null) {
+                    for (ServerInfo s : group.getServers()) {
+                        if (idOrHost.equals(s.getId()) || idOrHost.equals(s.getHost())) {
+                            return s;
+                        }
+                    }
+                }
+            }
+        }
+        if (serverConfig.getServers() != null) {
+            for (ServerInfo s : serverConfig.getServers()) {
+                if (idOrHost.equals(s.getId()) || idOrHost.equals(s.getHost())) {
+                    return s;
+                }
+            }
+        }
+        // 3. 按 host 从 Excel 加载器中查找
         if (excelServerConfigLoader != null) {
             ServerInfo found = excelServerConfigLoader.findServerByHost(idOrHost);
             if (found != null) {

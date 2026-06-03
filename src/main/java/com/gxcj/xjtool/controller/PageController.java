@@ -36,6 +36,11 @@ public class PageController {
         return "audit-dashboard";
     }
 
+    @GetMapping("/deploy")
+    public String deploy() {
+        return "deploy";
+    }
+
     @GetMapping("/presentation")
     public String presentation() {
         return "presentation";

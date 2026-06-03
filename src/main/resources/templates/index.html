@@ -346,6 +346,29 @@
             box-shadow: 0 8px 22px rgba(15, 23, 42, 0.1);
         }
 
+        .server-card.batch-mode,
+        .server-list-item.batch-mode {
+            cursor: pointer;
+        }
+
+        .server-card.selected,
+        .server-list-item.selected {
+            border-color: var(--workspace-primary);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, .18), 0 8px 22px rgba(15, 23, 42, 0.1);
+            background: #f8faff;
+        }
+
+        .server-select-check {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--workspace-primary);
+            flex: 0 0 auto;
+        }
+
+        .server-card .server-select-check {
+            margin-right: .35rem;
+        }
+
         .server-card-header {
             display: flex;
             align-items: center;
@@ -415,6 +438,10 @@
             margin-right: 1rem;
         }
 
+        .server-list-item .server-select-check {
+            margin-right: .8rem;
+        }
+
         .server-list-info {
             flex: 1;
             display: flex;
@@ -458,6 +485,67 @@
             padding: .5rem .6rem;
             margin-bottom: .6rem;
             border-bottom: 2px solid var(--workspace-border);
+        }
+
+        .deploy-selection-bar {
+            position: sticky;
+            bottom: .75rem;
+            z-index: 15;
+            background: #fff;
+            border: 1px solid #c7d2fe;
+            border-radius: .6rem;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, .14);
+            padding: .75rem;
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            flex-wrap: wrap;
+        }
+
+        .deploy-selection-summary {
+            font-weight: 700;
+            color: #312e81;
+            white-space: nowrap;
+        }
+
+        .deploy-selected-list {
+            display: flex;
+            gap: .45rem;
+            flex-wrap: wrap;
+            flex: 1;
+            min-width: 180px;
+            max-height: 78px;
+            overflow-y: auto;
+        }
+
+        .deploy-selected-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            border: 1px solid #e0e7ff;
+            background: #eef2ff;
+            color: #3730a3;
+            border-radius: 999px;
+            padding: .24rem .45rem .24rem .6rem;
+            font-size: .78rem;
+            font-weight: 600;
+        }
+
+        .deploy-selected-chip button {
+            border: none;
+            background: transparent;
+            color: #6366f1;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+
+        .deploy-selected-chip button:hover {
+            background: rgba(99, 102, 241, .16);
         }
 
         .server-group-header i {
@@ -626,7 +714,17 @@
                     <span class="servers-count">{{ totalServerCount }}</span>
                 </h4>
                 <div style="display:flex;gap:0.5rem;align-items:center;">
-                    <button class="btn btn-primary btn-sm" @click="showAddModal">
+                    <button class="btn btn-outline-primary btn-sm" v-if="!batchDeployMode" @click="enterBatchDeployMode">
+                        <i class="fas fa-rocket me-1"></i>{{ t('index.batchDeploy') }}
+                    </button>
+                    <span class="badge bg-primary" v-if="batchDeployMode">{{ t('index.selectedServers', selectedServerCount) }}</span>
+                    <button class="btn btn-light btn-sm" v-if="batchDeployMode" @click="cancelBatchDeployMode">
+                        {{ t('index.cancelBatchDeploy') }}
+                    </button>
+                    <button class="btn btn-success btn-sm" v-if="batchDeployMode" :disabled="selectedServerCount === 0" @click="goDeployNext">
+                        <i class="fas fa-arrow-right me-1"></i>{{ t('index.nextDeploy') }}
+                    </button>
+                    <button class="btn btn-primary btn-sm" v-if="!batchDeployMode" @click="showAddModal">
                         <i class="fas fa-plus me-1"></i>{{ t('index.addServer') }}
                     </button>
                     <div class="view-switch" v-if="displayGroups.length > 0">
@@ -665,13 +763,16 @@
                         </div>
                         <div class="row">
                             <div class="col-12 col-md-4 col-lg-2" v-for="server in group.servers" :key="server.id">
-                                <div class="server-card" @click="connect(server)">
+                                <div class="server-card" :class="{ selected: isServerSelected(server), 'batch-mode': batchDeployMode }"
+                                    @click="handleServerClick(server)">
                                     <div class="server-card-header">
                                         <div class="d-flex align-items-center" :title="server.name || server.host">
+                                            <input v-if="batchDeployMode" class="server-select-check" type="checkbox"
+                                                :checked="isServerSelected(server)" @click.stop="toggleServerSelection(server)">
                                             <span class="status-indicator"></span>
                                             <span class="server-ip text-truncate">{{ server.name || server.host }}</span>
                                         </div>
-                                        <div class="dropdown" @click.stop style="position:relative;">
+                                        <div class="dropdown" v-if="!batchDeployMode" @click.stop style="position:relative;">
                                             <button class="btn btn-link text-secondary p-0 border-0 shadow-none server-menu-btn"
                                                 type="button" @click.stop="activeMenuId = (activeMenuId === server.id ? null : server.id)">
                                                 <i class="fas fa-ellipsis-vertical"></i>
@@ -700,7 +801,10 @@
                             <span class="server-group-count">{{ group.servers.length }}</span>
                         </div>
                         <div class="server-list-item" v-for="server in group.servers" :key="server.id"
-                            @click="connect(server)">
+                            :class="{ selected: isServerSelected(server), 'batch-mode': batchDeployMode }"
+                            @click="handleServerClick(server)">
+                            <input v-if="batchDeployMode" class="server-select-check" type="checkbox"
+                                :checked="isServerSelected(server)" @click.stop="toggleServerSelection(server)">
                             <span class="status-indicator"></span>
                             <div class="server-list-info">
                                 <div class="server-list-name text-truncate" :title="server.name || server.host">
@@ -710,7 +814,7 @@
                                     {{ server.username }}@{{ server.host }}:{{ server.port }}
                                 </div>
                             </div>
-                            <div class="server-list-actions">
+                            <div class="server-list-actions" v-if="!batchDeployMode">
                                 <div class="dropdown" @click.stop style="position:relative;">
                                     <button class="btn btn-link text-secondary p-0 border-0 shadow-none server-menu-btn" type="button"
                                         @click.stop="activeMenuId = (activeMenuId === server.id ? null : server.id)">
@@ -732,6 +836,28 @@
                 <h5>{{ t('index.noServers') }}</h5>
                 <p class="text-muted mb-0" v-if="searchQuery">{{ t('index.noServersSearch') }}</p>
                 <p class="text-muted mb-0" v-else>{{ t('index.noServersEmpty') }}</p>
+            </section>
+
+            <section class="deploy-selection-bar" v-if="batchDeployMode">
+                <div class="deploy-selection-summary">
+                    <i class="fas fa-server me-1"></i>{{ t('index.selectedServers', selectedServerCount) }}
+                </div>
+                <div class="deploy-selected-list" v-if="selectedServerCount > 0">
+                    <span class="deploy-selected-chip" v-for="server in selectedServers" :key="server.id">
+                        {{ server.name || server.host }}
+                        <small class="text-muted">{{ server.host }}</small>
+                        <button type="button" @click="removeSelectedServer(server)" :title="t('index.removeSelectedServer')">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </span>
+                </div>
+                <div class="text-muted small" v-else>{{ t('index.noSelectedServers') }}</div>
+                <button class="btn btn-outline-secondary btn-sm" :disabled="selectedServerCount === 0" @click="clearSelectedServers">
+                    {{ t('index.clearSelectedServers') }}
+                </button>
+                <button class="btn btn-success btn-sm" :disabled="selectedServerCount === 0" @click="goDeployNext">
+                    <i class="fas fa-arrow-right me-1"></i>{{ t('index.nextDeploy') }}
+                </button>
             </section>
         </main>
 
@@ -849,7 +975,7 @@
         var enTexts = {
             'index.brand': 'Security Ops Console',
             'index.refresh': 'Refresh server list',
-            'index.searchPlaceholder': 'Search by IP, tag or note...',
+            'index.searchPlaceholder': 'Search by name, IP, group or username...',
             'index.jumpPlaceholder': 'Quick URL jump...',
             'index.jumpButton': 'Go',
             'index.apiTest': 'API Test Tool',
@@ -859,6 +985,14 @@
             'index.confirmLogout': 'Are you sure you want to logout?',
             'index.serverList': 'Server List',
             'index.addServer': 'Add Server',
+            'index.batchDeploy': 'Batch Deploy',
+            'index.cancelBatchDeploy': 'Cancel',
+            'index.cancelBatchDeployConfirm': 'You selected {0} servers. Exit batch deploy mode?',
+            'index.nextDeploy': 'Next: Deploy',
+            'index.selectedServers': 'Selected {0} servers',
+            'index.noSelectedServers': 'No servers selected',
+            'index.clearSelectedServers': 'Clear',
+            'index.removeSelectedServer': 'Remove',
             'index.editServer': 'Edit Server',
             'index.deleteServer': 'Delete Server',
             'index.gridView': 'Grid View',
@@ -897,7 +1031,7 @@
         var zhTexts = {
             'index.brand': '安全运维工作台',
             'index.refresh': '刷新服务器列表',
-            'index.searchPlaceholder': '搜索服务器 IP、标签或备注...',
+            'index.searchPlaceholder': '搜索服务器名称、IP、分组或用户名...',
             'index.jumpPlaceholder': '输入 URL 快速跳转...',
             'index.jumpButton': '跳转',
             'index.apiTest': 'API 调测工具',
@@ -907,6 +1041,14 @@
             'index.confirmLogout': '确定要退出登录吗？',
             'index.serverList': '服务器列表',
             'index.addServer': '新增服务器',
+            'index.batchDeploy': '批量部署',
+            'index.cancelBatchDeploy': '取消',
+            'index.cancelBatchDeployConfirm': '已选择 {0} 台服务器，确认退出批量部署？',
+            'index.nextDeploy': '下一步部署',
+            'index.selectedServers': '已选择 {0} 台',
+            'index.noSelectedServers': '还未选择服务器',
+            'index.clearSelectedServers': '清空',
+            'index.removeSelectedServer': '移除',
             'index.editServer': '修改服务器',
             'index.deleteServer': '删除服务器',
             'index.gridView': '网格视图',
@@ -959,6 +1101,9 @@
                     editingId: null,
                     activeMenuId: null,
                     viewMode: localStorage.getItem('serverViewMode') || 'grid',
+                    batchDeployMode: false,
+                    selectedServerIds: [],
+                    selectedServersMap: {},
                     newServer: {
                         groupName: '',
                         newGroupName: '',
@@ -991,14 +1136,20 @@
                     if (!this.searchQuery) return this.serverGroups;
                     var query = this.searchQuery.toLowerCase();
                     return this.serverGroups
-                        .map(group => ({
-                            name: group.name,
-                            servers: group.servers.filter(server =>
-                                (server.name || '').toLowerCase().includes(query) ||
-                                (server.host || '').toLowerCase().includes(query) ||
-                                (server.username || '').toLowerCase().includes(query)
-                            )
-                        }))
+                        .map(group => {
+                            // 若分组名命中搜索词，则整个分组所有服务器都显示
+                            var groupNameMatch = (group.name || '').toLowerCase().includes(query);
+                            return {
+                                name: group.name,
+                                servers: groupNameMatch
+                                    ? group.servers  // 分组名匹配 → 显示全部
+                                    : group.servers.filter(server =>
+                                        (server.name || '').toLowerCase().includes(query) ||
+                                        (server.host || '').toLowerCase().includes(query) ||
+                                        (server.username || '').toLowerCase().includes(query)
+                                    )
+                            };
+                        })
                         .filter(group => group.servers.length > 0);
                 },
                 memoryUsageRate() {
@@ -1007,6 +1158,15 @@
                 },
                 totalServerCount() {
                     return this.serverGroups.reduce(function(sum, g) { return sum + (g.servers ? g.servers.length : 0); }, 0);
+                },
+                selectedServerCount() {
+                    return this.selectedServerIds.length;
+                },
+                selectedServers() {
+                    var self = this;
+                    return this.selectedServerIds
+                        .map(function(id) { return self.selectedServersMap[id]; })
+                        .filter(function(server) { return !!server; });
                 }
             },
             mounted: function() {
@@ -1031,7 +1191,11 @@
             methods: {
                 t: function(key) {
                     var merged = Object.assign({}, allTexts[this.locale] || allTexts['en'], localeMessages);
-                    return merged[key] || key.split('.').pop();
+                    var text = merged[key] || key.split('.').pop();
+                    for (var i = 1; i < arguments.length; i++) {
+                        text = String(text).replace('{' + (i - 1) + '}', arguments[i]);
+                    }
+                    return text;
                 },
                 setLanguage: function(locale) {
                     this.locale = locale;
@@ -1256,6 +1420,61 @@
                 setViewMode: function(mode) {
                     this.viewMode = mode;
                     localStorage.setItem('serverViewMode', mode);
+                },
+                enterBatchDeployMode: function() {
+                    this.batchDeployMode = true;
+                    this.activeMenuId = null;
+                },
+                cancelBatchDeployMode: function() {
+                    if (this.selectedServerCount > 0 && !confirm(this.t('index.cancelBatchDeployConfirm', this.selectedServerCount))) {
+                        return;
+                    }
+                    this.batchDeployMode = false;
+                    this.clearSelectedServers();
+                },
+                handleServerClick: function(server) {
+                    if (this.batchDeployMode) {
+                        this.toggleServerSelection(server);
+                    } else {
+                        this.connect(server);
+                    }
+                },
+                isServerSelected: function(server) {
+                    return !!(server && this.selectedServersMap[server.id]);
+                },
+                toggleServerSelection: function(server) {
+                    if (!server || server.id == null) return;
+                    if (this.selectedServersMap[server.id]) {
+                        this.removeSelectedServer(server);
+                        return;
+                    }
+                    this.selectedServerIds.push(server.id);
+                    this.selectedServersMap[server.id] = server;
+                },
+                removeSelectedServer: function(server) {
+                    if (!server || server.id == null) return;
+                    this.selectedServerIds = this.selectedServerIds.filter(function(id) { return id !== server.id; });
+                    delete this.selectedServersMap[server.id];
+                },
+                clearSelectedServers: function() {
+                    this.selectedServerIds = [];
+                    this.selectedServersMap = {};
+                },
+                goDeployNext: function() {
+                    if (this.selectedServerCount === 0) return;
+                    var safeServers = this.selectedServers.map(function(server) {
+                        return {
+                            id: server.id,
+                            name: server.name,
+                            host: server.host,
+                            port: server.port,
+                            username: server.username,
+                            groupName: server.groupName
+                        };
+                    });
+                    sessionStorage.setItem('deploy_server_ids', JSON.stringify(this.selectedServerIds));
+                    sessionStorage.setItem('deploy_selected_servers', JSON.stringify(safeServers));
+                    window.open('/deploy', '_blank');
                 },
                 connect: function(server) {
                     if (this.monitor.currentConnections >= this.monitor.maxConnections) {

@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>批量分发与执行</title>
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/css/all.min.css" rel="stylesheet">
+    <script src="/js/vue.global.prod.js"></script>
+    <script src="/js/axios.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background: #f8fafc;
+            color: #1f2937;
+        }
+
+        .deploy-shell {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 18px;
+            gap: 14px;
+        }
+
+        .deploy-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .deploy-title {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 800;
+        }
+
+        .deploy-subtitle {
+            margin: 4px 0 0;
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        .deploy-layout {
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: 320px minmax(0, 1fr);
+            gap: 14px;
+        }
+
+        .panel {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 1px 5px rgba(15, 23, 42, .06);
+            min-height: 0;
+        }
+
+        .node-panel {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 14px;
+            border-bottom: 1px solid #eef2f7;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .panel-title {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .node-search {
+            padding: 10px 14px;
+            border-bottom: 1px solid #eef2f7;
+        }
+
+        .node-list {
+            padding: 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .node-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            background: #fff;
+        }
+
+        .node-name {
+            font-weight: 800;
+            font-size: 13px;
+            color: #111827;
+        }
+
+        .node-meta {
+            font-family: Consolas, Monaco, monospace;
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 3px;
+        }
+
+        .main-panel {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .main-scroll {
+            padding: 16px;
+            overflow-y: auto;
+        }
+
+        .section-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 14px;
+            background: #fff;
+        }
+
+        .section-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .section-title {
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .quick-dir-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .quick-dir {
+            border: 1px solid #e0e7ff;
+            background: #eef2ff;
+            color: #3730a3;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .quick-dir:hover {
+            background: #e0e7ff;
+        }
+
+        .command-editor {
+            font-family: Consolas, Monaco, monospace;
+            min-height: 170px;
+            resize: vertical;
+        }
+
+        .variable-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .variable-chip {
+            border: 1px solid #e5e7eb;
+            background: #f8fafc;
+            border-radius: 6px;
+            padding: 3px 7px;
+            font-family: Consolas, Monaco, monospace;
+            font-size: 12px;
+            color: #475569;
+            cursor: pointer;
+        }
+
+        .result-row {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        .result-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 12px;
+            background: #f8fafc;
+        }
+
+        .result-log {
+            margin: 0;
+            padding: 12px;
+            background: #0f172a;
+            color: #e5e7eb;
+            font-size: 12px;
+            max-height: 260px;
+            overflow: auto;
+            white-space: pre-wrap;
+        }
+
+        .action-footer {
+            padding: 12px 16px;
+            border-top: 1px solid #eef2f7;
+            background: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        @media (max-width: 980px) {
+            .deploy-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .node-panel {
+                max-height: 320px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app" class="deploy-shell">
+        <header class="deploy-header">
+            <div>
+                <h1 class="deploy-title">批量分发与执行</h1>
+                <p class="deploy-subtitle">支持任意附件分发、目标目录快捷选择、变量替换和批量 Linux 命令串行执行。</p>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" @click="backHome">
+                <i class="fas fa-arrow-left me-1"></i>返回服务器列表
+            </button>
+        </header>
+
+        <main class="deploy-layout">
+            <aside class="panel node-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">
+                        <i class="fas fa-server text-primary"></i>目标节点
+                        <span class="badge bg-primary">{{ servers.length }}</span>
+                    </h2>
+                </div>
+                <div class="node-search">
+                    <input class="form-control form-control-sm" v-model="nodeSearch" placeholder="搜索节点/IP/用户">
+                </div>
+                <div class="node-list" v-if="filteredServers.length > 0">
+                    <div class="node-item" v-for="server in filteredServers" :key="server.id || server.host">
+                        <div>
+                            <div class="node-name text-truncate" :title="server.name || server.host">{{ server.name || server.host }}</div>
+                            <div class="node-meta">{{ server.username }}@{{ server.host }}:{{ server.port || 22 }}</div>
+                        </div>
+                        <button class="btn btn-link btn-sm text-danger p-0" @click="removeServer(server)">移除</button>
+                    </div>
+                </div>
+                <div class="p-4 text-center text-muted" v-else>
+                    <i class="fas fa-inbox fa-2x mb-2"></i>
+                    <div>{{ servers.length === 0 ? '还没有选择服务器' : '没有匹配的节点' }}</div>
+                </div>
+            </aside>
+
+            <section class="panel main-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">
+                        <i class="fas fa-terminal text-success"></i>操作配置
+                    </h2>
+                    <span class="text-muted small">执行方式：串行</span>
+                </div>
+
+                <div class="main-scroll">
+                    <div class="section-card">
+                        <div class="section-head">
+                            <div class="section-title"><i class="fas fa-paperclip text-primary"></i>附件分发</div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" v-model="form.enableUpload" id="enableUpload">
+                                <label class="form-check-label" for="enableUpload">启用</label>
+                            </div>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-lg-5">
+                                <label class="form-label small fw-bold text-muted">上传附件（不限类型）</label>
+                                <input class="form-control" type="file" @change="onFileChange">
+                                <div class="form-text" v-if="selectedFile">{{ selectedFile.name }}，{{ formatSize(selectedFile.size) }}</div>
+                            </div>
+                            <div class="col-lg-4">
+                                <label class="form-label small fw-bold text-muted">目标目录</label>
+                                <input class="form-control" v-model.trim="form.targetDir" placeholder="/home/{username}/">
+                                <div class="quick-dir-list">
+                                    <span class="quick-dir" v-for="dir in quickDirs" :key="dir" @click="useDir(dir)">{{ dir }}</span>
+                                    <span class="quick-dir" v-for="dir in recentDirs" :key="'r-' + dir" @click="useDir(dir)">历史: {{ dir }}</span>
+                                </div>
+                            </div>
+                            <div class="col-lg-3">
+                                <label class="form-label small fw-bold text-muted">同名文件策略</label>
+                                <select class="form-select" v-model="form.existsPolicy">
+                                    <option value="backup">自动备份后覆盖</option>
+                                    <option value="overwrite">直接覆盖</option>
+                                    <option value="skip">跳过</option>
+                                    <option value="rename">重命名上传</option>
+                                </select>
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" v-model="form.chmodExecutable" id="chmodExecutable">
+                                    <label class="form-check-label" for="chmodExecutable">上传后 chmod +x</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-card">
+                        <div class="section-head">
+                            <div class="section-title"><i class="fas fa-code text-success"></i>批量 Linux 命令</div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" v-model="form.enableCommand" id="enableCommand">
+                                <label class="form-check-label" for="enableCommand">启用</label>
+                            </div>
+                        </div>
+                        <textarea class="form-control command-editor" v-model="form.commands" placeholder="每台服务器串行执行，例如：
+mkdir -p {targetDir}
+ls -lh {targetDir}
+echo uploaded: {targetFile}"></textarea>
+                        <div class="mt-2">
+                            <div class="small text-muted mb-1">可用变量，点击可插入命令：</div>
+                            <div class="variable-grid">
+                                <span class="variable-chip" v-for="v in variables" :key="v" @click="insertVariable(v)">{{ v }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-card">
+                        <div class="section-head">
+                            <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
+                            <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0" @click="results = []">清空结果</button>
+                        </div>
+                        <div v-if="results.length === 0" class="text-muted small">执行后将在这里显示每台服务器的上传、命令和日志结果。</div>
+                        <div v-for="result in results" :key="result.serverId || result.host" class="result-row">
+                            <div class="result-head">
+                                <div>
+                                    <strong>{{ result.name || result.host }}</strong>
+                                    <span class="text-muted small ms-2">{{ result.host }}</span>
+                                </div>
+                                <div>
+                                    <span class="badge" :class="result.success ? 'bg-success' : 'bg-danger'">
+                                        {{ result.success ? '成功' : '失败' }}
+                                    </span>
+                                    <span class="text-muted small ms-2">{{ result.durationMs || 0 }} ms</span>
+                                </div>
+                            </div>
+                            <pre class="result-log">{{ (result.logs || []).join('\n\n') }}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-footer">
+                    <div class="text-muted small">
+                        将对 {{ servers.length }} 台节点串行执行。启用附件分发或命令执行至少一项。
+                    </div>
+                    <button class="btn btn-success px-4" :disabled="running || !canRun" @click="runBatch">
+                        <span class="spinner-border spinner-border-sm me-1" v-if="running"></span>
+                        {{ running ? '执行中...' : '开始执行' }}
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    csrfToken: null,
+                    servers: [],
+                    nodeSearch: '',
+                    selectedFile: null,
+                    running: false,
+                    results: [],
+                    quickDirs: [
+                        '/home/{username}/'
+                    ],
+                    variables: ['{host}', '{username}', '{targetDir}', '{targetFile}', '{fileName}', '{fileBaseName}', '{date}', '{timestamp}'],
+                    form: {
+                        enableUpload: true,
+                        enableCommand: true,
+                        targetDir: '/home/{username}/',
+                        existsPolicy: 'backup',
+                        chmodExecutable: false,
+                        customPermission: '',
+                        commands: 'ls -lh {targetDir}\necho target file: {targetFile}'
+                    }
+                };
+            },
+            computed: {
+                filteredServers() {
+                    const q = this.nodeSearch.trim().toLowerCase();
+                    if (!q) return this.servers;
+                    return this.servers.filter(function(server) {
+                        return String(server.name || '').toLowerCase().includes(q)
+                            || String(server.host || '').toLowerCase().includes(q)
+                            || String(server.username || '').toLowerCase().includes(q);
+                    });
+                },
+                recentDirs() {
+                    try {
+                        return JSON.parse(localStorage.getItem('deploy_recent_dirs') || '[]');
+                    } catch (e) {
+                        return [];
+                    }
+                },
+                canRun() {
+                    if (this.servers.length === 0) return false;
+                    if (!this.form.enableUpload && !this.form.enableCommand) return false;
+                    if (this.form.enableUpload && !this.selectedFile) return false;
+                    if (this.form.enableUpload && !this.form.targetDir) return false;
+                    if (this.form.enableCommand && !this.form.commands.trim()) return false;
+                    return true;
+                }
+            },
+            mounted() {
+                try {
+                    this.servers = JSON.parse(sessionStorage.getItem('deploy_selected_servers') || '[]');
+                } catch (e) {
+                    this.servers = [];
+                }
+                // 获取 CSRF Token
+                this.getCsrfToken();
+            },
+            methods: {
+                getCsrfToken() {
+                    var self = this;
+                    axios.get('/api/csrf/token').then(function(res) {
+                        if (res.data && res.data.success) {
+                            self.csrfToken = res.data.token;
+                        }
+                    }).catch(function(e) {
+                        console.error('Failed to get CSRF token:', e);
+                    });
+                },
+                onFileChange(event) {
+                    this.selectedFile = event.target.files && event.target.files.length > 0 ? event.target.files[0] : null;
+                },
+                useDir(dir) {
+                    this.form.targetDir = dir;
+                },
+                insertVariable(variable) {
+                    this.form.commands = (this.form.commands || '') + variable;
+                },
+                removeServer(server) {
+                    this.servers = this.servers.filter(function(item) { return item.id !== server.id; });
+                    sessionStorage.setItem('deploy_selected_servers', JSON.stringify(this.servers));
+                    sessionStorage.setItem('deploy_server_ids', JSON.stringify(this.servers.map(function(item) { return item.id; })));
+                },
+                backHome() {
+                    window.location.href = '/';
+                },
+                formatSize(size) {
+                    if (size < 1024) return size + ' B';
+                    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
+                    return (size / 1024 / 1024).toFixed(1) + ' MB';
+                },
+                saveRecentDir() {
+                    if (!this.form.targetDir) return;
+                    const dirs = this.recentDirs.filter(dir => dir !== this.form.targetDir);
+                    dirs.unshift(this.form.targetDir);
+                    localStorage.setItem('deploy_recent_dirs', JSON.stringify(dirs.slice(0, 5)));
+                },
+                async runBatch() {
+                    if (!this.canRun) return;
+                    this.running = true;
+                    this.results = [];
+                    this.saveRecentDir();
+                    const data = new FormData();
+                    this.servers.forEach(server => data.append('serverIds', server.host));
+                    data.append('targetDir', this.form.targetDir || '');
+                    data.append('commands', this.form.commands || '');
+                    data.append('enableUpload', this.form.enableUpload);
+                    data.append('enableCommand', this.form.enableCommand);
+                    data.append('existsPolicy', this.form.existsPolicy);
+                    data.append('chmodExecutable', this.form.chmodExecutable);
+                    data.append('customPermission', this.form.customPermission || '');
+                    if (this.selectedFile) {
+                        data.append('file', this.selectedFile);
+                    }
+                    try {
+                        const headers = { 'Content-Type': 'multipart/form-data' };
+                        if (this.csrfToken) {
+                            headers['X-CSRF-Token'] = this.csrfToken;
+                        }
+                        const res = await axios.post('/api/deploy/batch-run', data, {
+                            headers: headers
+                        });
+                        this.results = res.data && res.data.results ? res.data.results : [];
+                        if (res.data && res.data.message) {
+                            alert(res.data.message);
+                        }
+                    } catch (e) {
+                        alert('执行失败: ' + (e.response && e.response.data ? e.response.data.message || e.response.data : e.message));
+                    } finally {
+                        this.running = false;
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>
