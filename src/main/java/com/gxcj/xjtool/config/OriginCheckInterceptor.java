@@ -17,6 +17,7 @@ import javax.servlet.http.HttpServletResponse;
 public class OriginCheckInterceptor implements HandlerInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(OriginCheckInterceptor.class);
+    private static final String RESULT_EDIT_COMMIT_PATH = "/api/oracle/result-edits/commit";
 
     @Autowired
     private SecurityConfig securityConfig;
@@ -25,7 +26,8 @@ public class OriginCheckInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
 
-        if (!securityConfig.getOriginCheck().isEnabled()) {
+        boolean forceCheck = RESULT_EDIT_COMMIT_PATH.equals(request.getRequestURI());
+        if (!forceCheck && !securityConfig.getOriginCheck().isEnabled()) {
             return true;
         }
 
@@ -35,6 +37,13 @@ public class OriginCheckInterceptor implements HandlerInterceptor {
         // 如果没有 Origin 和 Referer，通常是直接访问或服务器间调用，暂时放行
         // 严格模式下可能需要限制，但为了兼容性先允许
         if (origin == null && referer == null) {
+            if (forceCheck && !"XMLHttpRequest".equalsIgnoreCase(request.getHeader("X-Requested-With"))) {
+                log.warn("拒绝缺少来源头的敏感请求: URI={}", request.getRequestURI());
+                response.setStatus(403);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"success\":false,\"message\":\"敏感操作缺少合法请求来源\"}");
+                return false;
+            }
             return true;
         }
 
@@ -49,6 +58,11 @@ public class OriginCheckInterceptor implements HandlerInterceptor {
                 break;
             }
         }
+        if (!isAllowed && forceCheck) {
+            String requestOrigin = request.getScheme() + "://" + request.getServerName()
+                    + (isDefaultPort(request) ? "" : ":" + request.getServerPort());
+            isAllowed = source.startsWith(requestOrigin);
+        }
 
         if (!isAllowed) {
             log.warn("拒绝非法来源请求: Origin={}, Referer={}, URI={}", origin, referer, request.getRequestURI());
@@ -59,5 +73,11 @@ public class OriginCheckInterceptor implements HandlerInterceptor {
         }
 
         return true;
+    }
+
+    private boolean isDefaultPort(HttpServletRequest request) {
+        int port = request.getServerPort();
+        return ("http".equalsIgnoreCase(request.getScheme()) && port == 80)
+                || ("https".equalsIgnoreCase(request.getScheme()) && port == 443);
     }
 }

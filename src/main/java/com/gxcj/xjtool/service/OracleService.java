@@ -2,6 +2,7 @@ package com.gxcj.xjtool.service;
 
 import com.gxcj.xjtool.dto.ExecuteSqlRequest;
 import com.gxcj.xjtool.dto.OracleDataSourceDto;
+import com.gxcj.xjtool.dto.ResultEditCommitRequest;
 import com.gxcj.xjtool.dto.SqlResultResponse;
 
 import java.util.List;
@@ -40,6 +41,11 @@ public interface OracleService {
      * @return 执行结果
      */
     SqlResultResponse executeSql(ExecuteSqlRequest request);
+
+    /**
+     * Commit pending result-grid cell edits in one transaction.
+     */
+    SqlResultResponse commitResultEdits(ResultEditCommitRequest request);
 
     /**
      * 获取 SQL 执行计划

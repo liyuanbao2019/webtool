@@ -2,6 +2,7 @@ package com.gxcj.xjtool.controller;
 
 import com.gxcj.xjtool.dto.ExecuteSqlRequest;
 import com.gxcj.xjtool.dto.OracleDataSourceDto;
+import com.gxcj.xjtool.dto.ResultEditCommitRequest;
 import com.gxcj.xjtool.dto.SqlResultResponse;
 import com.gxcj.xjtool.service.OracleService;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +64,14 @@ public class OracleController {
         request.setUsername(username != null ? username : "unknown");
         request.setSessionId(session.getId()); // 设置会话ID用于安全验证
         return oracleService.executeSql(request);
+    }
+
+    @PostMapping("/result-edits/commit")
+    public SqlResultResponse commitResultEdits(@RequestBody ResultEditCommitRequest request,
+            javax.servlet.http.HttpSession session) {
+        String username = (String) session.getAttribute("LOGIN_USER");
+        request.setUsername(username != null ? username : "unknown");
+        return oracleService.commitResultEdits(request);
     }
 
     @PostMapping("/export/{format}")

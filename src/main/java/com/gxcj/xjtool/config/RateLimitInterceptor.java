@@ -73,7 +73,9 @@ public class RateLimitInterceptor implements HandlerInterceptor {
      * 是否为SQL执行请求
      */
     private boolean isSqlExecutionRequest(String uri) {
-        return uri.equals("/api/oracle/execute") || uri.equals("/api/oracle/explain");
+        return uri.equals("/api/oracle/execute")
+                || uri.equals("/api/oracle/explain")
+                || uri.equals("/api/oracle/result-edits/commit");
     }
 
     /**

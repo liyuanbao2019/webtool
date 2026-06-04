@@ -637,6 +637,36 @@
             text-overflow: ellipsis;
         }
 
+        .result-table td.editable-cell {
+            cursor: cell;
+        }
+
+        .result-table td.edited-cell {
+            background: #fff7cc;
+            box-shadow: inset 0 0 0 1px #f0c36d;
+        }
+
+        .result-table td.editing-cell {
+            padding: 2px 4px;
+            background: #e7f1ff;
+            overflow: visible;
+        }
+
+        .result-cell-editor {
+            width: 100%;
+            min-width: 160px;
+            height: 26px;
+            border: 1px solid #0d6efd;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: var(--base-font-size);
+        }
+
+        .result-edit-toolbar {
+            border-left: 1px solid #dee2e6;
+            padding-left: 8px;
+        }
+
         .empty-state {
             display: flex;
             flex-direction: column;
@@ -1143,6 +1173,22 @@
                             <span>{{ t('sql.result') }}</span>
                             <span class="badge bg-secondary ms-2" v-if="currentResult">{{ currentResult.rowCount }}
                                 {{ t('sql.rows') }}</span>
+                            <span class="badge bg-success" v-if="resultEditable">{{ t('sql.editable') }}</span>
+                            <span class="badge bg-warning text-dark" v-if="pendingEditCount > 0">{{ pendingEditCount }}
+                                {{ t('sql.pendingEdits') }}</span>
+                            <div class="d-flex align-items-center gap-1 result-edit-toolbar"
+                                v-if="resultEditable || pendingEditCount > 0">
+                                <button class="btn btn-outline-success btn-sm" @click="commitResultEdits"
+                                    :disabled="pendingEditCount === 0 || committingEdits" :title="t('sql.commitEdits')">
+                                    <i class="fas fa-check me-1" v-if="!committingEdits"></i>
+                                    <span v-else class="spinner-border spinner-border-sm me-1"></span>
+                                    {{ t('sql.commit') }}
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" @click="rollbackResultEdits"
+                                    :disabled="pendingEditCount === 0 || committingEdits" :title="t('sql.rollbackEdits')">
+                                    <i class="fas fa-undo me-1"></i>{{ t('sql.rollback') }}
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Batch Result Tabs (左侧可滚动) -->
@@ -1152,7 +1198,7 @@
                             <button v-for="(res, idx) in result.multiResults" :key="idx" class="btn text-nowrap"
                                 :class="activeResultTabIndex === idx ? 'btn-primary' : 'btn-outline-secondary'"
                                 :style="{ fontSize: 'var(--base-font-size)', padding: '2px 8px', height: 'auto' }"
-                                @click="activeResultTabIndex = idx" :title="res.sql">
+                                @click="switchResultTab(idx)" :title="res.sql">
                                 <i class="fas" :class="res.success ? 'fa-check text-success' : 'fa-times text-danger'"
                                     v-if="!res.columns" :style="{ fontSize: 'var(--base-font-size)', marginRight: '3px' }"></i>
                                 <i class="fas fa-table text-primary" v-else
@@ -1237,8 +1283,16 @@
                                 <tr v-for="(row, idx) in paginatedRows" :key="idx">
                                     <td class="text-muted">{{ (pagination.currentPage - 1) * pagination.pageSize + idx +
                                         1 }}</td>
-                                    <td v-for="col in currentResult.columns" :key="col" :title="row[col]">
-                                        {{ formatCellValue(row[col]) }}
+                                    <td v-for="col in currentResult.columns" :key="col" :title="row[col]"
+                                        :class="{ 'editable-cell': canEditResultCell(col), 'edited-cell': isEditedCell(row, col), 'editing-cell': isEditingCell(row, col) }"
+                                        @dblclick="startCellEdit(row, col)">
+                                        <input v-if="isEditingCell(row, col)" class="result-cell-editor"
+                                            :ref="'cellEditor_' + editKey(row, col)"
+                                            v-model="editingCell.value"
+                                            @keydown.enter.prevent="finishCellEdit(true)"
+                                            @keydown.esc.prevent="finishCellEdit(false)"
+                                            @blur="finishCellEdit(true)">
+                                        <span v-else>{{ formatCellValue(displayCellValue(row, col)) }}</span>
                                     </td>
                                 </tr>
                             </tbody>
@@ -2146,6 +2200,16 @@
             'sql.explainPlanFailed': 'Explain plan query failed: {0}',
             'sql.requestErrorNoArgs': 'Request error',
             'sql.executeError': 'Execute error: {0}',
+            'sql.editable': 'Editable',
+            'sql.pendingEdits': 'pending edits',
+            'sql.commit': 'Commit',
+            'sql.rollback': 'Rollback',
+            'sql.commitEdits': 'Commit result edits',
+            'sql.rollbackEdits': 'Discard pending result edits',
+            'sql.commitEditsConfirm': 'Commit {0} pending edit(s)?',
+            'sql.editsCommitted': 'Result edits committed',
+            'sql.editsRolledBack': 'Pending edits discarded',
+            'sql.commitFailed': 'Commit failed',
             'sql.tokenGenerateFailed': 'Token generation failed',
             'sql.tokenRequestFailed': 'Token request failed: {0}',
             'sql.serverSidePaging': 'Server-side paging',
@@ -2413,6 +2477,9 @@
                     result: null,
                     activeResultTabIndex: 0,
                     lastExecutionTime: null,
+                    resultEdits: {},
+                    editingCell: null,
+                    committingEdits: false,
                     history: [],
                     showSidebar: true,
                     baseFontSize: parseInt(localStorage.getItem('sqlToolFontSize') || 13),
@@ -2655,6 +2722,17 @@
                         return this.result.multiResults[this.activeResultTabIndex] || this.result;
                     }
                     return this.result;
+                },
+                resultEditMetadata() {
+                    return this.currentResult && this.currentResult.editableMetadata
+                        ? this.currentResult.editableMetadata
+                        : null;
+                },
+                resultEditable() {
+                    return !!(this.resultEditMetadata && this.resultEditMetadata.editable);
+                },
+                pendingEditCount() {
+                    return Object.keys(this.resultEdits || {}).length;
                 },
                 /**
                  * 当前结果集是否处于服务端分页（单条执行看根对象；批量执行看当前 multiResults 项）
@@ -2987,6 +3065,8 @@
                     this.loading = !!tab.loading;
                     this.result = tab.result || null;
                     this.lastExecutionTime = tab.lastExecutionTime || null;
+                    this.resultEdits = {};
+                    this.editingCell = null;
                     this.pagination = {
                         currentPage: tab.pagination?.currentPage || 1,
                         pageSize: tab.pagination?.pageSize || 10,
@@ -3000,6 +3080,11 @@
                     if (!this.tabs || this.tabs.length === 0) return;
                     localStorage.setItem('sql_editor_tabs', JSON.stringify(this.tabs));
                     localStorage.setItem('sql_editor_active_tab', this.activeTabId || '');
+                },
+                switchResultTab(idx) {
+                    this.activeResultTabIndex = idx;
+                    this.resultEdits = {};
+                    this.editingCell = null;
                 },
                 initTabs() {
                     const savedTabs = localStorage.getItem('sql_editor_tabs');
@@ -3791,6 +3876,8 @@
                 // 配置axios CSRF拦截器
                 setupCsrfInterceptor() {
                     axios.interceptors.request.use(config => {
+                        config.headers = config.headers || {};
+                        config.headers['X-Requested-With'] = 'XMLHttpRequest';
                         // 如果是POST/PUT/DELETE/PATCH请求，添加CSRF Token
                         const modifyingMethods = ['post', 'put', 'delete', 'patch'];
                         if (config.method && modifyingMethods.includes(config.method.toLowerCase())) {
@@ -3917,6 +4004,8 @@
                     this.result = null;
                     this.activeResultTabIndex = 0;
                     this.lastExecutionTime = null;
+                    this.resultEdits = {};
+                    this.editingCell = null;
                     // 仅在全新执行（非翻页）时重置页码和分页状态
                     if (page === null) {
                         this.pagination.currentPage = 1;
@@ -4095,6 +4184,124 @@
                     if (val === null || val === undefined) return '<null>';
                     if (typeof val === 'object') return JSON.stringify(val);
                     return val;
+                },
+                canEditResultCell(col) {
+                    const meta = this.resultEditMetadata;
+                    return !!(meta && meta.editable && Array.isArray(meta.editableColumns)
+                        && meta.editableColumns.some(item => String(item).toLowerCase() === String(col).toLowerCase()));
+                },
+                editKey(row, col) {
+                    const meta = this.resultEditMetadata || {};
+                    const pkCol = meta.primaryKeyColumn;
+                    const pkVal = pkCol ? row[pkCol] : '';
+                    return `${pkCol}:${String(pkVal)}:${col}`;
+                },
+                displayCellValue(row, col) {
+                    const edit = this.resultEdits[this.editKey(row, col)];
+                    return edit ? edit.newValue : row[col];
+                },
+                isEditedCell(row, col) {
+                    return !!this.resultEdits[this.editKey(row, col)];
+                },
+                isEditingCell(row, col) {
+                    return !!(this.editingCell && this.editingCell.key === this.editKey(row, col));
+                },
+                startCellEdit(row, col) {
+                    if (!this.canEditResultCell(col) || this.committingEdits) return;
+                    const key = this.editKey(row, col);
+                    const currentValue = this.displayCellValue(row, col);
+                    this.editingCell = {
+                        key,
+                        row,
+                        col,
+                        originalValue: row[col],
+                        value: currentValue === null || currentValue === undefined ? '' : String(currentValue)
+                    };
+                    this.$nextTick(() => {
+                        const refs = this.$refs['cellEditor_' + key];
+                        const input = Array.isArray(refs) ? refs[0] : refs;
+                        if (input) {
+                            input.focus();
+                            input.select();
+                        }
+                    });
+                },
+                finishCellEdit(save) {
+                    if (!this.editingCell) return;
+                    const editing = this.editingCell;
+                    this.editingCell = null;
+                    if (!save) return;
+
+                    const newValue = this.coerceEditedValue(editing.value, editing.originalValue);
+                    if (this.valuesEqual(newValue, editing.originalValue)) {
+                        delete this.resultEdits[editing.key];
+                        return;
+                    }
+                    const meta = this.resultEditMetadata;
+                    this.resultEdits[editing.key] = {
+                        columnName: editing.col,
+                        newValue,
+                        originalValue: editing.originalValue,
+                        primaryKeyValues: {
+                            [meta.primaryKeyColumn]: editing.row[meta.primaryKeyColumn]
+                        }
+                    };
+                },
+                coerceEditedValue(value, originalValue) {
+                    if (value === '<null>' || value === '\\N') return null;
+                    if (typeof originalValue === 'number' && value !== '') {
+                        const n = Number(value);
+                        return Number.isFinite(n) ? n : value;
+                    }
+                    if (typeof originalValue === 'boolean') {
+                        const lower = String(value).toLowerCase();
+                        if (lower === 'true' || lower === '1') return true;
+                        if (lower === 'false' || lower === '0') return false;
+                    }
+                    return value;
+                },
+                valuesEqual(a, b) {
+                    if (a === b) return true;
+                    if (a === null || a === undefined || b === null || b === undefined) return a == null && b == null;
+                    return String(a) === String(b);
+                },
+                rollbackResultEdits() {
+                    this.resultEdits = {};
+                    this.editingCell = null;
+                    this.showToast(this.t('sql.tip'), this.t('sql.editsRolledBack'), 'success');
+                },
+                async commitResultEdits() {
+                    const meta = this.resultEditMetadata;
+                    const edits = Object.values(this.resultEdits || {});
+                    if (!meta || !meta.editable || edits.length === 0 || this.lastDatasourceIdx === null) return;
+                    if (!confirm(this.t('sql.commitEditsConfirm', edits.length))) return;
+
+                    this.committingEdits = true;
+                    try {
+                        const res = await axios.post('/api/oracle/result-edits/commit', {
+                            datasourceIndex: this.lastDatasourceIdx,
+                            tableName: meta.tableName,
+                            schemaName: meta.schemaName,
+                            primaryKeyColumn: meta.primaryKeyColumn,
+                            editToken: meta.editToken,
+                            edits
+                        });
+                        if (res.data && res.data.success) {
+                            this.resultEdits = {};
+                            this.editingCell = null;
+                            this.showToast(this.t('sql.success'), this.t('sql.editsCommitted'), 'success');
+                            if (this.lastExecutedSql) {
+                                await this.executeSqlInternal(this.lastExecutedSql, this.lastDatasourceIdx, null,
+                                    this.currentPageNum || 1, this.pagination.pageSize);
+                            }
+                        } else {
+                            this.showToast(this.t('sql.error'), res.data?.errorMessage || this.t('sql.commitFailed'), 'error');
+                        }
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), this.t('sql.commitFailed') + ': ' + (e.response?.data?.errorMessage || e.message), 'error');
+                    } finally {
+                        this.committingEdits = false;
+                    }
                 },
                 exportCsv() {
                     if (!this.currentResult || !this.currentResult.columns || !this.currentResult.rows) return;

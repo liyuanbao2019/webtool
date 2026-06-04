@@ -3,6 +3,8 @@ package com.gxcj.xjtool.service.impl;
 import com.gxcj.xjtool.config.OracleConfig;
 import com.gxcj.xjtool.dto.ExecuteSqlRequest;
 import com.gxcj.xjtool.dto.OracleDataSourceDto;
+import com.gxcj.xjtool.dto.ResultEditCommitRequest;
+import com.gxcj.xjtool.dto.ResultEditMetadata;
 import com.gxcj.xjtool.dto.SqlResultResponse;
 import com.gxcj.xjtool.service.DangerousCommandTokenService;
 import com.gxcj.xjtool.service.OracleService;
@@ -13,11 +15,16 @@ import com.zaxxer.hikari.HikariDataSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import javax.annotation.PreDestroy;
+import javax.servlet.http.HttpSession;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -56,6 +63,12 @@ public class OracleServiceImpl implements OracleService {
     private static final long SLAVE_POOL_MAX_LIFE_MS = 5 * 60 * 1000; // 5 分钟
 
     // 解锁库表专用 SQL
+    private static final Pattern SIMPLE_SELECT_TABLE_PATTERN = Pattern.compile(
+            "(?is)^\\s*select\\s+.+?\\s+from\\s+([`\"\\[]?[A-Za-z0-9_.$]+[`\"\\]]?)(?:\\s+[A-Za-z_][A-Za-z0-9_]*)?(?:\\s+where\\b.*|\\s+order\\s+by\\b.*|\\s+limit\\b.*|\\s+fetch\\b.*|\\s+offset\\b.*)?\\s*;?\\s*$");
+    private static final String RESULT_EDIT_SCOPES_SESSION_KEY = "RESULT_EDIT_SCOPES";
+    private static final long RESULT_EDIT_SCOPE_TTL_MS = 15 * 60 * 1000L;
+    private static final int MAX_RESULT_EDIT_CELLS_PER_COMMIT = 200;
+
     private static final String LOCK_QUERY_SQL =
         "SELECT " +
         "    c.object_name, " +
@@ -256,6 +269,115 @@ public class OracleServiceImpl implements OracleService {
         }
 
         return response;
+    }
+
+    @Override
+    public SqlResultResponse commitResultEdits(ResultEditCommitRequest request) {
+        long startTime = System.currentTimeMillis();
+        if (request == null || request.getDatasourceIndex() == null) {
+            return SqlResultResponse.error("Datasource is required");
+        }
+        if (request.getEdits() == null || request.getEdits().isEmpty()) {
+            return SqlResultResponse.error("No pending edits to commit");
+        }
+        if (request.getEdits().size() > MAX_RESULT_EDIT_CELLS_PER_COMMIT) {
+            return SqlResultResponse.error("Too many edits in one commit, max " + MAX_RESULT_EDIT_CELLS_PER_COMMIT);
+        }
+        ResultEditScope editScope = validateResultEditScope(request);
+        if (editScope == null) {
+            return SqlResultResponse.error("Result edit authorization expired or invalid, please re-run the query");
+        }
+
+        OracleConfig.OracleDataSource dsConfig = getDataSourceConfig(request.getDatasourceIndex());
+        if (dsConfig == null) {
+            return SqlResultResponse.error("Datasource does not exist");
+        }
+
+        Connection conn = null;
+        try {
+            conn = getConnectionByIndex(request.getDatasourceIndex());
+            conn.setAutoCommit(false);
+
+            TableEditInfo tableInfo = resolveTableEditInfo(conn, request.getSchemaName(), request.getTableName());
+            if (tableInfo == null) {
+                throw new SQLException("Table metadata not found");
+            }
+            String pkColumn = tableInfo.resolveColumn(request.getPrimaryKeyColumn());
+            if (pkColumn == null || !tableInfo.isAllowedKeyColumn(pkColumn)) {
+                throw new SQLException("Row key metadata does not match current table");
+            }
+            validateResultEditColumns(request, tableInfo, editScope);
+
+            int affectedRows = 0;
+            // 当 schema 与当前连接的默认 schema 相同时，不加 schema 前缀
+            // 避免通过同义词(synonym)访问的表在 UPDATE 时引用了错误的 schema
+            String effectiveSchema = tableInfo.schemaName;
+            try {
+                String connSchema = conn.getSchema();
+                if (effectiveSchema != null && effectiveSchema.equalsIgnoreCase(connSchema)) {
+                    effectiveSchema = null; // 使用默认 schema，无需限定
+                }
+            } catch (SQLException ignored) {
+            }
+            String qualifiedTableName = qualifyTableName(conn, effectiveSchema, tableInfo.tableName);
+            log.debug("提交编辑: table={}, schema={}, effectiveSchema={}, pkColumn={}",
+                    tableInfo.tableName, tableInfo.schemaName, effectiveSchema, pkColumn);
+            for (ResultEditCommitRequest.CellEdit edit : request.getEdits()) {
+                if (edit == null) {
+                    continue;
+                }
+                String columnName = tableInfo.resolveColumn(edit.getColumnName());
+                if (columnName == null) {
+                    throw new SQLException("Column metadata not found: " + edit.getColumnName());
+                }
+                if (columnName.equals(pkColumn)) {
+                    throw new SQLException("Primary key column cannot be edited");
+                }
+                Object pkValue = findValueIgnoreCase(edit.getPrimaryKeyValues(), pkColumn);
+                if (pkValue == null) {
+                    throw new SQLException("Primary key value is missing for column " + pkColumn);
+                }
+
+                int count = executeResultCellUpdate(conn, qualifiedTableName, pkColumn, columnName, pkValue, edit, tableInfo);
+                if (count != 1) {
+                    throw new SQLException("Edit conflict or row not found: " + tableInfo.tableName + "." + columnName
+                            + " (pkColumn=" + pkColumn + ", pkValue=" + pkValue
+                            + " [" + (pkValue == null ? "null" : pkValue.getClass().getSimpleName()) + "]"
+                            + ", originalValue=" + edit.getOriginalValue()
+                            + " [" + (edit.getOriginalValue() == null ? "null" : edit.getOriginalValue().getClass().getSimpleName()) + "]"
+                            + ", affectedRows=" + count + ")");
+                }
+                affectedRows += count;
+            }
+
+            conn.commit();
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditResultEdit(request, true, null, executionTime, affectedRows, dsConfig.getName());
+            return SqlResultResponse.successUpdate(affectedRows, "UPDATE", executionTime);
+        } catch (Exception e) {
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackEx) {
+                    log.warn("Rollback result edits failed: {}", rollbackEx.getMessage());
+                }
+            }
+            long executionTime = System.currentTimeMillis() - startTime;
+            auditResultEdit(request, false, e.getMessage(), executionTime, 0, dsConfig.getName());
+            log.error("Commit result edits failed", e);
+            return SqlResultResponse.error("Commit failed: " + e.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
+                try {
+                    conn.close();
+                } catch (SQLException ignored) {
+                }
+            }
+        }
     }
 
     @Override
@@ -679,7 +801,9 @@ public class OracleServiceImpl implements OracleService {
 
         try (Connection conn = getConnectionByIndex(datasourceIndex)) {
             if (isResultSetSqlType(sqlType)) {
-                return executeQuery(conn, sql, maxRows, page, pageSize, startTime);
+                SqlResultResponse response = executeQuery(conn, sql, maxRows, page, pageSize, startTime);
+                attachEditableMetadata(conn, sql, response);
+                return response;
             } else {
                 return executeUpdate(conn, sql, sqlType, startTime);
             }
@@ -714,6 +838,7 @@ public class OracleServiceImpl implements OracleService {
                     SqlResultResponse res;
                     if (isResultSetSqlType(sqlType)) {
                         res = executeQuery(conn, sql, maxRows, page, pageSize, stmtStartTime);
+                        attachEditableMetadata(conn, sql, res);
                     } else {
                         res = executeUpdate(conn, sql, sqlType, stmtStartTime);
                         totalAffectedRows += res.getAffectedRows();
@@ -979,6 +1104,602 @@ public class OracleServiceImpl implements OracleService {
     /**
      * 获取数据源配置
      */
+    private int executeResultCellUpdate(Connection conn, String qualifiedTableName, String pkColumn, String columnName,
+            Object pkValue, ResultEditCommitRequest.CellEdit edit, TableEditInfo tableInfo) throws SQLException {
+        // 根据数据库列类型对参数值进行类型适配，防止 JSON 反序列化类型与 JDBC 不兼容
+        Object coercedPkValue = coerceValueForColumn(pkValue, pkColumn, tableInfo);
+        Object coercedNewValue = coerceValueForColumn(edit.getNewValue(), columnName, tableInfo);
+        Object coercedOriginalValue = coerceValueForColumn(edit.getOriginalValue(), columnName, tableInfo);
+
+        String quotedColumn = quoteIdentifier(conn, columnName);
+        String quotedPk = quoteIdentifier(conn, pkColumn);
+        String guardedSql = "UPDATE " + qualifiedTableName
+                + " SET " + quotedColumn + " = ?"
+                + " WHERE " + quotedPk + " = ?"
+                + " AND ((" + quotedColumn + " IS NULL AND ? IS NULL)"
+                + " OR " + quotedColumn + " = ?)";
+        try (PreparedStatement ps = conn.prepareStatement(guardedSql)) {
+            setObjectOrNull(ps, 1, coercedNewValue);
+            setObjectOrNull(ps, 2, coercedPkValue);
+            setObjectOrNull(ps, 3, coercedOriginalValue);
+            setObjectOrNull(ps, 4, coercedOriginalValue);
+            int count = ps.executeUpdate();
+            if (count != 0) {
+                return count;
+            }
+        }
+
+        String keyOnlySql = "UPDATE " + qualifiedTableName
+                + " SET " + quotedColumn + " = ?"
+                + " WHERE " + quotedPk + " = ?";
+        try (PreparedStatement ps = conn.prepareStatement(keyOnlySql)) {
+            setObjectOrNull(ps, 1, coercedNewValue);
+            setObjectOrNull(ps, 2, coercedPkValue);
+            int count = ps.executeUpdate();
+            if (count == 1) {
+                log.warn("Result edit original-value guard missed, updated by row key only: table={}, keyColumn={}, keyValue={}, column={}",
+                        qualifiedTableName, pkColumn, coercedPkValue, columnName);
+            }
+            if (count == 0) {
+                // 诊断：执行 SELECT 验证行是否存在，帮助定位是 schema 错误还是行已被删除
+                String diagSql = "SELECT COUNT(*) FROM " + qualifiedTableName + " WHERE " + quotedPk + " = ?";
+                try (PreparedStatement diagPs = conn.prepareStatement(diagSql)) {
+                    setObjectOrNull(diagPs, 1, coercedPkValue);
+                    try (ResultSet rs = diagPs.executeQuery()) {
+                        int rowCount = rs.next() ? rs.getInt(1) : -1;
+                        log.error("行更新失败诊断: table={}, pkColumn={}, pkValue={} [{}→{}], 行存在={}, keyOnlySql={}",
+                                qualifiedTableName, pkColumn, pkValue,
+                                pkValue == null ? "null" : pkValue.getClass().getSimpleName(),
+                                coercedPkValue == null ? "null" : coercedPkValue.getClass().getSimpleName(),
+                                rowCount, keyOnlySql);
+                    }
+                } catch (SQLException diagEx) {
+                    log.error("行更新失败，诊断查询也失败: table={}, pkValue={}, diagError={}",
+                            qualifiedTableName, coercedPkValue, diagEx.getMessage());
+                }
+            }
+            return count;
+        }
+    }
+
+    /**
+     * 根据数据库列的 SQL 类型，将 JSON 反序列化得到的 Java 值转换为 JDBC 兼容的类型。
+     * 例如：JSON 中的 Integer/Double → BigDecimal（NUMBER 列），String → 保持原样（VARCHAR2 列）。
+     */
+    private Object coerceValueForColumn(Object value, String columnName, TableEditInfo tableInfo) {
+        if (value == null || tableInfo == null || tableInfo.columnTypes == null) {
+            return value;
+        }
+        Integer sqlType = tableInfo.columnTypes.get(columnName.toUpperCase(Locale.ROOT));
+        if (sqlType == null) {
+            return value;
+        }
+        try {
+            switch (sqlType) {
+                case Types.NUMERIC:
+                case Types.DECIMAL:
+                    // Oracle NUMBER 列 → 统一用 BigDecimal，避免 Integer/Double/Long 不匹配
+                    if (value instanceof java.math.BigDecimal) {
+                        return value;
+                    }
+                    if (value instanceof Number) {
+                        return new java.math.BigDecimal(value.toString());
+                    }
+                    if (value instanceof String) {
+                        String str = ((String) value).trim();
+                        if (str.isEmpty()) return null;
+                        return new java.math.BigDecimal(str);
+                    }
+                    break;
+                case Types.BIGINT:
+                    if (value instanceof Long) return value;
+                    if (value instanceof Number) return ((Number) value).longValue();
+                    if (value instanceof String) {
+                        String str = ((String) value).trim();
+                        if (str.isEmpty()) return null;
+                        return Long.valueOf(str);
+                    }
+                    break;
+                case Types.INTEGER:
+                case Types.SMALLINT:
+                case Types.TINYINT:
+                    if (value instanceof Integer) return value;
+                    if (value instanceof Number) return ((Number) value).intValue();
+                    if (value instanceof String) {
+                        String str = ((String) value).trim();
+                        if (str.isEmpty()) return null;
+                        return Integer.valueOf(str);
+                    }
+                    break;
+                case Types.FLOAT:
+                case Types.REAL:
+                    if (value instanceof Float) return value;
+                    if (value instanceof Number) return ((Number) value).floatValue();
+                    if (value instanceof String) {
+                        String str = ((String) value).trim();
+                        if (str.isEmpty()) return null;
+                        return Float.valueOf(str);
+                    }
+                    break;
+                case Types.DOUBLE:
+                    if (value instanceof Double) return value;
+                    if (value instanceof Number) return ((Number) value).doubleValue();
+                    if (value instanceof String) {
+                        String str = ((String) value).trim();
+                        if (str.isEmpty()) return null;
+                        return Double.valueOf(str);
+                    }
+                    break;
+                case Types.VARCHAR:
+                case Types.NVARCHAR:
+                case Types.CHAR:
+                case Types.NCHAR:
+                case Types.LONGVARCHAR:
+                case Types.LONGNVARCHAR:
+                    return value.toString();
+                case Types.DATE:
+                case Types.TIMESTAMP:
+                case Types.TIMESTAMP_WITH_TIMEZONE:
+                    if (value instanceof java.sql.Timestamp || value instanceof java.sql.Date) {
+                        return value;
+                    }
+                    if (value instanceof String) {
+                        String str = ((String) value).trim();
+                        if (str.isEmpty()) return null;
+                        // 尝试解析常见日期格式
+                        try {
+                            return java.sql.Timestamp.valueOf(str);
+                        } catch (IllegalArgumentException ignored) {
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+        } catch (NumberFormatException e) {
+            log.warn("值类型转换失败: column={}, value={}, sqlType={}, error={}",
+                    columnName, value, sqlType, e.getMessage());
+        }
+        return value;
+    }
+
+    /**
+     * 安全地设置 PreparedStatement 参数，null 值使用 setNull
+     */
+    private void setObjectOrNull(PreparedStatement ps, int index, Object value) throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.NULL);
+        } else {
+            ps.setObject(index, value);
+        }
+    }
+
+    private String issueResultEditToken(String schemaName, String tableName, String primaryKeyColumn, List<String> editableColumns) {
+        HttpSession session = getCurrentHttpSession();
+        if (session == null) {
+            log.warn("Cannot issue result edit token without active session");
+            return null;
+        }
+        Map<String, ResultEditScope> scopes = getResultEditScopes(session, true);
+        evictExpiredResultEditScopes(scopes);
+        String token = UUID.randomUUID().toString().replace("-", "");
+        scopes.put(token, new ResultEditScope(
+                normalizeScopeValue(schemaName),
+                normalizeScopeValue(tableName),
+                normalizeScopeValue(primaryKeyColumn),
+                editableColumns.stream().map(this::normalizeScopeValue).collect(Collectors.toCollection(LinkedHashSet::new)),
+                System.currentTimeMillis() + RESULT_EDIT_SCOPE_TTL_MS));
+        return token;
+    }
+
+    private ResultEditScope validateResultEditScope(ResultEditCommitRequest request) {
+        if (request.getEditToken() == null || request.getEditToken().trim().isEmpty()) {
+            return null;
+        }
+        HttpSession session = getCurrentHttpSession();
+        if (session == null) {
+            return null;
+        }
+        Map<String, ResultEditScope> scopes = getResultEditScopes(session, false);
+        if (scopes == null) {
+            return null;
+        }
+        evictExpiredResultEditScopes(scopes);
+        ResultEditScope scope = scopes.get(request.getEditToken());
+        if (scope == null || scope.expiresAt < System.currentTimeMillis()) {
+            return null;
+        }
+        if (!Objects.equals(scope.schemaName, normalizeScopeValue(request.getSchemaName()))
+                || !Objects.equals(scope.tableName, normalizeScopeValue(request.getTableName()))
+                || !Objects.equals(scope.primaryKeyColumn, normalizeScopeValue(request.getPrimaryKeyColumn()))) {
+            return null;
+        }
+        return scope;
+    }
+
+    private void validateResultEditColumns(ResultEditCommitRequest request, TableEditInfo tableInfo, ResultEditScope scope)
+            throws SQLException {
+        for (ResultEditCommitRequest.CellEdit edit : request.getEdits()) {
+            if (edit == null) {
+                continue;
+            }
+            String columnName = tableInfo.resolveColumn(edit.getColumnName());
+            if (columnName == null || !scope.editableColumns.contains(normalizeScopeValue(columnName))) {
+                throw new SQLException("Column is not authorized for result editing: " + edit.getColumnName());
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, ResultEditScope> getResultEditScopes(HttpSession session, boolean create) {
+        Object value = session.getAttribute(RESULT_EDIT_SCOPES_SESSION_KEY);
+        if (value instanceof Map) {
+            return (Map<String, ResultEditScope>) value;
+        }
+        if (!create) {
+            return null;
+        }
+        Map<String, ResultEditScope> scopes = new ConcurrentHashMap<>();
+        session.setAttribute(RESULT_EDIT_SCOPES_SESSION_KEY, scopes);
+        return scopes;
+    }
+
+    private void evictExpiredResultEditScopes(Map<String, ResultEditScope> scopes) {
+        if (scopes == null || scopes.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        scopes.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue().expiresAt < now);
+    }
+
+    private HttpSession getCurrentHttpSession() {
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attributes == null) {
+            return null;
+        }
+        return attributes.getRequest().getSession(false);
+    }
+
+    private String normalizeScopeValue(String value) {
+        return value == null ? null : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private void attachEditableMetadata(Connection conn, String sql, SqlResultResponse response) {
+        if (response == null || !response.isSuccess() || response.getColumns() == null || response.getColumns().isEmpty()) {
+            return;
+        }
+        ResultEditMetadata metadata = buildEditableMetadata(conn, sql, response.getColumns());
+        response.setEditableMetadata(metadata);
+    }
+
+    private ResultEditMetadata buildEditableMetadata(Connection conn, String sql, List<String> resultColumns) {
+        String tableRef = inferSimpleSelectTable(sql);
+        if (tableRef == null) {
+            return ResultEditMetadata.builder()
+                    .editable(false)
+                    .reason("Only simple single-table SELECT results can be edited")
+                    .build();
+        }
+        try {
+            ParsedTableRef parsed = parseTableRef(tableRef);
+            TableEditInfo tableInfo = resolveTableEditInfo(conn, parsed.schemaName, parsed.tableName);
+            if (tableInfo == null) {
+                return ResultEditMetadata.builder()
+                        .editable(false)
+                        .reason("Table metadata not found")
+                        .build();
+            }
+            String pkColumn = resolveEditableKeyColumn(tableInfo, resultColumns);
+            if (pkColumn == null) {
+                return ResultEditMetadata.builder()
+                        .editable(false)
+                        .reason("The result must include a single primary key column or an ID column")
+                        .tableName(tableInfo.tableName)
+                        .schemaName(tableInfo.schemaName)
+                        .build();
+            }
+            String resultPkColumn = findStringIgnoreCase(resultColumns, pkColumn);
+
+            Set<String> tableColumns = tableInfo.columns.stream()
+                    .map(String::toUpperCase)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            List<String> editableColumns = resultColumns.stream()
+                    .filter(col -> tableColumns.contains(col.toUpperCase()))
+                    .filter(col -> !col.equalsIgnoreCase(pkColumn))
+                    .filter(tableInfo::isEditableDataColumn)
+                    .collect(Collectors.toList());
+            boolean editable = !editableColumns.isEmpty();
+            String editToken = editable
+                    ? issueResultEditToken(tableInfo.schemaName, tableInfo.tableName, resultPkColumn, editableColumns)
+                    : null;
+
+            return ResultEditMetadata.builder()
+                    .editable(editable)
+                    .reason(editableColumns.isEmpty() ? "No editable columns in result" : null)
+                    .tableName(tableInfo.tableName)
+                    .schemaName(tableInfo.schemaName)
+                    .primaryKeyColumn(resultPkColumn)
+                    .editableColumns(editableColumns)
+                    .editToken(editToken)
+                    .build();
+        } catch (Exception e) {
+            log.warn("Build editable metadata failed: {}", e.getMessage());
+            return ResultEditMetadata.builder()
+                    .editable(false)
+                    .reason("Unable to inspect table metadata: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    private String inferSimpleSelectTable(String sql) {
+        if (sql == null) {
+            return null;
+        }
+        String normalized = sql.trim();
+        String lower = normalized.toLowerCase(Locale.ROOT);
+        if (!lower.startsWith("select ")) {
+            return null;
+        }
+        if (Pattern.compile("(?is)\\b(join|union|intersect|minus|except|group\\s+by|having)\\b").matcher(normalized).find()) {
+            return null;
+        }
+        if (Pattern.compile("(?is)\\bfrom\\s*\\(").matcher(normalized).find()) {
+            return null;
+        }
+        Matcher matcher = SIMPLE_SELECT_TABLE_PATTERN.matcher(normalized);
+        if (!matcher.matches()) {
+            return null;
+        }
+        return stripIdentifierQuotes(matcher.group(1));
+    }
+
+    private ParsedTableRef parseTableRef(String tableRef) {
+        String[] parts = tableRef.split("\\.");
+        if (parts.length >= 2) {
+            return new ParsedTableRef(stripIdentifierQuotes(parts[parts.length - 2]), stripIdentifierQuotes(parts[parts.length - 1]));
+        }
+        return new ParsedTableRef(null, stripIdentifierQuotes(tableRef));
+    }
+
+    private String resolveEditableKeyColumn(TableEditInfo tableInfo, List<String> resultColumns) {
+        if (tableInfo.primaryKeyColumns.size() == 1) {
+            String primaryKey = tableInfo.primaryKeyColumns.get(0);
+            String resultPrimaryKey = findStringIgnoreCase(resultColumns, primaryKey);
+            if (resultPrimaryKey != null) {
+                return resultPrimaryKey;
+            }
+        }
+        String idColumn = tableInfo.resolveColumn("ID");
+        if (idColumn != null) {
+            String resultIdColumn = findStringIgnoreCase(resultColumns, idColumn);
+            if (resultIdColumn != null) {
+                return resultIdColumn;
+            }
+        }
+        return null;
+    }
+
+    private TableEditInfo resolveTableEditInfo(Connection conn, String schemaName, String tableName) throws SQLException {
+        if (tableName == null || tableName.trim().isEmpty()) {
+            return null;
+        }
+        DatabaseMetaData meta = conn.getMetaData();
+        String dbType = getDatasourceTypeByConn(conn);
+        String lookupTable = normalizeMetadataIdentifier(tableName, dbType);
+        String lookupSchema = normalizeMetadataIdentifier(schemaName, dbType);
+        String catalog = null;
+        String schema = lookupSchema;
+        if ("MYSQL".equalsIgnoreCase(dbType)) {
+            catalog = lookupSchema != null ? lookupSchema : conn.getCatalog();
+            schema = null;
+        }
+
+        // 当未指定 schema 时，优先使用当前连接的 schema 查找，
+        // 避免 DatabaseMetaData 匹配到其他 schema 的同名表
+        if (lookupSchema == null && !"MYSQL".equalsIgnoreCase(dbType)) {
+            TableEditInfo info = readTableEditInfo(meta, null, conn.getSchema(), lookupTable);
+            if (info != null) {
+                return info;
+            }
+        }
+
+        TableEditInfo info = readTableEditInfo(meta, catalog, schema, lookupTable);
+        if (info == null && lookupSchema == null && !"MYSQL".equalsIgnoreCase(dbType)) {
+            // 前面已经尝试过 conn.getSchema()，这里用 null schema 做最后的回退
+            info = readTableEditInfo(meta, null, null, lookupTable);
+        }
+        if (info == null) {
+            info = readTableEditInfo(meta, catalog, schema, tableName);
+        }
+        return info;
+    }
+
+    private TableEditInfo readTableEditInfo(DatabaseMetaData meta, String catalog, String schema, String table)
+            throws SQLException {
+        List<String> columns = new ArrayList<>();
+        Map<String, Integer> columnTypes = new LinkedHashMap<>();
+        String actualSchema = schema;
+        String actualTable = table;
+        try (ResultSet rs = meta.getColumns(catalog, schema, table, null)) {
+            while (rs.next()) {
+                actualSchema = rs.getString("TABLE_SCHEM");
+                actualTable = rs.getString("TABLE_NAME");
+                String columnName = rs.getString("COLUMN_NAME");
+                columns.add(columnName);
+                columnTypes.put(columnName.toUpperCase(Locale.ROOT), rs.getInt("DATA_TYPE"));
+            }
+        }
+        if (columns.isEmpty()) {
+            return null;
+        }
+
+        List<String> primaryKeys = new ArrayList<>();
+        try (ResultSet rs = meta.getPrimaryKeys(catalog, actualSchema, actualTable)) {
+            Map<Short, String> ordered = new TreeMap<>();
+            while (rs.next()) {
+                ordered.put(rs.getShort("KEY_SEQ"), rs.getString("COLUMN_NAME"));
+            }
+            primaryKeys.addAll(ordered.values());
+        }
+
+        TableEditInfo info = new TableEditInfo();
+        info.schemaName = actualSchema;
+        info.tableName = actualTable;
+        info.columns = columns;
+        info.columnTypes = columnTypes;
+        info.primaryKeyColumns = primaryKeys;
+        return info;
+    }
+
+    private String normalizeMetadataIdentifier(String value, String dbType) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        String cleaned = stripIdentifierQuotes(value.trim());
+        if ("ORACLE".equalsIgnoreCase(dbType) || "DM".equalsIgnoreCase(dbType)) {
+            return cleaned.toUpperCase(Locale.ROOT);
+        }
+        return cleaned;
+    }
+
+    private String qualifyTableName(Connection conn, String schemaName, String tableName) throws SQLException {
+        if (schemaName == null || schemaName.trim().isEmpty()) {
+            return quoteIdentifier(conn, tableName);
+        }
+        return quoteIdentifier(conn, schemaName) + "." + quoteIdentifier(conn, tableName);
+    }
+
+    private String quoteIdentifier(Connection conn, String identifier) throws SQLException {
+        if (identifier == null || !identifier.matches("[A-Za-z0-9_.$]+")) {
+            throw new SQLException("Unsafe identifier: " + identifier);
+        }
+        String quote = conn.getMetaData().getIdentifierQuoteString();
+        if (quote == null || quote.trim().isEmpty()) {
+            return identifier;
+        }
+        return quote + identifier.replace(quote, quote + quote) + quote;
+    }
+
+    private String stripIdentifierQuotes(String value) {
+        if (value == null) {
+            return null;
+        }
+        String result = value.trim();
+        if ((result.startsWith("\"") && result.endsWith("\""))
+                || (result.startsWith("`") && result.endsWith("`"))
+                || (result.startsWith("[") && result.endsWith("]"))) {
+            return result.substring(1, result.length() - 1);
+        }
+        return result;
+    }
+
+    private String findStringIgnoreCase(Collection<String> values, String target) {
+        if (values == null || target == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && value.equalsIgnoreCase(target)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private Object findValueIgnoreCase(Map<String, Object> values, String key) {
+        if (values == null || key == null) {
+            return null;
+        }
+        for (Map.Entry<String, Object> entry : values.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    private void auditResultEdit(ResultEditCommitRequest request, boolean success, String errorMessage,
+            long executionTime, int affectedRows, String datasourceName) {
+        try {
+            String sql = "RESULT_GRID_EDIT " + request.getTableName() + " edits="
+                    + (request.getEdits() == null ? 0 : request.getEdits().size());
+            sqlAuditService.logSqlExecution(
+                    request.getUsername(),
+                    sql,
+                    success,
+                    errorMessage,
+                    executionTime,
+                    affectedRows,
+                    datasourceName);
+        } catch (Exception e) {
+            log.error("Record result edit audit failed", e);
+        }
+    }
+
+    private static class ParsedTableRef {
+        private final String schemaName;
+        private final String tableName;
+
+        private ParsedTableRef(String schemaName, String tableName) {
+            this.schemaName = schemaName;
+            this.tableName = tableName;
+        }
+    }
+
+    private static class ResultEditScope {
+        private final String schemaName;
+        private final String tableName;
+        private final String primaryKeyColumn;
+        private final Set<String> editableColumns;
+        private final long expiresAt;
+
+        private ResultEditScope(String schemaName, String tableName, String primaryKeyColumn,
+                Set<String> editableColumns, long expiresAt) {
+            this.schemaName = schemaName;
+            this.tableName = tableName;
+            this.primaryKeyColumn = primaryKeyColumn;
+            this.editableColumns = editableColumns;
+            this.expiresAt = expiresAt;
+        }
+    }
+
+    private static class TableEditInfo {
+        private String schemaName;
+        private String tableName;
+        private List<String> columns = Collections.emptyList();
+        private Map<String, Integer> columnTypes = Collections.emptyMap();
+        private List<String> primaryKeyColumns = Collections.emptyList();
+
+        private String resolveColumn(String columnName) {
+            return columns.stream()
+                    .filter(col -> col.equalsIgnoreCase(columnName))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        private boolean isEditableDataColumn(String columnName) {
+            Integer type = columnTypes.get(columnName.toUpperCase(Locale.ROOT));
+            if (type == null) {
+                return true;
+            }
+            return type != Types.BLOB
+                    && type != Types.CLOB
+                    && type != Types.NCLOB
+                    && type != Types.BINARY
+                    && type != Types.VARBINARY
+                    && type != Types.LONGVARBINARY
+                    && type != Types.LONGVARCHAR
+                    && type != Types.LONGNVARCHAR
+                    && type != Types.SQLXML;
+        }
+
+        private boolean isAllowedKeyColumn(String columnName) {
+            if (primaryKeyColumns.stream().anyMatch(col -> col.equalsIgnoreCase(columnName))) {
+                return true;
+            }
+            return "ID".equalsIgnoreCase(columnName) && resolveColumn("ID") != null;
+        }
+    }
+
     private OracleConfig.OracleDataSource getDataSourceConfig(int index) {
         List<OracleConfig.OracleDataSource> datasources = oracleConfig.getDatasources();
         if (datasources == null || index < 0 || index >= datasources.size()) {

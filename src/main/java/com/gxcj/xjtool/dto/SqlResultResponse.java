@@ -92,6 +92,12 @@ public class SqlResultResponse {
     private String sql;
 
     /**
+     * Result-set edit metadata. Present only for simple single-table SELECTs that
+     * can be safely mapped back to a primary key.
+     */
+    private ResultEditMetadata editableMetadata;
+
+    /**
      * 分页：数据总行数（用于服务端分页时显示总页码）
      */
     @Builder.Default
