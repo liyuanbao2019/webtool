@@ -157,6 +157,26 @@ public interface OracleService {
     List<Map<String, Object>> getMysqlWsrepProcesses(int datasourceIndex, String databaseName, String command, String eventType);
 
     /**
+     * Query currently running slow MySQL statements.
+     *
+     * @param datasourceIndex datasource index
+     * @param databaseName    database name
+     * @param minSeconds      minimum running seconds
+     * @return slow SQL rows
+     */
+    List<Map<String, Object>> getMysqlCurrentSlowSql(int datasourceIndex, String databaseName, int minSeconds);
+
+    /**
+     * Query MySQL long transactions and lock waits.
+     *
+     * @param datasourceIndex datasource index
+     * @param databaseName    database name
+     * @param minSeconds      minimum transaction seconds
+     * @return diagnostics result with longTransactions and lockWaits
+     */
+    Map<String, Object> getMysqlTransactionDiagnostics(int datasourceIndex, String databaseName, int minSeconds);
+
+    /**
      * Kill MySQL processes after re-validating each selected process still matches
      * the wsrep query filter.
      *

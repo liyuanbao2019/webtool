@@ -2974,6 +2974,169 @@ public class OracleServiceImpl implements OracleService {
     }
 
     @Override
+    public List<Map<String, Object>> getMysqlCurrentSlowSql(int datasourceIndex, String databaseName, int minSeconds) {
+        validateMysqlProcessDatasource(datasourceIndex, databaseName);
+        int threshold = Math.max(1, Math.min(minSeconds, 3600));
+
+        String sql = "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO " +
+                "FROM information_schema.PROCESSLIST " +
+                "WHERE DB = ? " +
+                "AND COMMAND = 'Query' " +
+                "AND ID <> CONNECTION_ID() " +
+                "AND TIME >= ? " +
+                "AND INFO IS NOT NULL " +
+                "ORDER BY TIME DESC, ID DESC " +
+                "LIMIT 200";
+
+        try (Connection conn = getConnectionByIndex(datasourceIndex);
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setQueryTimeout(15);
+            stmt.setString(1, databaseName);
+            stmt.setInt(2, threshold);
+            try (ResultSet rs = stmt.executeQuery()) {
+                List<Map<String, Object>> rows = readRows(rs);
+                log.info("MySQL current slow SQL query success datasource={}, database={}, threshold={}s, rows={}",
+                        datasourceIndex, databaseName, threshold, rows.size());
+                return rows;
+            }
+        } catch (SQLException e) {
+            log.error("MySQL current slow SQL query failed datasource={}, database={}", datasourceIndex, databaseName, e);
+            throw new IllegalStateException(e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public Map<String, Object> getMysqlTransactionDiagnostics(int datasourceIndex, String databaseName, int minSeconds) {
+        validateMysqlProcessDatasource(datasourceIndex, databaseName);
+        int threshold = Math.max(1, Math.min(minSeconds, 86400));
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        try (Connection conn = getConnectionByIndex(datasourceIndex)) {
+            List<Map<String, Object>> longTransactions = queryMysqlLongTransactions(conn, databaseName, threshold);
+            result.put("longTransactions", longTransactions);
+            result.put("longTransactionCount", longTransactions.size());
+
+            try {
+                List<Map<String, Object>> lockWaits = queryMysqlLockWaits(conn, databaseName);
+                result.put("lockWaits", lockWaits);
+                result.put("lockWaitCount", lockWaits.size());
+                result.put("lockWaitMessage", null);
+            } catch (SQLException lockEx) {
+                log.warn("MySQL information_schema lock wait query failed datasource={}, database={}: {}",
+                        datasourceIndex, databaseName, lockEx.getMessage());
+                try {
+                    List<Map<String, Object>> lockWaits = queryMysqlLockWaitsFromPerformanceSchema(conn, databaseName);
+                    result.put("lockWaits", lockWaits);
+                    result.put("lockWaitCount", lockWaits.size());
+                    result.put("lockWaitMessage", null);
+                } catch (SQLException performanceLockEx) {
+                    log.warn("MySQL performance_schema lock wait query failed datasource={}, database={}: {}",
+                            datasourceIndex, databaseName, performanceLockEx.getMessage());
+                    result.put("lockWaits", Collections.emptyList());
+                    result.put("lockWaitCount", 0);
+                    result.put("lockWaitMessage", "Lock wait detail unavailable: " + performanceLockEx.getMessage());
+                }
+            }
+
+            log.info("MySQL transaction diagnostics success datasource={}, database={}, threshold={}s, trxCount={}",
+                    datasourceIndex, databaseName, threshold, longTransactions.size());
+            return result;
+        } catch (SQLException e) {
+            log.error("MySQL transaction diagnostics failed datasource={}, database={}", datasourceIndex, databaseName, e);
+            throw new IllegalStateException(e.getMessage(), e);
+        }
+    }
+
+    private List<Map<String, Object>> queryMysqlLongTransactions(Connection conn, String databaseName, int minSeconds)
+            throws SQLException {
+        String sql = "SELECT " +
+                "t.trx_id AS TRX_ID, " +
+                "t.trx_state AS TRX_STATE, " +
+                "DATE_FORMAT(t.trx_started, '%Y-%m-%d %H:%i:%s') AS TRX_STARTED, " +
+                "TIMESTAMPDIFF(SECOND, t.trx_started, NOW()) AS TRX_SECONDS, " +
+                "t.trx_mysql_thread_id AS PROCESS_ID, " +
+                "p.USER AS USER, p.HOST AS HOST, p.DB AS DB, p.COMMAND AS COMMAND, p.TIME AS PROCESS_TIME, " +
+                "p.STATE AS STATE, COALESCE(t.trx_query, p.INFO) AS SQL_TEXT, " +
+                "t.trx_rows_locked AS ROWS_LOCKED, t.trx_rows_modified AS ROWS_MODIFIED, " +
+                "t.trx_tables_locked AS TABLES_LOCKED, t.trx_lock_structs AS LOCK_STRUCTS " +
+                "FROM information_schema.innodb_trx t " +
+                "LEFT JOIN information_schema.PROCESSLIST p ON p.ID = t.trx_mysql_thread_id " +
+                "WHERE (p.DB = ? OR p.DB IS NULL) " +
+                "AND TIMESTAMPDIFF(SECOND, t.trx_started, NOW()) >= ? " +
+                "ORDER BY TRX_SECONDS DESC, PROCESS_ID DESC " +
+                "LIMIT 200";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setQueryTimeout(15);
+            stmt.setString(1, databaseName);
+            stmt.setInt(2, minSeconds);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return readRows(rs);
+            }
+        }
+    }
+
+    private List<Map<String, Object>> queryMysqlLockWaits(Connection conn, String databaseName) throws SQLException {
+        String sql = "SELECT " +
+                "r.trx_id AS WAITING_TRX_ID, " +
+                "r.trx_mysql_thread_id AS WAITING_PROCESS_ID, " +
+                "TIMESTAMPDIFF(SECOND, r.trx_started, NOW()) AS WAITING_SECONDS, " +
+                "rp.USER AS WAITING_USER, rp.HOST AS WAITING_HOST, rp.DB AS WAITING_DB, " +
+                "COALESCE(r.trx_query, rp.INFO) AS WAITING_SQL, " +
+                "b.trx_id AS BLOCKING_TRX_ID, " +
+                "b.trx_mysql_thread_id AS BLOCKING_PROCESS_ID, " +
+                "TIMESTAMPDIFF(SECOND, b.trx_started, NOW()) AS BLOCKING_SECONDS, " +
+                "bp.USER AS BLOCKING_USER, bp.HOST AS BLOCKING_HOST, bp.DB AS BLOCKING_DB, " +
+                "COALESCE(b.trx_query, bp.INFO) AS BLOCKING_SQL " +
+                "FROM information_schema.innodb_lock_waits w " +
+                "JOIN information_schema.innodb_trx r ON w.requesting_trx_id = r.trx_id " +
+                "JOIN information_schema.innodb_trx b ON w.blocking_trx_id = b.trx_id " +
+                "LEFT JOIN information_schema.PROCESSLIST rp ON rp.ID = r.trx_mysql_thread_id " +
+                "LEFT JOIN information_schema.PROCESSLIST bp ON bp.ID = b.trx_mysql_thread_id " +
+                "WHERE (rp.DB = ? OR bp.DB = ?) " +
+                "ORDER BY WAITING_SECONDS DESC, WAITING_PROCESS_ID DESC " +
+                "LIMIT 200";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setQueryTimeout(15);
+            stmt.setString(1, databaseName);
+            stmt.setString(2, databaseName);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return readRows(rs);
+            }
+        }
+    }
+
+    private List<Map<String, Object>> queryMysqlLockWaitsFromPerformanceSchema(Connection conn, String databaseName)
+            throws SQLException {
+        String sql = "SELECT " +
+                "r.trx_id AS WAITING_TRX_ID, " +
+                "r.trx_mysql_thread_id AS WAITING_PROCESS_ID, " +
+                "TIMESTAMPDIFF(SECOND, r.trx_started, NOW()) AS WAITING_SECONDS, " +
+                "rp.USER AS WAITING_USER, rp.HOST AS WAITING_HOST, rp.DB AS WAITING_DB, " +
+                "COALESCE(r.trx_query, rp.INFO) AS WAITING_SQL, " +
+                "b.trx_id AS BLOCKING_TRX_ID, " +
+                "b.trx_mysql_thread_id AS BLOCKING_PROCESS_ID, " +
+                "TIMESTAMPDIFF(SECOND, b.trx_started, NOW()) AS BLOCKING_SECONDS, " +
+                "bp.USER AS BLOCKING_USER, bp.HOST AS BLOCKING_HOST, bp.DB AS BLOCKING_DB, " +
+                "COALESCE(b.trx_query, bp.INFO) AS BLOCKING_SQL " +
+                "FROM performance_schema.data_lock_waits w " +
+                "JOIN information_schema.innodb_trx r ON w.REQUESTING_ENGINE_TRANSACTION_ID = r.trx_id " +
+                "JOIN information_schema.innodb_trx b ON w.BLOCKING_ENGINE_TRANSACTION_ID = b.trx_id " +
+                "LEFT JOIN information_schema.PROCESSLIST rp ON rp.ID = r.trx_mysql_thread_id " +
+                "LEFT JOIN information_schema.PROCESSLIST bp ON bp.ID = b.trx_mysql_thread_id " +
+                "WHERE (rp.DB = ? OR bp.DB = ?) " +
+                "ORDER BY WAITING_SECONDS DESC, WAITING_PROCESS_ID DESC " +
+                "LIMIT 200";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setQueryTimeout(15);
+            stmt.setString(1, databaseName);
+            stmt.setString(2, databaseName);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return readRows(rs);
+            }
+        }
+    }
+
+    @Override
     public Map<String, Object> killMysqlProcesses(int datasourceIndex, String databaseName, String command, String eventType, List<Long> processIds, String username) {
         validateMysqlProcessDatasource(datasourceIndex, databaseName);
 
@@ -3101,5 +3264,23 @@ public class OracleServiceImpl implements OracleService {
         row.put("id", processId);
         row.put("message", message);
         return row;
+    }
+
+    private List<Map<String, Object>> readRows(ResultSet rs) throws SQLException {
+        ResultSetMetaData metaData = rs.getMetaData();
+        int columnCount = metaData.getColumnCount();
+        List<String> columns = new ArrayList<>();
+        for (int i = 1; i <= columnCount; i++) {
+            columns.add(metaData.getColumnLabel(i));
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        while (rs.next()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            for (int i = 1; i <= columnCount; i++) {
+                row.put(columns.get(i - 1), getColumnValue(rs, i, metaData.getColumnType(i)));
+            }
+            rows.add(row);
+        }
+        return rows;
     }
 }

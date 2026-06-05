@@ -75,7 +75,9 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private boolean isSqlExecutionRequest(String uri) {
         return uri.equals("/api/oracle/execute")
                 || uri.equals("/api/oracle/explain")
-                || uri.equals("/api/oracle/result-edits/commit");
+                || uri.equals("/api/oracle/result-edits/commit")
+                || uri.equals("/api/database/lock/mysql-slow-sql")
+                || uri.equals("/api/database/lock/mysql-transaction-diagnostics");
     }
 
     /**

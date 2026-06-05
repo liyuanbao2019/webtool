@@ -42,7 +42,8 @@
         body {
             background-color: #f4f6f9;
             height: 100vh;
-            height: 100dvh; /* 现代浏览器动态高度，防止底部工具栏遮挡 */
+            height: 100dvh;
+            /* 现代浏览器动态高度，防止底部工具栏遮挡 */
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -87,7 +88,8 @@
             flex: 1;
             display: flex;
             overflow: hidden;
-            min-height: 0; /* 关键修复：防止 Flex 子元素被内容撑出滚动边界 */
+            min-height: 0;
+            /* 关键修复：防止 Flex 子元素被内容撑出滚动边界 */
         }
 
         /* Sidebar History */
@@ -303,10 +305,16 @@
             padding: 10px;
         }
 
-        .mysql-process-filterbar .form-select {
+        .mysql-process-filterbar .form-select,
+        .mysql-process-filterbar .form-control {
             border-color: var(--workspace-border);
             border-radius: 6px;
             font-size: 0.84rem;
+            height: 31px;
+        }
+
+        .mysql-process-filterbar .form-select {
+            width: 100%;
         }
 
         .mysql-process-source {
@@ -729,11 +737,13 @@
         }
 
         .result-footer {
-            padding: 10px 15px 20px 15px; /* 增加底部 padding 防止浏览器底部遮挡 */
+            padding: 10px 15px 20px 15px;
+            /* 增加底部 padding 防止浏览器底部遮挡 */
             border-top: 1px solid #eee;
             background: #fbfbfb;
             display: flex;
-            flex-wrap: wrap; /* 允许换行，避免挤压时撑出屏幕外 */
+            flex-wrap: wrap;
+            /* 允许换行，避免挤压时撑出屏幕外 */
             gap: 10px;
             justify-content: space-between;
             align-items: center;
@@ -769,6 +779,7 @@
         .context-menu-item i {
             width: 16px;
         }
+
         .sql-header .lang-switcher {
             display: flex;
             gap: 2px;
@@ -796,7 +807,7 @@
         .sql-header .lang-btn.active {
             background: #fff;
             color: #0d6efd;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
@@ -816,7 +827,8 @@
                 <!-- Language Switcher -->
                 <div class="lang-switcher">
                     <button class="lang-btn" :class="{active: locale === 'en'}" @click="setLanguage('en')">EN</button>
-                    <button class="lang-btn" :class="{active: locale === 'zh_CN'}" @click="setLanguage('zh_CN')">{{ t('sql.langZh') }}</button>
+                    <button class="lang-btn" :class="{active: locale === 'zh_CN'}" @click="setLanguage('zh_CN')">{{
+                        t('sql.langZh') }}</button>
                 </div>
                 <!-- Font Size Settings -->
                 <div class="d-flex align-items-center gap-1 border-end pe-3">
@@ -829,7 +841,7 @@
                         :title="t('sql.zoomIn')">A+</button>
                 </div>
 
-                <div class="input-group" style="width: 200px;">
+                <div class="input-group" style="width: 260px;">
                     <label class="input-group-text bg-light"><i class="fas fa-server"></i></label>
                     <select class="form-select" v-model="selectedDataSourceIdx" @change="fetchDatabaseType">
                         <option v-for="ds in dataSources" :key="ds.index" :value="ds.index">
@@ -857,8 +869,9 @@
                             <i class="fas fa-search"></i>
                         </button>
                         <input type="text" class="form-control"
-                            style="font-size: 0.75rem; padding: 2px 6px; height: 24px;" :placeholder="t('sql.searchObjects')"
-                            v-model="objectSearch" @keyup.enter="forceReloadObjects">
+                            style="font-size: 0.75rem; padding: 2px 6px; height: 24px;"
+                            :placeholder="t('sql.searchObjects')" v-model="objectSearch"
+                            @keyup.enter="forceReloadObjects">
                     </div>
 
                     <button class="btn btn-outline-secondary" style="font-size: 0.7rem; padding: 2px 6px; height: 24px;"
@@ -869,191 +882,200 @@
 
                 <!-- Accordion for Database Objects（可滚动区域） -->
                 <div class="history-sidebar-scroll">
-                <div class="accordion accordion-flush" id="dbObjectsAccordion">
+                    <div class="accordion accordion-flush" id="dbObjectsAccordion">
 
-                    <!-- Tables -->
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button"
-                                @click="loadDatabaseObjects('tables')" data-bs-toggle="collapse"
-                                data-bs-target="#collapseTables">
-                                <i class="fas fa-table me-2"></i>{{ t('sql.tables') }} <span v-if="loadedObjects.tables">({{
-                                    filteredObjects('tables').length }})</span>
-                            </button>
-                        </h2>
-                        <div id="collapseTables" class="accordion-collapse collapse"
-                            data-bs-parent="#dbObjectsAccordion">
-                            <div class="accordion-body p-0">
-                                <div v-if="loadingObjects.tables" class="text-center p-3 text-muted">
-                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
-                                </div>
-                                <div v-else-if="filteredObjects('tables').length === 0"
-                                    class="text-center p-3 text-muted small">
-                                    {{ t('sql.noData') }}
-                                </div>
-                                <div v-else class="object-list">
-                                    <div v-for="obj in filteredObjects('tables')" :key="obj.name" class="object-item"
-                                        @click="handleObjectClick('tables', obj.name)"
-                                        @contextmenu.prevent="showContextMenu($event, obj.name)" :title="obj.name">
-                                        <i class="fas fa-table text-primary me-2"></i>{{ obj.name }}
+                        <!-- Tables -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button"
+                                    @click="loadDatabaseObjects('tables')" data-bs-toggle="collapse"
+                                    data-bs-target="#collapseTables">
+                                    <i class="fas fa-table me-2"></i>{{ t('sql.tables') }} <span
+                                        v-if="loadedObjects.tables">({{
+                                        filteredObjects('tables').length }})</span>
+                                </button>
+                            </h2>
+                            <div id="collapseTables" class="accordion-collapse collapse"
+                                data-bs-parent="#dbObjectsAccordion">
+                                <div class="accordion-body p-0">
+                                    <div v-if="loadingObjects.tables" class="text-center p-3 text-muted">
+                                        <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                    </div>
+                                    <div v-else-if="filteredObjects('tables').length === 0"
+                                        class="text-center p-3 text-muted small">
+                                        {{ t('sql.noData') }}
+                                    </div>
+                                    <div v-else class="object-list">
+                                        <div v-for="obj in filteredObjects('tables')" :key="obj.name"
+                                            class="object-item" @click="handleObjectClick('tables', obj.name)"
+                                            @contextmenu.prevent="showContextMenu($event, obj.name)" :title="obj.name">
+                                            <i class="fas fa-table text-primary me-2"></i>{{ obj.name }}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Views -->
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button"
-                                @click="loadDatabaseObjects('views')" data-bs-toggle="collapse"
-                                data-bs-target="#collapseViews">
-                                <i class="fas fa-eye me-2"></i>{{ t('sql.views') }} <span v-if="loadedObjects.views">({{
-                                    filteredObjects('views').length }})</span>
-                            </button>
-                        </h2>
-                        <div id="collapseViews" class="accordion-collapse collapse"
-                            data-bs-parent="#dbObjectsAccordion">
-                            <div class="accordion-body p-0">
-                                <div v-if="loadingObjects.views" class="text-center p-3 text-muted">
-                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
-                                </div>
-                                <div v-else-if="filteredObjects('views').length === 0"
-                                    class="text-center p-3 text-muted small">
-                                    {{ t('sql.noData') }}
-                                </div>
-                                <div v-else class="object-list">
-                                    <div v-for="obj in filteredObjects('views')" :key="obj.name" class="object-item"
-                                        @click="handleObjectClick('views', obj.name)" :title="obj.name">
-                                        <i class="fas fa-eye text-info me-2"></i>{{ obj.name }}
+                        <!-- Views -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button"
+                                    @click="loadDatabaseObjects('views')" data-bs-toggle="collapse"
+                                    data-bs-target="#collapseViews">
+                                    <i class="fas fa-eye me-2"></i>{{ t('sql.views') }} <span
+                                        v-if="loadedObjects.views">({{
+                                        filteredObjects('views').length }})</span>
+                                </button>
+                            </h2>
+                            <div id="collapseViews" class="accordion-collapse collapse"
+                                data-bs-parent="#dbObjectsAccordion">
+                                <div class="accordion-body p-0">
+                                    <div v-if="loadingObjects.views" class="text-center p-3 text-muted">
+                                        <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                    </div>
+                                    <div v-else-if="filteredObjects('views').length === 0"
+                                        class="text-center p-3 text-muted small">
+                                        {{ t('sql.noData') }}
+                                    </div>
+                                    <div v-else class="object-list">
+                                        <div v-for="obj in filteredObjects('views')" :key="obj.name" class="object-item"
+                                            @click="handleObjectClick('views', obj.name)" :title="obj.name">
+                                            <i class="fas fa-eye text-info me-2"></i>{{ obj.name }}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Indexes -->
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button"
-                                @click="loadDatabaseObjects('indexes')" data-bs-toggle="collapse"
-                                data-bs-target="#collapseIndexes">
-                                <i class="fas fa-sort-amount-down me-2"></i>{{ t('sql.indexes') }} <span v-if="loadedObjects.indexes">({{
-                                    filteredObjects('indexes').length }})</span>
-                            </button>
-                        </h2>
-                        <div id="collapseIndexes" class="accordion-collapse collapse"
-                            data-bs-parent="#dbObjectsAccordion">
-                            <div class="accordion-body p-0">
-                                <div v-if="loadingObjects.indexes" class="text-center p-3 text-muted">
-                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
-                                </div>
-                                <div v-else-if="filteredObjects('indexes').length === 0"
-                                    class="text-center p-3 text-muted small">
-                                    {{ t('sql.noData') }}
-                                </div>
-                                <div v-else class="object-list">
-                                    <div v-for="obj in filteredObjects('indexes')" :key="obj.name" class="object-item"
-                                        @click="handleObjectClick('indexes', obj.name)" :title="obj.name">
-                                        <i class="fas fa-sort-amount-down text-warning me-2"></i>{{ obj.name }}
+                        <!-- Indexes -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button"
+                                    @click="loadDatabaseObjects('indexes')" data-bs-toggle="collapse"
+                                    data-bs-target="#collapseIndexes">
+                                    <i class="fas fa-sort-amount-down me-2"></i>{{ t('sql.indexes') }} <span
+                                        v-if="loadedObjects.indexes">({{
+                                        filteredObjects('indexes').length }})</span>
+                                </button>
+                            </h2>
+                            <div id="collapseIndexes" class="accordion-collapse collapse"
+                                data-bs-parent="#dbObjectsAccordion">
+                                <div class="accordion-body p-0">
+                                    <div v-if="loadingObjects.indexes" class="text-center p-3 text-muted">
+                                        <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                    </div>
+                                    <div v-else-if="filteredObjects('indexes').length === 0"
+                                        class="text-center p-3 text-muted small">
+                                        {{ t('sql.noData') }}
+                                    </div>
+                                    <div v-else class="object-list">
+                                        <div v-for="obj in filteredObjects('indexes')" :key="obj.name"
+                                            class="object-item" @click="handleObjectClick('indexes', obj.name)"
+                                            :title="obj.name">
+                                            <i class="fas fa-sort-amount-down text-warning me-2"></i>{{ obj.name }}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Procedures/Functions -->
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button"
-                                @click="loadDatabaseObjects('procedures')" data-bs-toggle="collapse"
-                                data-bs-target="#collapseProcedures">
-                                <i class="fas fa-code me-2"></i>{{ t('sql.procedures') }} <span v-if="loadedObjects.procedures">({{
-                                    filteredObjects('procedures').length }})</span>
-                            </button>
-                        </h2>
-                        <div id="collapseProcedures" class="accordion-collapse collapse"
-                            data-bs-parent="#dbObjectsAccordion">
-                            <div class="accordion-body p-0">
-                                <div v-if="loadingObjects.procedures" class="text-center p-3 text-muted">
-                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
-                                </div>
-                                <div v-else-if="filteredObjects('procedures').length === 0"
-                                    class="text-center p-3 text-muted small">
-                                    {{ t('sql.noData') }}
-                                </div>
-                                <div v-else class="object-list">
-                                    <div v-for="obj in filteredObjects('procedures')" :key="obj.name"
-                                        class="object-item" @click="handleObjectClick('procedures', obj.name)"
-                                        :title="obj.name">
-                                        <i class="fas fa-code text-success me-2"></i>{{ obj.name }}
+                        <!-- Procedures/Functions -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button"
+                                    @click="loadDatabaseObjects('procedures')" data-bs-toggle="collapse"
+                                    data-bs-target="#collapseProcedures">
+                                    <i class="fas fa-code me-2"></i>{{ t('sql.procedures') }} <span
+                                        v-if="loadedObjects.procedures">({{
+                                        filteredObjects('procedures').length }})</span>
+                                </button>
+                            </h2>
+                            <div id="collapseProcedures" class="accordion-collapse collapse"
+                                data-bs-parent="#dbObjectsAccordion">
+                                <div class="accordion-body p-0">
+                                    <div v-if="loadingObjects.procedures" class="text-center p-3 text-muted">
+                                        <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                    </div>
+                                    <div v-else-if="filteredObjects('procedures').length === 0"
+                                        class="text-center p-3 text-muted small">
+                                        {{ t('sql.noData') }}
+                                    </div>
+                                    <div v-else class="object-list">
+                                        <div v-for="obj in filteredObjects('procedures')" :key="obj.name"
+                                            class="object-item" @click="handleObjectClick('procedures', obj.name)"
+                                            :title="obj.name">
+                                            <i class="fas fa-code text-success me-2"></i>{{ obj.name }}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Triggers -->
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button"
-                                @click="loadDatabaseObjects('triggers')" data-bs-toggle="collapse"
-                                data-bs-target="#collapseTriggers">
-                                <i class="fas fa-bolt me-2"></i>{{ t('sql.triggers') }} <span v-if="loadedObjects.triggers">({{
-                                    filteredObjects('triggers').length }})</span>
-                            </button>
-                        </h2>
-                        <div id="collapseTriggers" class="accordion-collapse collapse"
-                            data-bs-parent="#dbObjectsAccordion">
-                            <div class="accordion-body p-0">
-                                <div v-if="loadingObjects.triggers" class="text-center p-3 text-muted">
-                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
-                                </div>
-                                <div v-else-if="filteredObjects('triggers').length === 0"
-                                    class="text-center p-3 text-muted small">
-                                    {{ t('sql.noData') }}
-                                </div>
-                                <div v-else class="object-list">
-                                    <div v-for="obj in filteredObjects('triggers')" :key="obj.name" class="object-item"
-                                        @click="handleObjectClick('triggers', obj.name)" :title="obj.name">
-                                        <i class="fas fa-bolt text-danger me-2"></i>{{ obj.name }}
+                        <!-- Triggers -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button"
+                                    @click="loadDatabaseObjects('triggers')" data-bs-toggle="collapse"
+                                    data-bs-target="#collapseTriggers">
+                                    <i class="fas fa-bolt me-2"></i>{{ t('sql.triggers') }} <span
+                                        v-if="loadedObjects.triggers">({{
+                                        filteredObjects('triggers').length }})</span>
+                                </button>
+                            </h2>
+                            <div id="collapseTriggers" class="accordion-collapse collapse"
+                                data-bs-parent="#dbObjectsAccordion">
+                                <div class="accordion-body p-0">
+                                    <div v-if="loadingObjects.triggers" class="text-center p-3 text-muted">
+                                        <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                    </div>
+                                    <div v-else-if="filteredObjects('triggers').length === 0"
+                                        class="text-center p-3 text-muted small">
+                                        {{ t('sql.noData') }}
+                                    </div>
+                                    <div v-else class="object-list">
+                                        <div v-for="obj in filteredObjects('triggers')" :key="obj.name"
+                                            class="object-item" @click="handleObjectClick('triggers', obj.name)"
+                                            :title="obj.name">
+                                            <i class="fas fa-bolt text-danger me-2"></i>{{ obj.name }}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Sequences (Only for Oracle and DM) -->
-                    <div class="accordion-item" v-if="currentDbType !== 'MYSQL'">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button"
-                                @click="loadDatabaseObjects('sequences')" data-bs-toggle="collapse"
-                                data-bs-target="#collapseSequences">
-                                <i class="fas fa-list-ol me-2"></i>{{ t('sql.sequences') }} <span v-if="loadedObjects.sequences">({{
-                                    filteredObjects('sequences').length }})</span>
-                            </button>
-                        </h2>
-                        <div id="collapseSequences" class="accordion-collapse collapse"
-                            data-bs-parent="#dbObjectsAccordion">
-                            <div class="accordion-body p-0">
-                                <div v-if="loadingObjects.sequences" class="text-center p-3 text-muted">
-                                    <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
-                                </div>
-                                <div v-else-if="filteredObjects('sequences').length === 0"
-                                    class="text-center p-3 text-muted small">
-                                    {{ t('sql.noData') }}
-                                </div>
-                                <div v-else class="object-list">
-                                    <div v-for="obj in filteredObjects('sequences')" :key="obj.name" class="object-item"
-                                        @click="handleObjectClick('sequences', obj.name)" :title="obj.name">
-                                        <i class="fas fa-list-ol text-secondary me-2"></i>{{ obj.name }}
+                        <!-- Sequences (Only for Oracle and DM) -->
+                        <div class="accordion-item" v-if="currentDbType !== 'MYSQL'">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button"
+                                    @click="loadDatabaseObjects('sequences')" data-bs-toggle="collapse"
+                                    data-bs-target="#collapseSequences">
+                                    <i class="fas fa-list-ol me-2"></i>{{ t('sql.sequences') }} <span
+                                        v-if="loadedObjects.sequences">({{
+                                        filteredObjects('sequences').length }})</span>
+                                </button>
+                            </h2>
+                            <div id="collapseSequences" class="accordion-collapse collapse"
+                                data-bs-parent="#dbObjectsAccordion">
+                                <div class="accordion-body p-0">
+                                    <div v-if="loadingObjects.sequences" class="text-center p-3 text-muted">
+                                        <div class="spinner-border spinner-border-sm"></div> {{ t('sql.loading') }}
+                                    </div>
+                                    <div v-else-if="filteredObjects('sequences').length === 0"
+                                        class="text-center p-3 text-muted small">
+                                        {{ t('sql.noData') }}
+                                    </div>
+                                    <div v-else class="object-list">
+                                        <div v-for="obj in filteredObjects('sequences')" :key="obj.name"
+                                            class="object-item" @click="handleObjectClick('sequences', obj.name)"
+                                            :title="obj.name">
+                                            <i class="fas fa-list-ol text-secondary me-2"></i>{{ obj.name }}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                </div>
+                    </div>
                 </div>
 
                 <!-- 数据库管理 / 常用工具（3列小卡片，仅前端占位） -->
@@ -1062,12 +1084,10 @@
                         <div class="sidebar-common-tools-title">{{ t('sql.commonTools') }}</div>
                     </div>
                     <div class="sidebar-tools-grid">
-                        <button type="button" class="sidebar-tool-card"
-                            v-for="tool in visibleCommonTools"
+                        <button type="button" class="sidebar-tool-card" v-for="tool in visibleCommonTools"
                             :key="tool.id"
                             :disabled="selectedDataSourceIdx === null || (tool.requireOracle && !isOracleDb) || (tool.requireMysql && !isMysqlDb)"
-                            :title="t(tool.descKey)"
-                            @click="onCommonTool(tool)">
+                            :title="t(tool.descKey)" @click="onCommonTool(tool)">
                             <span class="sidebar-tool-card-icon"><i :class="tool.icon"></i></span>
                             <span class="sidebar-tool-card-label">{{ t(tool.labelKey) }}</span>
                             <span v-if="tool.requireOracle" class="sidebar-tool-card-badge">Oracle</span>
@@ -1080,7 +1100,8 @@
             <!-- Main Content -->
             <div class="editor-container">
                 <!-- Toggle Sidebar Button (when collapsed) -->
-                <button class="sidebar-toggle-btn" v-if="!showSidebar" @click="showSidebar = true" :title="t('sql.showObjectBrowser')">
+                <button class="sidebar-toggle-btn" v-if="!showSidebar" @click="showSidebar = true"
+                    :title="t('sql.showObjectBrowser')">
                     <i class="fas fa-list"></i>
                 </button>
 
@@ -1097,7 +1118,8 @@
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
-                        <button class="btn btn-outline-primary btn-sm sql-tab-add" @click="newTab" :title="t('sql.newTab')">
+                        <button class="btn btn-outline-primary btn-sm sql-tab-add" @click="newTab"
+                            :title="t('sql.newTab')">
                             <i class="fas fa-plus"></i>
                         </button>
                     </div>
@@ -1185,7 +1207,8 @@
                                     {{ t('sql.commit') }}
                                 </button>
                                 <button class="btn btn-outline-secondary btn-sm" @click="rollbackResultEdits"
-                                    :disabled="pendingEditCount === 0 || committingEdits" :title="t('sql.rollbackEdits')">
+                                    :disabled="pendingEditCount === 0 || committingEdits"
+                                    :title="t('sql.rollbackEdits')">
                                     <i class="fas fa-undo me-1"></i>{{ t('sql.rollback') }}
                                 </button>
                             </div>
@@ -1200,7 +1223,8 @@
                                 :style="{ fontSize: 'var(--base-font-size)', padding: '2px 8px', height: 'auto' }"
                                 @click="switchResultTab(idx)" :title="res.sql">
                                 <i class="fas" :class="res.success ? 'fa-check text-success' : 'fa-times text-danger'"
-                                    v-if="!res.columns" :style="{ fontSize: 'var(--base-font-size)', marginRight: '3px' }"></i>
+                                    v-if="!res.columns"
+                                    :style="{ fontSize: 'var(--base-font-size)', marginRight: '3px' }"></i>
                                 <i class="fas fa-table text-primary" v-else
                                     :style="{ fontSize: 'var(--base-font-size)', marginRight: '3px' }"></i>
                                 {{ t('sql.resultNum') }} {{ idx + 1 }}
@@ -1230,9 +1254,12 @@
                                     <i class="fas fa-download me-1"></i>{{ t('sql.export') }}
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end">
-                                    <li><a class="dropdown-item" href="#" @click.prevent="exportCsv">{{ t('sql.exportCsv') }}</a></li>
-                                    <li><a class="dropdown-item" href="#" @click.prevent="exportExcel">{{ t('sql.exportExcel') }}</a></li>
-                                    <li><a class="dropdown-item" href="#" @click.prevent="exportInsertSql">{{ t('sql.exportSql') }}</a></li>
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportCsv">{{
+                                            t('sql.exportCsv') }}</a></li>
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportExcel">{{
+                                            t('sql.exportExcel') }}</a></li>
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportInsertSql">{{
+                                            t('sql.exportSql') }}</a></li>
                                 </ul>
                             </div>
                         </div>
@@ -1261,9 +1288,12 @@
                                     <i class="fas fa-download me-1"></i>{{ t('sql.export') }}
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end">
-                                    <li><a class="dropdown-item" href="#" @click.prevent="exportCsv">{{ t('sql.exportCsv') }}</a></li>
-                                    <li><a class="dropdown-item" href="#" @click.prevent="exportExcel">{{ t('sql.exportExcel') }}</a></li>
-                                    <li><a class="dropdown-item" href="#" @click.prevent="exportInsertSql">{{ t('sql.exportSql') }}</a></li>
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportCsv">{{
+                                            t('sql.exportCsv') }}</a></li>
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportExcel">{{
+                                            t('sql.exportExcel') }}</a></li>
+                                    <li><a class="dropdown-item" href="#" @click.prevent="exportInsertSql">{{
+                                            t('sql.exportSql') }}</a></li>
                                 </ul>
                             </div>
                         </div>
@@ -1287,11 +1317,9 @@
                                         :class="{ 'editable-cell': canEditResultCell(col), 'edited-cell': isEditedCell(row, col), 'editing-cell': isEditingCell(row, col) }"
                                         @dblclick="startCellEdit(row, col)">
                                         <input v-if="isEditingCell(row, col)" class="result-cell-editor"
-                                            :ref="'cellEditor_' + editKey(row, col)"
-                                            v-model="editingCell.value"
+                                            :ref="'cellEditor_' + editKey(row, col)" v-model="editingCell.value"
                                             @keydown.enter.prevent="finishCellEdit(true)"
-                                            @keydown.esc.prevent="finishCellEdit(false)"
-                                            @blur="finishCellEdit(true)">
+                                            @keydown.esc.prevent="finishCellEdit(false)" @blur="finishCellEdit(true)">
                                         <span v-else>{{ formatCellValue(displayCellValue(row, col)) }}</span>
                                     </td>
                                 </tr>
@@ -1304,8 +1332,8 @@
                             <div class="d-flex align-items-center gap-2 mb-2">
                                 <span class="text-muted small">{{ t('sql.textViewTip') }}</span>
                             </div>
-                            <textarea class="form-control font-monospace" rows="15" readonly
-                                :value="textViewContent" :style="{ fontSize: 'var(--base-font-size)', resize: 'vertical', minHeight: '200px', whiteSpace: 'pre', overflowX: 'auto' }"
+                            <textarea class="form-control font-monospace" rows="15" readonly :value="textViewContent"
+                                :style="{ fontSize: 'var(--base-font-size)', resize: 'vertical', minHeight: '200px', whiteSpace: 'pre', overflowX: 'auto' }"
                                 @click="$event.target.select()"></textarea>
                         </div>
 
@@ -1315,7 +1343,8 @@
                             <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
                             <h5>{{ t('sql.success') }}</h5>
                             <p class="text-secondary">
-                                {{ currentResult.sqlType }} {{ t('sql.affectedRows') }} <span class="fw-bold text-dark">{{
+                                {{ currentResult.sqlType }} {{ t('sql.affectedRows') }} <span
+                                    class="fw-bold text-dark">{{
                                     currentResult.affectedRows
                                     }}</span> {{ t('sql.rows') }}
                             </p>
@@ -1324,7 +1353,8 @@
                         <!-- Error Result -->
                         <div v-else-if="currentResult && !currentResult.success" class="p-4">
                             <div class="alert alert-danger">
-                                <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>{{ t('sql.error') }}</h6>
+                                <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>{{
+                                    t('sql.error') }}</h6>
                                 <hr>
                                 <pre class="mb-0" style="white-space: pre-wrap;">{{ currentResult.errorMessage }}</pre>
                             </div>
@@ -1343,7 +1373,8 @@
                             <span class="text-muted">
                                 {{ t('sql.showing') }} {{ pageStart }} {{ t('sql.to') }} {{ pageEnd }} {{ t('sql.of') }}
                                 <strong>{{ totalRowsText }}</strong> {{ t('sql.rows') }}
-                                <span v-if="effectiveServerPaging" class="badge bg-primary ms-1" style="font-size:0.7em;">{{ t('sql.serverSidePaging') }}</span>
+                                <span v-if="effectiveServerPaging" class="badge bg-primary ms-1"
+                                    style="font-size:0.7em;">{{ t('sql.serverSidePaging') }}</span>
                             </span>
                             <select class="form-select form-select-sm" style="width: auto;"
                                 v-model="pagination.pageSize"
@@ -1396,14 +1427,16 @@
                     <div class="modal-body fs-5" style="max-height: calc(92vh - 190px); overflow: auto;">
                         <div class="alert alert-warning">
                             <strong><i class="fas fa-server me-1"></i>{{ t('sql.operating') }}</strong>
-                            {{ t('sql.executingHighRisk') }} <strong class="text-danger">"{{ currentDatabaseName }}"</strong>
+                            {{ t('sql.executingHighRisk') }} <strong class="text-danger">"{{ currentDatabaseName
+                                }}"</strong>
                         </div>
                         <div class="p-4 bg-dark text-danger fw-bold rounded my-3 text-center shadow-inner"
                             style="font-size: 1.25rem; word-break: break-all; letter-spacing: 1px; max-height: 42vh; overflow: auto; white-space: pre-wrap; text-align: left;">
                             {{ pendingSql }}
                         </div>
                         <div v-if="dangerousSqlReason" class="text-secondary small text-center mb-3">
-                            ({{ t('sql.blockedReason') }}: {{ dangerousSqlReasonKey ? t(dangerousSqlReasonKey) : dangerousSqlReason }})
+                            ({{ t('sql.blockedReason') }}: {{ dangerousSqlReasonKey ? t(dangerousSqlReasonKey) :
+                            dangerousSqlReason }})
                         </div>
                         <div v-if="dangerousSqlSuggestionKey" class="text-secondary small text-center mb-3">
                             {{ t(dangerousSqlSuggestionKey) }}
@@ -1415,8 +1448,8 @@
                     </div>
                     <div class="modal-footer bg-light justify-content-center"
                         style="position: sticky; bottom: 0; z-index: 2; flex-wrap: wrap; gap: .5rem;">
-                        <button type="button" class="btn btn-secondary btn-lg me-3 px-4"
-                            @click="cancelDangerousSql">{{ t('sql.cancelExecute') }}</button>
+                        <button type="button" class="btn btn-secondary btn-lg me-3 px-4" @click="cancelDangerousSql">{{
+                            t('sql.cancelExecute') }}</button>
                         <button type="button" class="btn btn-danger btn-lg px-4" @click="confirmDangerousSql"
                             :disabled="generatingToken">
                             <span v-if="generatingToken" class="spinner-border spinner-border-sm me-1"></span>
@@ -1467,7 +1500,8 @@
                             <select class="form-select" v-model="selectedSqlTemplateId">
                                 <option disabled value="">{{ t('sql.selectTemplate') }}</option>
                                 <option v-for="tpl in filteredSqlTemplates" :key="tpl.id" :value="tpl.id">
-                                    [{{ t(tpl.categoryKey) }}][{{ (tpl.dbTypes || ['ORACLE','DM','MYSQL']).join('/') }}] {{
+                                    [{{ t(tpl.categoryKey) }}][{{ (tpl.dbTypes || ['ORACLE','DM','MYSQL']).join('/') }}]
+                                    {{
                                     t(tpl.nameKey) }} - {{ t(tpl.descKey) }}
                                 </option>
                             </select>
@@ -1498,7 +1532,8 @@
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-light" @click="closeSqlTemplateModal">{{ t('sql.cancel') }}</button>
+                        <button type="button" class="btn btn-light" @click="closeSqlTemplateModal">{{ t('sql.cancel')
+                            }}</button>
                         <button type="button" class="btn btn-outline-secondary" @click="copySqlTemplate"
                             :disabled="!renderedSqlTemplate">
                             <i class="fas fa-copy me-1"></i>{{ t('sql.copy') }}
@@ -1540,7 +1575,8 @@
         <!-- Table Structure Modal -->
         <!-- 解锁库表弹窗 -->
         <div class="modal fade" id="unlockTableModal" tabindex="-1" ref="unlockTableModal">
-            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: min(900px, 94vw);">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"
+                style="max-width: min(900px, 94vw);">
                 <div class="modal-content">
                     <div class="modal-header" style="background:#0d6efd;color:#fff;">
                         <h5 class="modal-title"><i class="fas fa-unlock-alt me-2"></i>{{ t('sql.unlockTables') }}</h5>
@@ -1552,12 +1588,15 @@
                             <div class="text-muted small">{{ t('sql.queryingLockInfo') }}</div>
                         </div>
                         <div v-else-if="lockData.error">
-                            <div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{{ lockData.error }}</div>
+                            <div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{{
+                                lockData.error }}</div>
                         </div>
                         <div v-else>
                             <div class="d-flex align-items-center justify-content-between mb-2">
-                                <span class="small text-muted">{{ t('sql.currentDatasource') }}<strong>{{ currentDatabaseName }}</strong></span>
-                                <button class="btn btn-outline-primary btn-sm" @click="fetchLockedObjects" :disabled="lockData.loading">
+                                <span class="small text-muted">{{ t('sql.currentDatasource') }}<strong>{{
+                                        currentDatabaseName }}</strong></span>
+                                <button class="btn btn-outline-primary btn-sm" @click="fetchLockedObjects"
+                                    :disabled="lockData.loading">
                                     <i class="fas fa-redo me-1"></i>{{ t('sql.refresh') }}
                                 </button>
                             </div>
@@ -1566,7 +1605,8 @@
                                 <div>{{ t('sql.noBlockingLocks') }}</div>
                             </div>
                             <div v-else class="table-responsive">
-                                <table class="table table-bordered table-hover table-sm mb-0" style="font-size: 0.78rem;">
+                                <table class="table table-bordered table-hover table-sm mb-0"
+                                    style="font-size: 0.78rem;">
                                     <thead class="table-light">
                                         <tr>
                                             <th style="width:40px;">#</th>
@@ -1590,23 +1630,28 @@
                                             <td><code>{{ row.SID }}</code></td>
                                             <td><code>{{ row.SERIAL_NUM }}</code></td>
                                             <td>{{ row.USERNAME }}</td>
-                                            <td class="text-truncate" style="max-width:100px;" :title="row.PROGRAM">{{ row.PROGRAM }}</td>
-                                            <td><span :class="row.STATUS === 'ACTIVE' ? 'text-danger' : 'text-muted'">{{ row.STATUS }}</span></td>
-                                            <td><span :class="row.LOCK_DURATION_SECONDS > 300 ? 'text-danger fw-bold' : 'text-warning'">{{ formatLockDuration(row.LOCK_DURATION_SECONDS) }}</span></td>
+                                            <td class="text-truncate" style="max-width:100px;" :title="row.PROGRAM">{{
+                                                row.PROGRAM }}</td>
+                                            <td><span :class="row.STATUS === 'ACTIVE' ? 'text-danger' : 'text-muted'">{{
+                                                    row.STATUS }}</span></td>
+                                            <td><span
+                                                    :class="row.LOCK_DURATION_SECONDS > 300 ? 'text-danger fw-bold' : 'text-warning'">{{
+                                                    formatLockDuration(row.LOCK_DURATION_SECONDS) }}</span></td>
                                             <td>{{ row.LOGON_TIME }}</td>
                                             <td>
-                                                <button class="btn btn-danger btn-sm py-0 px-1" style="font-size:0.7rem;"
-                                                    :disabled="lockData.unlocking === idx"
-                                                    @click="doUnlock(row, idx)"
-                                                    :title="t('sql.terminateSession')">
-                                                    <span v-if="lockData.unlocking === idx" class="spinner-border spinner-border-sm"></span>
+                                                <button class="btn btn-danger btn-sm py-0 px-1"
+                                                    style="font-size:0.7rem;" :disabled="lockData.unlocking === idx"
+                                                    @click="doUnlock(row, idx)" :title="t('sql.terminateSession')">
+                                                    <span v-if="lockData.unlocking === idx"
+                                                        class="spinner-border spinner-border-sm"></span>
                                                     <i v-else class="fas fa-ban me-1"></i>{{ t('sql.terminate') }}
                                                 </button>
                                             </td>
                                         </tr>
                                     </tbody>
                                 </table>
-                                <div class="small text-muted mt-1">{{ lockData.rows.length }} {{ t('sql.lockRecords') }}</div>
+                                <div class="small text-muted mt-1">{{ lockData.rows.length }} {{ t('sql.lockRecords') }}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1658,9 +1703,11 @@
                                     :disabled="mysqlProcessData.loading">
                                     <i class="fas fa-redo me-1"></i>{{ t('sql.refresh') }}
                                 </button>
-                                <button class="btn btn-danger btn-sm mysql-process-danger-btn" @click="killSelectedMysqlProcesses"
+                                <button class="btn btn-danger btn-sm mysql-process-danger-btn"
+                                    @click="killSelectedMysqlProcesses"
                                     :disabled="mysqlProcessData.killing || mysqlProcessData.selectedIds.length === 0">
-                                    <span v-if="mysqlProcessData.killing" class="spinner-border spinner-border-sm me-1"></span>
+                                    <span v-if="mysqlProcessData.killing"
+                                        class="spinner-border spinner-border-sm me-1"></span>
                                     <i v-else class="fas fa-ban me-1"></i>
                                     {{ t('sql.killSelectedProcesses') }} ({{ mysqlProcessData.selectedIds.length }})
                                 </button>
@@ -1676,7 +1723,8 @@
                             <div class="text-muted small">{{ t('sql.queryingProcessInfo') }}</div>
                         </div>
                         <div v-else-if="mysqlProcessData.error">
-                            <div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{{ mysqlProcessData.error }}</div>
+                            <div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{{
+                                mysqlProcessData.error }}</div>
                         </div>
                         <div v-else-if="mysqlProcessData.rows.length === 0" class="text-center py-4 text-muted">
                             <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
@@ -1711,12 +1759,17 @@
                                         <td class="text-muted">{{ mysqlProcessPageStart + idx }}</td>
                                         <td><code>{{ row.ID }}</code></td>
                                         <td>{{ row.USER }}</td>
-                                        <td class="text-truncate" style="max-width: 160px;" :title="row.HOST">{{ row.HOST }}</td>
+                                        <td class="text-truncate" style="max-width: 160px;" :title="row.HOST">{{
+                                            row.HOST }}</td>
                                         <td><span class="mysql-process-db-badge">{{ row.DB }}</span></td>
                                         <td>{{ row.COMMAND }}</td>
-                                        <td><span :class="Number(row.TIME) > 60 ? 'mysql-process-time-warn' : 'text-muted'">{{ row.TIME }}</span></td>
-                                        <td class="text-truncate" style="max-width: 220px;" :title="row.STATE">{{ row.STATE }}</td>
-                                        <td class="text-truncate" style="max-width: 360px;" :title="row.INFO">{{ row.INFO }}</td>
+                                        <td><span
+                                                :class="Number(row.TIME) > 60 ? 'mysql-process-time-warn' : 'text-muted'">{{
+                                                row.TIME }}</span></td>
+                                        <td class="text-truncate" style="max-width: 220px;" :title="row.STATE">{{
+                                            row.STATE }}</td>
+                                        <td class="text-truncate" style="max-width: 360px;" :title="row.INFO">{{
+                                            row.INFO }}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1730,7 +1783,8 @@
                                     <strong>{{ mysqlProcessData.rows.length }}</strong> {{ t('sql.processRecords') }}
                                 </span>
                                 <select class="form-select form-select-sm" style="width:auto;"
-                                    v-model.number="mysqlProcessData.pageSize" @change="mysqlProcessData.currentPage = 1">
+                                    v-model.number="mysqlProcessData.pageSize"
+                                    @change="mysqlProcessData.currentPage = 1">
                                     <option v-for="size in mysqlProcessData.pageSizeOptions" :key="size" :value="size">
                                         {{ size }}
                                     </option>
@@ -1744,25 +1798,205 @@
                                         </button>
                                     </li>
                                     <li class="page-item" :class="{ disabled: mysqlProcessData.currentPage === 1 }">
-                                        <button class="page-link" @click="changeMysqlProcessPage(mysqlProcessData.currentPage - 1)">
+                                        <button class="page-link"
+                                            @click="changeMysqlProcessPage(mysqlProcessData.currentPage - 1)">
                                             <i class="fas fa-angle-left"></i>
                                         </button>
                                     </li>
                                     <li class="page-item disabled">
-                                        <span class="page-link text-dark">{{ mysqlProcessData.currentPage }} / {{ mysqlProcessTotalPages }}</span>
+                                        <span class="page-link text-dark">{{ mysqlProcessData.currentPage }} / {{
+                                            mysqlProcessTotalPages }}</span>
                                     </li>
-                                    <li class="page-item" :class="{ disabled: mysqlProcessData.currentPage === mysqlProcessTotalPages }">
-                                        <button class="page-link" @click="changeMysqlProcessPage(mysqlProcessData.currentPage + 1)">
+                                    <li class="page-item"
+                                        :class="{ disabled: mysqlProcessData.currentPage === mysqlProcessTotalPages }">
+                                        <button class="page-link"
+                                            @click="changeMysqlProcessPage(mysqlProcessData.currentPage + 1)">
                                             <i class="fas fa-angle-right"></i>
                                         </button>
                                     </li>
-                                    <li class="page-item" :class="{ disabled: mysqlProcessData.currentPage === mysqlProcessTotalPages }">
-                                        <button class="page-link" @click="changeMysqlProcessPage(mysqlProcessTotalPages)">
+                                    <li class="page-item"
+                                        :class="{ disabled: mysqlProcessData.currentPage === mysqlProcessTotalPages }">
+                                        <button class="page-link"
+                                            @click="changeMysqlProcessPage(mysqlProcessTotalPages)">
                                             <i class="fas fa-angle-double-right"></i>
                                         </button>
                                     </li>
                                 </ul>
                             </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="mysqlDiagnosticsModal" tabindex="-1" ref="mysqlDiagnosticsModal">
+            <div class="modal-dialog modal-dialog-centered" style="max-width: min(1220px, 96vw);">
+                <div class="modal-content mysql-process-modal">
+                    <div class="modal-header mysql-process-header">
+                        <div class="mysql-process-title">
+                            <span class="mysql-process-title-icon"><i class="fas fa-stethoscope"></i></span>
+                            <div>
+                                <div class="mysql-process-title-text">{{ t('sql.mysqlDiagnostics') }}</div>
+                                <div class="mysql-process-title-sub">{{ t('sql.mysqlDiagnosticsDesc') }}</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body mysql-process-body">
+                        <div class="row g-2 align-items-end mb-2 mysql-process-toolbar mysql-process-filterbar">
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold mb-1">{{ t('sql.database') }}</label>
+                                <select class="form-select form-select-sm" v-model="mysqlDiagnosticData.database"
+                                    @change="fetchMysqlDiagnostics">
+                                    <option v-for="db in mysqlProcessDatabases" :key="db" :value="db">{{ db }}</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold mb-1">{{ t('sql.slowSqlThreshold') }}</label>
+                                <input class="form-control form-control-sm" type="number" min="1" max="3600"
+                                    v-model.number="mysqlDiagnosticData.minSlowSeconds" @change="fetchMysqlSlowSql">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold mb-1">{{ t('sql.longTrxThreshold') }}</label>
+                                <input class="form-control form-control-sm" type="number" min="1" max="86400"
+                                    v-model.number="mysqlDiagnosticData.minTrxSeconds"
+                                    @change="fetchMysqlTransactionDiagnostics">
+                            </div>
+                            <div class="col-md-6 d-flex gap-2 justify-content-md-end">
+                                <button class="btn btn-sm"
+                                    :class="mysqlDiagnosticData.activeTab === 'slow' ? 'btn-primary' : 'btn-outline-secondary'"
+                                    @click="mysqlDiagnosticData.activeTab = 'slow'">
+                                    <i class="fas fa-clock me-1"></i>{{ t('sql.currentSlowSql') }}
+                                </button>
+                                <button class="btn btn-sm"
+                                    :class="mysqlDiagnosticData.activeTab === 'trx' ? 'btn-primary' : 'btn-outline-secondary'"
+                                    @click="mysqlDiagnosticData.activeTab = 'trx'">
+                                    <i class="fas fa-lock me-1"></i>{{ t('sql.longTrxLockWait') }}
+                                </button>
+                                <button class="btn btn-sm mysql-process-primary-btn" @click="fetchMysqlDiagnostics"
+                                    :disabled="mysqlDiagnosticData.loading">
+                                    <i class="fas fa-redo me-1"></i>{{ t('sql.refresh') }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="small mb-2 mysql-process-toolbar mysql-process-source">
+                            {{ t('sql.currentDatasource') }}<strong>{{ currentDatabaseName }}</strong>
+                        </div>
+
+                        <div v-if="mysqlDiagnosticData.loading" class="text-center py-5">
+                            <div class="spinner-border mb-2" style="color: var(--workspace-primary);"></div>
+                            <div class="text-muted small">{{ t('sql.diagnosing') }}</div>
+                        </div>
+                        <div v-else-if="mysqlDiagnosticData.error">
+                            <div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>{{
+                                mysqlDiagnosticData.error }}</div>
+                        </div>
+                        <div v-else-if="mysqlDiagnosticData.activeTab === 'slow'">
+                            <div v-if="mysqlDiagnosticData.slowRows.length === 0" class="text-center py-4 text-muted">
+                                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                                <div>{{ t('sql.noCurrentSlowSql') }}</div>
+                            </div>
+                            <div v-else class="mysql-process-table-wrap">
+                                <table class="table table-bordered table-hover table-sm mb-0 mysql-process-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width:70px;">ID</th>
+                                            <th style="width:95px;">{{ t('sql.user') }}</th>
+                                            <th style="width:160px;">HOST</th>
+                                            <th style="width:120px;">DB</th>
+                                            <th style="width:80px;">TIME</th>
+                                            <th style="width:220px;">STATE</th>
+                                            <th style="width:520px;">SQL</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="row in mysqlDiagnosticData.slowRows" :key="row.ID">
+                                            <td><code>{{ row.ID }}</code></td>
+                                            <td>{{ row.USER }}</td>
+                                            <td class="text-truncate" :title="row.HOST">{{ row.HOST }}</td>
+                                            <td><span class="mysql-process-db-badge">{{ row.DB }}</span></td>
+                                            <td><span class="mysql-process-time-warn">{{ row.TIME }}</span></td>
+                                            <td class="text-truncate" :title="row.STATE">{{ row.STATE }}</td>
+                                            <td class="text-truncate" :title="row.INFO">{{ row.INFO }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div v-else>
+                            <div v-if="mysqlDiagnosticData.lockWaitMessage" class="alert alert-warning py-2">
+                                <i class="fas fa-info-circle me-2"></i>{{ mysqlDiagnosticData.lockWaitMessage }}
+                            </div>
+                            <div class="fw-bold small mb-2">{{ t('sql.longTransactions') }} ({{
+                                mysqlDiagnosticData.longTransactions.length }})</div>
+                            <div v-if="mysqlDiagnosticData.longTransactions.length === 0"
+                                class="text-center py-3 text-muted">
+                                <i class="fas fa-check-circle text-success me-1"></i>{{ t('sql.noLongTransactions') }}
+                            </div>
+                            <div v-else class="mysql-process-table-wrap mb-3" style="min-height: 180px;">
+                                <table class="table table-bordered table-hover table-sm mb-0 mysql-process-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width:90px;">PROCESS</th>
+                                            <th style="width:90px;">{{ t('sql.user') }}</th>
+                                            <th style="width:120px;">DB</th>
+                                            <th style="width:90px;">SECONDS</th>
+                                            <th style="width:120px;">STATE</th>
+                                            <th style="width:100px;">LOCKED</th>
+                                            <th style="width:100px;">MODIFIED</th>
+                                            <th style="width:420px;">SQL</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="row in mysqlDiagnosticData.longTransactions" :key="row.TRX_ID">
+                                            <td><code>{{ row.PROCESS_ID }}</code></td>
+                                            <td>{{ row.USER }}</td>
+                                            <td><span class="mysql-process-db-badge">{{ row.DB }}</span></td>
+                                            <td><span class="mysql-process-time-warn">{{ row.TRX_SECONDS }}</span></td>
+                                            <td>{{ row.TRX_STATE || row.STATE }}</td>
+                                            <td>{{ row.ROWS_LOCKED }}</td>
+                                            <td>{{ row.ROWS_MODIFIED }}</td>
+                                            <td class="text-truncate" :title="row.SQL_TEXT">{{ row.SQL_TEXT }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="fw-bold small mb-2">{{ t('sql.lockWaits') }} ({{
+                                mysqlDiagnosticData.lockWaits.length }})</div>
+                            <div v-if="mysqlDiagnosticData.lockWaits.length === 0" class="text-center py-3 text-muted">
+                                <i class="fas fa-check-circle text-success me-1"></i>{{ t('sql.noLockWaits') }}
+                            </div>
+                            <div v-else class="mysql-process-table-wrap" style="min-height: 180px;">
+                                <table class="table table-bordered table-hover table-sm mb-0 mysql-process-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width:90px;">WAITING</th>
+                                            <th style="width:90px;">BLOCKING</th>
+                                            <th style="width:90px;">SECONDS</th>
+                                            <th style="width:120px;">WAIT DB</th>
+                                            <th style="width:120px;">BLOCK DB</th>
+                                            <th style="width:360px;">WAIT SQL</th>
+                                            <th style="width:360px;">BLOCK SQL</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="row in mysqlDiagnosticData.lockWaits"
+                                            :key="row.WAITING_TRX_ID + '_' + row.BLOCKING_TRX_ID">
+                                            <td><code>{{ row.WAITING_PROCESS_ID }}</code></td>
+                                            <td><code>{{ row.BLOCKING_PROCESS_ID }}</code></td>
+                                            <td><span class="mysql-process-time-warn">{{ row.WAITING_SECONDS }}</span>
+                                            </td>
+                                            <td>{{ row.WAITING_DB }}</td>
+                                            <td>{{ row.BLOCKING_DB }}</td>
+                                            <td class="text-truncate" :title="row.WAITING_SQL">{{ row.WAITING_SQL }}
+                                            </td>
+                                            <td class="text-truncate" :title="row.BLOCKING_SQL">{{ row.BLOCKING_SQL }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1974,7 +2208,8 @@
                         <button type="button" class="btn btn-primary" @click="generateCreateTableSQL">
                             <i class="fas fa-code me-1"></i>{{ t('sql.generateCreateSql') }}
                         </button>
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('sql.close') }}</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('sql.close')
+                            }}</button>
                     </div>
                 </div>
             </div>
@@ -2135,6 +2370,19 @@
             'sql.killSuccess': 'Kill Success',
             'sql.killPartialFailed': 'Partial Kill Failed',
             'sql.killFailed': 'Kill Failed',
+            'sql.mysqlDiagnostics': 'Diagnostics',
+            'sql.mysqlDiagnosticsDesc': 'Query current slow SQL, long transactions, and lock waits',
+            'sql.slowSqlThreshold': 'Slow SQL >= seconds',
+            'sql.longTrxThreshold': 'Long trx >= seconds',
+            'sql.currentSlowSql': 'Current Slow SQL',
+            'sql.longTrxLockWait': 'Long Trx / Locks',
+            'sql.diagnosing': 'Running diagnostics...',
+            'sql.noCurrentSlowSql': 'No current slow SQL',
+            'sql.longTransactions': 'Long Transactions',
+            'sql.noLongTransactions': 'No long transactions',
+            'sql.lockWaits': 'Lock Waits',
+            'sql.noLockWaits': 'No lock waits',
+            'sql.onlyMysqlDiagnostics': 'Diagnostics only supports MySQL datasources',
             'sql.tabTitle': 'Query',
             'sql.pivotRowCol': 'Row to Column (CASE WHEN)',
             'sql.pivotRowColCategory': 'Row/Column Transform',
@@ -2367,6 +2615,19 @@
             'sql.killSuccess': '查杀成功',
             'sql.killPartialFailed': '部分查杀失败',
             'sql.killFailed': '查杀失败',
+            'sql.mysqlDiagnostics': '诊断',
+            'sql.mysqlDiagnosticsDesc': '查询当前慢 SQL、长事务和锁等待',
+            'sql.slowSqlThreshold': '慢 SQL 秒数',
+            'sql.longTrxThreshold': '长事务秒数',
+            'sql.currentSlowSql': '当前慢 SQL',
+            'sql.longTrxLockWait': '长事务/锁等待',
+            'sql.diagnosing': '正在诊断...',
+            'sql.noCurrentSlowSql': '暂无当前慢 SQL',
+            'sql.longTransactions': '长事务',
+            'sql.noLongTransactions': '暂无长事务',
+            'sql.lockWaits': '锁等待',
+            'sql.noLockWaits': '暂无锁等待',
+            'sql.onlyMysqlDiagnostics': '诊断仅支持 MySQL 数据源',
             'sql.tabTitle': '查询',
             'sql.pivotRowCol': '行转列（CASE WHEN）',
             'sql.pivotRowColCategory': '行列转换',
@@ -2443,14 +2704,14 @@
 
         function preloadSqlLocales() {
             return Promise.all([
-                fetch('/js/locale/en.json').then(function(r) { return r.json(); }),
-                fetch('/js/locale/zh_CN.json').then(function(r) { return r.json(); })
-            ]).then(function(results) {
+                fetch('/js/locale/en.json').then(function (r) { return r.json(); }),
+                fetch('/js/locale/zh_CN.json').then(function (r) { return r.json(); })
+            ]).then(function (results) {
                 sqlLocaleCache['en'] = results[0];
                 sqlLocaleCache['zh_CN'] = results[1];
                 var savedLocale = localStorage.getItem('locale') || 'en';
                 sqlLocaleMessages = sqlLocaleCache[savedLocale] || {};
-            }).catch(function(e) {
+            }).catch(function (e) {
                 console.error('Failed to preload locale files:', e);
             });
         }
@@ -2553,15 +2814,34 @@
                         icon: 'fas fa-ban',
                         requireMysql: true
                     },
+                    mysqlDiagnosticsTool: {
+                        id: 'mysql_diagnostics',
+                        labelKey: 'sql.mysqlDiagnostics',
+                        descKey: 'sql.mysqlDiagnosticsDesc',
+                        icon: 'fas fa-stethoscope',
+                        requireMysql: true
+                    },
+                    mysqlDiagnosticData: {
+                        loading: false,
+                        error: null,
+                        database: 'tm_xj',
+                        activeTab: 'slow',
+                        minSlowSeconds: 5,
+                        minTrxSeconds: 30,
+                        slowRows: [],
+                        longTransactions: [],
+                        lockWaits: [],
+                        lockWaitMessage: null
+                    },
                     // 左侧「常用工具」配置（仅前端入口，后续接后端）
                     commonTools: [
-                        { id: 'large_table_query',    labelKey: 'sql.largeTableQuery',     descKey: 'sql.largeTableQueryDesc',    icon: 'fas fa-th-large',    requireOracle: false },
-                        { id: 'ha_switchover',         labelKey: 'sql.haSwitchover',          descKey: 'sql.haSwitchoverDesc',        icon: 'fas fa-sync-alt',     requireOracle: false },
-                        { id: 'archive_cleanup',       labelKey: 'sql.archiveCleanup',        descKey: 'sql.archiveCleanupDesc',      icon: 'fas fa-archive',      requireOracle: false },
-                        { id: 'recycle_bin_cleanup',   labelKey: 'sql.recycleBinCleanup',      descKey: 'sql.recycleBinCleanupDesc',   icon: 'fas fa-recycle',      requireOracle: false },
-                        { id: 'unlock_tables',         labelKey: 'sql.unlockTablesTool',        descKey: 'sql.unlockTablesToolDesc',    icon: 'fas fa-unlock-alt',   requireOracle: false },
-                        { id: 'health_check',          labelKey: 'sql.healthCheck',            descKey: 'sql.healthCheckDesc',        icon: 'fas fa-heartbeat',     requireOracle: false },
-                        { id: 'awr_export',            labelKey: 'sql.awrReport',              descKey: 'sql.awrReportDesc',          icon: 'fas fa-chart-bar',    requireOracle: true }
+                        { id: 'large_table_query', labelKey: 'sql.largeTableQuery', descKey: 'sql.largeTableQueryDesc', icon: 'fas fa-th-large', requireOracle: false },
+                        { id: 'ha_switchover', labelKey: 'sql.haSwitchover', descKey: 'sql.haSwitchoverDesc', icon: 'fas fa-sync-alt', requireOracle: false },
+                        { id: 'archive_cleanup', labelKey: 'sql.archiveCleanup', descKey: 'sql.archiveCleanupDesc', icon: 'fas fa-archive', requireOracle: false },
+                        { id: 'recycle_bin_cleanup', labelKey: 'sql.recycleBinCleanup', descKey: 'sql.recycleBinCleanupDesc', icon: 'fas fa-recycle', requireOracle: false },
+                        { id: 'unlock_tables', labelKey: 'sql.unlockTablesTool', descKey: 'sql.unlockTablesToolDesc', icon: 'fas fa-unlock-alt', requireOracle: false },
+                        { id: 'health_check', labelKey: 'sql.healthCheck', descKey: 'sql.healthCheckDesc', icon: 'fas fa-heartbeat', requireOracle: false },
+                        { id: 'awr_export', labelKey: 'sql.awrReport', descKey: 'sql.awrReportDesc', icon: 'fas fa-chart-bar', requireOracle: true }
                     ],
                     // Context menu
                     contextMenu: {
@@ -2691,7 +2971,7 @@
                     return (this.currentDbType || '').toUpperCase() === 'MYSQL';
                 },
                 visibleCommonTools() {
-                    return this.isMysqlDb ? [this.mysqlProcessTool] : this.commonTools;
+                    return this.isMysqlDb ? [this.mysqlProcessTool, this.mysqlDiagnosticsTool] : this.commonTools;
                 },
                 allMysqlProcessesSelected() {
                     const pageIds = this.paginatedMysqlProcessRows.map(row => Number(row.ID)).filter(id => Number.isFinite(id));
@@ -3005,21 +3285,21 @@
                 }, 5000);
             },
             methods: {
-                t: function(key) {
+                t: function (key) {
                     var merged = Object.assign({}, sqlAllTexts[this.locale] || sqlAllTexts['en'], sqlLocaleMessages);
                     var val = merged[key] || key.split('.').pop();
                     if (arguments.length > 1) {
                         for (var i = 1; i < arguments.length; i++) {
-                            val = val.replace('{' + (i-1) + '}', arguments[i]);
+                            val = val.replace('{' + (i - 1) + '}', arguments[i]);
                         }
                     }
                     return val;
                 },
-                updateTitle: function() {
+                updateTitle: function () {
                     var merged = Object.assign({}, sqlAllTexts[this.locale] || sqlAllTexts['en'], sqlLocaleMessages);
                     document.title = (merged['sql.title'] || 'SQL Executor') + ' - Web Tool';
                 },
-                setLanguage: function(locale) {
+                setLanguage: function (locale) {
                     this.locale = locale;
                     localStorage.setItem('locale', locale);
                     loadSqlLocaleMessages(locale);
@@ -3504,6 +3784,8 @@
                         this.openUnlockModal();
                     } else if (tool.id === 'mysql_process_kill') {
                         this.openMysqlProcessKillModal();
+                    } else if (tool.id === 'mysql_diagnostics') {
+                        this.openMysqlDiagnosticsModal();
                     } else {
                         this.showToast(this.t('sql.pendingFeature'), this.t('sql.featureInDevelopment', this.t(tool.labelKey), this.currentDatabaseName), 'success');
                     }
@@ -3647,6 +3929,91 @@
                     }
                 },
                 /** 格式化锁定时长 */
+                openMysqlDiagnosticsModal() {
+                    this.mysqlDiagnosticData.loading = false;
+                    this.mysqlDiagnosticData.error = null;
+                    this.mysqlDiagnosticData.slowRows = [];
+                    this.mysqlDiagnosticData.longTransactions = [];
+                    this.mysqlDiagnosticData.lockWaits = [];
+                    this.mysqlDiagnosticData.lockWaitMessage = null;
+                    this.mysqlDiagnosticData.activeTab = 'slow';
+                    if (!this.mysqlProcessDatabases.includes(this.mysqlDiagnosticData.database)) {
+                        this.mysqlDiagnosticData.database = 'tm_xj';
+                    }
+                    const modal = new bootstrap.Modal(document.getElementById('mysqlDiagnosticsModal'));
+                    modal.show();
+                    this.$nextTick(() => this.fetchMysqlDiagnostics());
+                },
+                async fetchMysqlDiagnostics() {
+                    if (!this.isMysqlDb) {
+                        this.mysqlDiagnosticData.error = this.t('sql.onlyMysqlDiagnostics');
+                        return;
+                    }
+                    this.mysqlDiagnosticData.loading = true;
+                    this.mysqlDiagnosticData.error = null;
+                    try {
+                        await Promise.all([
+                            this.fetchMysqlSlowSql(false),
+                            this.fetchMysqlTransactionDiagnostics(false)
+                        ]);
+                    } finally {
+                        this.mysqlDiagnosticData.loading = false;
+                    }
+                },
+                async fetchMysqlSlowSql(showLoading = true) {
+                    if (!this.isMysqlDb) {
+                        this.mysqlDiagnosticData.error = this.t('sql.onlyMysqlDiagnostics');
+                        return;
+                    }
+                    if (showLoading) this.mysqlDiagnosticData.loading = true;
+                    this.mysqlDiagnosticData.error = null;
+                    try {
+                        const res = await axios.get('/api/database/lock/mysql-slow-sql', {
+                            params: {
+                                datasourceIndex: this.selectedDataSourceIdx,
+                                database: this.mysqlDiagnosticData.database,
+                                minSeconds: this.mysqlDiagnosticData.minSlowSeconds || 5
+                            }
+                        });
+                        if (res.data.success) {
+                            this.mysqlDiagnosticData.slowRows = res.data.data || [];
+                        } else {
+                            this.mysqlDiagnosticData.error = res.data.message || this.t('sql.loadingFailed');
+                        }
+                    } catch (e) {
+                        this.mysqlDiagnosticData.error = e.response?.data?.message || e.message;
+                    } finally {
+                        if (showLoading) this.mysqlDiagnosticData.loading = false;
+                    }
+                },
+                async fetchMysqlTransactionDiagnostics(showLoading = true) {
+                    if (!this.isMysqlDb) {
+                        this.mysqlDiagnosticData.error = this.t('sql.onlyMysqlDiagnostics');
+                        return;
+                    }
+                    if (showLoading) this.mysqlDiagnosticData.loading = true;
+                    this.mysqlDiagnosticData.error = null;
+                    try {
+                        const res = await axios.get('/api/database/lock/mysql-transaction-diagnostics', {
+                            params: {
+                                datasourceIndex: this.selectedDataSourceIdx,
+                                database: this.mysqlDiagnosticData.database,
+                                minSeconds: this.mysqlDiagnosticData.minTrxSeconds || 30
+                            }
+                        });
+                        if (res.data.success) {
+                            this.mysqlDiagnosticData.longTransactions = res.data.longTransactions || [];
+                            this.mysqlDiagnosticData.lockWaits = res.data.lockWaits || [];
+                            this.mysqlDiagnosticData.lockWaitMessage = res.data.lockWaitMessage || null;
+                        } else {
+                            this.mysqlDiagnosticData.error = res.data.message || this.t('sql.loadingFailed');
+                        }
+                    } catch (e) {
+                        this.mysqlDiagnosticData.error = e.response?.data?.message || e.message;
+                    } finally {
+                        if (showLoading) this.mysqlDiagnosticData.loading = false;
+                    }
+                },
                 formatLockDuration(seconds) {
                     if (seconds == null) return '-';
                     const s = Number(seconds);

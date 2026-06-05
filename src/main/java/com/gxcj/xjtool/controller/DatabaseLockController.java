@@ -90,6 +90,51 @@ public class DatabaseLockController {
         }
     }
 
+    @GetMapping("/mysql-slow-sql")
+    public Map<String, Object> getMysqlSlowSql(
+            @RequestParam("datasourceIndex") int datasourceIndex,
+            @RequestParam("database") String database,
+            @RequestParam(value = "minSeconds", required = false, defaultValue = "5") int minSeconds) {
+        try {
+            List<Map<String, Object>> rows = oracleService.getMysqlCurrentSlowSql(datasourceIndex, database, minSeconds);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("data", rows);
+            result.put("count", rows.size());
+            return result;
+        } catch (Exception e) {
+            log.error("Query MySQL current slow SQL failed datasourceIndex={}, database={}", datasourceIndex, database, e);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", false);
+            result.put("message", "Query MySQL current slow SQL failed: " + e.getMessage());
+            result.put("data", Collections.emptyList());
+            result.put("count", 0);
+            return result;
+        }
+    }
+
+    @GetMapping("/mysql-transaction-diagnostics")
+    public Map<String, Object> getMysqlTransactionDiagnostics(
+            @RequestParam("datasourceIndex") int datasourceIndex,
+            @RequestParam("database") String database,
+            @RequestParam(value = "minSeconds", required = false, defaultValue = "30") int minSeconds) {
+        try {
+            Map<String, Object> diagnostics = oracleService.getMysqlTransactionDiagnostics(datasourceIndex, database, minSeconds);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.putAll(diagnostics);
+            return result;
+        } catch (Exception e) {
+            log.error("Query MySQL transaction diagnostics failed datasourceIndex={}, database={}", datasourceIndex, database, e);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", false);
+            result.put("message", "Query MySQL transaction diagnostics failed: " + e.getMessage());
+            result.put("longTransactions", Collections.emptyList());
+            result.put("lockWaits", Collections.emptyList());
+            return result;
+        }
+    }
+
     /**
      * Batch kill selected MySQL processes.
      */

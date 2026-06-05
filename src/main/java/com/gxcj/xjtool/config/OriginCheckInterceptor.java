@@ -17,7 +17,11 @@ import javax.servlet.http.HttpServletResponse;
 public class OriginCheckInterceptor implements HandlerInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(OriginCheckInterceptor.class);
-    private static final String RESULT_EDIT_COMMIT_PATH = "/api/oracle/result-edits/commit";
+    private static final java.util.Set<String> FORCE_CHECK_PATHS = new java.util.HashSet<>(
+            java.util.Arrays.asList(
+                    "/api/oracle/result-edits/commit",
+                    "/api/database/lock/mysql-slow-sql",
+                    "/api/database/lock/mysql-transaction-diagnostics"));
 
     @Autowired
     private SecurityConfig securityConfig;
@@ -26,7 +30,7 @@ public class OriginCheckInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
 
-        boolean forceCheck = RESULT_EDIT_COMMIT_PATH.equals(request.getRequestURI());
+        boolean forceCheck = FORCE_CHECK_PATHS.contains(request.getRequestURI());
         if (!forceCheck && !securityConfig.getOriginCheck().isEnabled()) {
             return true;
         }
