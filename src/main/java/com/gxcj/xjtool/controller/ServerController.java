@@ -241,28 +241,62 @@ public class ServerController {
             updated.setGroupName(groupName);
         }
 
-        boolean found = false;
+        // 1. 从旧的分组或无分组列表中移除该服务器
+        boolean removed = false;
         if (serverConfig.getServerGroups() != null) {
             for (ServerGroup g : serverConfig.getServerGroups()) {
-                for (int i = 0; i < g.getServers().size(); i++) {
-                    if (id.equals(g.getServers().get(i).getId())) {
-                        g.getServers().set(i, updated);
-                        found = true;
-                        break;
+                if (g.getServers() != null) {
+                    for (int i = 0; i < g.getServers().size(); i++) {
+                        if (id.equals(g.getServers().get(i).getId())) {
+                            g.getServers().remove(i);
+                            removed = true;
+                            break;
+                        }
                     }
                 }
-                if (found) break;
+                if (removed) break;
             }
         }
-        if (!found && serverConfig.getServers() != null) {
+        if (!removed && serverConfig.getServers() != null) {
             for (int i = 0; i < serverConfig.getServers().size(); i++) {
                 if (id.equals(serverConfig.getServers().get(i).getId())) {
-                    serverConfig.getServers().set(i, updated);
-                    found = true;
+                    serverConfig.getServers().remove(i);
                     break;
                 }
             }
         }
+
+        // 2. 将更新后的服务器对象加入到目标新分组中
+        boolean groupFound = false;
+        if (serverConfig.getServerGroups() != null) {
+            for (ServerGroup g : serverConfig.getServerGroups()) {
+                if (groupName.equals(g.getName())) {
+                    if (g.getServers() == null) {
+                        g.setServers(new ArrayList<>());
+                    }
+                    g.getServers().add(updated);
+                    groupFound = true;
+                    break;
+                }
+            }
+        }
+        if (!groupFound) {
+            ServerGroup newGroup = new ServerGroup();
+            newGroup.setName(groupName);
+            newGroup.setServers(new ArrayList<>());
+            newGroup.getServers().add(updated);
+            if (serverConfig.getServerGroups() == null) {
+                serverConfig.setServerGroups(new ArrayList<>());
+            }
+            serverConfig.getServerGroups().add(newGroup);
+        }
+
+        // 3. 清理掉已被移空的分组
+        if (serverConfig.getServerGroups() != null) {
+            serverConfig.getServerGroups().removeIf(g -> g.getServers() == null || g.getServers().isEmpty());
+        }
+
+        // 4. 更新单层集合 serverList
         for (int i = 0; i < serverList.size(); i++) {
             if (id.equals(serverList.get(i).getId())) {
                 serverList.set(i, updated);
@@ -270,6 +304,7 @@ public class ServerController {
             }
         }
 
+        // 5. 保存更新至 Excel
         if (excelServerConfigLoader != null) {
             excelServerConfigLoader.updateServer(updated);
         }
