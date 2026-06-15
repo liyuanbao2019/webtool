@@ -411,6 +411,7 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
                             si.setPort(s.get("port") == null ? 22 : ((Number) s.get("port")).intValue());
                             si.setUsername((String) s.get("username"));
                             si.setPassword(resolvePassword((String) s.get("password"), (String) s.get("host")));
+                            applyAgentFieldsFromYaml(s, si);
                             parseSuPasswordsFromYaml(s, si);
                             sg.getServers().add(si);
                         }
@@ -422,6 +423,30 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
         } catch (Exception e) {
             log.warn("加载 YAML 服务器配置失败 [{}]: {}", fileName, e.getMessage());
         }
+    }
+
+    private void applyAgentFieldsFromYaml(Map<String, Object> s, ServerInfo si) {
+        Object connectionMode = firstNonNull(s.get("connectionMode"), s.get("connection-mode"));
+        Object agentBaseUrl = firstNonNull(s.get("agentBaseUrl"), s.get("agent-base-url"));
+        Object agentId = firstNonNull(s.get("agentId"), s.get("agent-id"));
+        Object agentToken = firstNonNull(s.get("agentToken"), s.get("agent-token"));
+
+        if (connectionMode != null) {
+            si.setConnectionMode(connectionMode.toString().trim());
+        }
+        if (agentBaseUrl != null) {
+            si.setAgentBaseUrl(agentBaseUrl.toString().trim());
+        }
+        if (agentId != null) {
+            si.setAgentId(agentId.toString().trim());
+        }
+        if (agentToken != null) {
+            si.setAgentToken(agentToken.toString().trim());
+        }
+    }
+
+    private Object firstNonNull(Object first, Object second) {
+        return first != null ? first : second;
     }
 
     private String resolvePassword(String rowPassword, String host) {

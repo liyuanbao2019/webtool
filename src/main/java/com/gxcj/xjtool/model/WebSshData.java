@@ -9,6 +9,10 @@ public class WebSshData {
     private Integer port;
     private String username;
     private String password;
+    private String connectionMode; // ssh, agent
+    private String agentBaseUrl;
+    private String agentId;
+    private String agentToken;
     private String command;
     private String commandText;
     private Integer cols; // 终端列数

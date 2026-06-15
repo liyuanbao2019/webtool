@@ -61,6 +61,24 @@ spring:
 app:
   servers-config-file: servers.xlsx
   default-group-name: Default Group
+  # Agent 连接默认配置（服务端 webtool 调用目标服务器 webtool-agent）
+  # 默认关闭，不影响现有 SSH 模式。启用后，所有服务器终端连接统一通过 http://{服务器IP}:{port} 调用 Agent。
+  agent:
+    enabled: true
+    port: 18080
+    # 仅保存在 webtool 服务端，不下发浏览器；与每台目标机 webtool-agent 的 agent.token 保持一致。
+    # 生产请改成高强度随机值。
+    token: change-me
+  # 如果不使用 servers.xlsx，也可以直接在 application.yml 中配置服务器：
+  # server-groups:
+  #   - name: Agent Servers
+  #     servers:
+  #       - name: demo-agent-server
+  #         host: 10.0.0.10
+  #         port: 22
+  #         username: appuser
+  #         password: unused-in-agent-mode
+  #         # app.agent.enabled=true 时，会自动使用 http://10.0.0.10:${app.agent.port} 调用 Agent
   common-websites-enabled: true
   common-websites:
       # icon 使用 FontAwesome class，可参考以下常用图标（按需复制到网站配置里）

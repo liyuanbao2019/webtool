@@ -1,6 +1,7 @@
 package com.gxcj.xjtool.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gxcj.xjtool.config.ServerConfig;
 import com.gxcj.xjtool.model.ServerInfo;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +13,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import javax.annotation.PostConstruct;
@@ -53,6 +56,9 @@ public class SftpController {
     private final ConcurrentMap<String, PooledSession> sessionPool = new ConcurrentHashMap<>();
     private volatile long lastCleanupAt = 0L;
     private SshClient sharedSshClient;
+
+    @Autowired
+    private ServerConfig serverConfig;
 
     @Data
     private static class PooledSession {
@@ -190,7 +196,17 @@ public class SftpController {
         }
     }
 
+    private void assertSftpAllowed() {
+        if (serverConfig != null
+                && serverConfig.getAgent() != null
+                && serverConfig.getAgent().isEnabled()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "SFTP is disabled while Agent mode is enabled");
+        }
+    }
+
     private <T> T executeWithSftp(ServerInfo info, SftpAction<T> action) throws Exception {
+        assertSftpAllowed();
         Exception lastException = null;
         for (int attempt = 0; attempt < 2; attempt++) {
             ClientSession session = getOrCreateSession(info);
@@ -233,6 +249,7 @@ public class SftpController {
 
     @PostMapping("/download")
     public ResponseEntity<StreamingResponseBody> download(@RequestBody SftpRequest request) throws IOException {
+        assertSftpAllowed();
         String requestedPath = normalizeRemotePath(request.getPath());
         long[] fileSize = new long[] { -1L };
         try {
@@ -381,6 +398,7 @@ public class SftpController {
      */
     @PostMapping("/download-folder")
     public ResponseEntity<StreamingResponseBody> downloadFolder(@RequestBody SftpRequest request) {
+        assertSftpAllowed();
         String folderPath = request.getPath();
         // 获取文件夹名称作为 ZIP 文件名
         String folderName = folderPath.substring(folderPath.lastIndexOf('/') + 1);

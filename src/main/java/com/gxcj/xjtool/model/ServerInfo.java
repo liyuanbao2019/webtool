@@ -31,6 +31,14 @@ public class ServerInfo {
     @Size(min = 1, max = 200, message = "密码长度不能超过200")
     private String password;
 
+    private String connectionMode = "ssh";
+
+    private String agentBaseUrl;
+
+    private String agentId;
+
+    private String agentToken;
+
     /**
      * sudo/su 用户名及密码映射表
      * Key: sudo/su 用户名 (小写)，Value: 对应密码

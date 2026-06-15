@@ -1,0 +1,16 @@
+server:
+  port: 18080
+
+agent:
+  id: local-agent
+  token: change-me
+  shell:
+    linux: /bin/bash,-i
+    windows: cmd.exe
+  command:
+    max-sessions: 20
+    idle-timeout-seconds: 1800
+  security:
+    require-token: true
+    # 可选：只允许这些主服务 IP 调用 Agent。为空表示不校验来源 IP，建议生产填写。
+    allowed-clients: []

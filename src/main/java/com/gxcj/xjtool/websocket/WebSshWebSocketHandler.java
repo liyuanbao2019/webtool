@@ -1,6 +1,7 @@
 package com.gxcj.xjtool.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gxcj.xjtool.agent.AgentTerminalService;
 import com.gxcj.xjtool.model.WebSshData;
 import com.gxcj.xjtool.service.SshService;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,9 @@ public class WebSshWebSocketHandler implements WebSocketHandler {
 
     @Autowired
     private SshService sshService;
+
+    @Autowired
+    private AgentTerminalService agentTerminalService;
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -68,17 +72,33 @@ public class WebSshWebSocketHandler implements WebSocketHandler {
             try {
                 WebSshData webSshData = objectMapper.readValue(payload, WebSshData.class);
                 if ("connect".equals(webSshData.getOperate())) {
-                    sshService.initConnection(session, webSshData);
+                    if (agentTerminalService.isAgentMode(webSshData)) {
+                        agentTerminalService.initConnection(session, webSshData);
+                    } else {
+                        sshService.initConnection(session, webSshData);
+                    }
                 } else if ("command".equals(webSshData.getOperate())) {
-                    sshService.recvHandle(session, webSshData);
+                    if (agentTerminalService.hasSession(session)) {
+                        agentTerminalService.recvHandle(session, webSshData);
+                    } else {
+                        sshService.recvHandle(session, webSshData);
+                    }
                 } else if ("ping".equals(webSshData.getOperate())) {
                     // 处理心跳ping消息,更新SSH连接活动时间并返回pong
-                    sshService.keepAlive(session);
+                    if (agentTerminalService.hasSession(session)) {
+                        agentTerminalService.keepAlive(session);
+                    } else {
+                        sshService.keepAlive(session);
+                    }
                     session.sendMessage(new TextMessage("pong"));
                     log.debug("Heartbeat ping received from session: {}", session.getId());
                 } else if ("resize".equals(webSshData.getOperate())) {
                     // 处理终端大小调整
-                    sshService.resizeTerminal(session, webSshData.getCols(), webSshData.getRows());
+                    if (agentTerminalService.hasSession(session)) {
+                        agentTerminalService.resizeTerminal(session, webSshData.getCols(), webSshData.getRows());
+                    } else {
+                        sshService.resizeTerminal(session, webSshData.getCols(), webSshData.getRows());
+                    }
                 } else if ("charset".equals(webSshData.getOperate())) {
                     // 处理终端字符集切换
                     sshService.updateTerminalCharset(session, webSshData.getCharset());
@@ -92,6 +112,7 @@ public class WebSshWebSocketHandler implements WebSocketHandler {
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
         log.error("WebSocket transport error", exception);
+        agentTerminalService.close(session);
         sshService.close(session);
     }
 
@@ -99,6 +120,7 @@ public class WebSshWebSocketHandler implements WebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus closeStatus) throws Exception {
         unregisterSession(session.getId());
         log.info("WebSocket closed: {}", session.getId());
+        agentTerminalService.close(session);
         sshService.close(session);
     }
 

@@ -314,7 +314,7 @@ public class ServerController {
 
     private ServerInfoDTO toDTO(ServerInfo serverInfo) {
         try {
-            String json = objectMapper.writeValueAsString(serverInfo);
+            String json = objectMapper.writeValueAsString(withAgentDefaults(serverInfo));
             String encrypted = com.gxcj.xjtool.util.CryptoUtil.encrypt(json);
 
             ServerInfoDTO dto = new ServerInfoDTO();
@@ -324,4 +324,34 @@ public class ServerController {
             throw new RuntimeException("服务器信息序列化失败", e);
         }
     }
+
+    private ServerInfo withAgentDefaults(ServerInfo source) {
+        if (source == null) {
+            return null;
+        }
+        ServerInfo copy = objectMapper.convertValue(source, ServerInfo.class);
+        ServerConfig.AgentConfig agent = serverConfig.getAgent();
+        if (agent == null || !agent.isEnabled()) {
+            return copy;
+        }
+
+        copy.setConnectionMode("agent");
+        copy.setAgentBaseUrl(buildAgentBaseUrl(copy.getHost(), agent.getPort()));
+        copy.setAgentId(copy.getHost());
+        copy.setAgentToken(null);
+        return copy;
+    }
+
+    private String buildAgentBaseUrl(String host, int port) {
+        if (isBlank(host)) {
+            return null;
+        }
+        int resolvedPort = port > 0 ? port : 18080;
+        return "http://" + host.trim() + ":" + resolvedPort;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
 }

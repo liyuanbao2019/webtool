@@ -98,7 +98,7 @@
         <!-- Terminal Layout -->
         <div class="terminal-layout">
             <!-- File Manager Sidebar -->
-            <div class="file-sidebar" :class="{ 'collapsed': isSidebarCollapsed }">
+            <div v-if="!isAgentMode" class="file-sidebar" :class="{ 'collapsed': isSidebarCollapsed }">
                 <div class="file-header d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center flex-grow-1 overflow-hidden me-2">
                         <button class="toggle-sidebar-btn" @click="toggleSidebar"
@@ -957,6 +957,10 @@
                 }
             },
             computed: {
+                isAgentMode() {
+                    return this.serverInfo
+                        && String(this.serverInfo.connectionMode || '').toLowerCase() === 'agent';
+                },
                 filteredFiles() {
                     if (!this.fileSearchQuery) return this.files;
                     const query = this.fileSearchQuery.toLowerCase();
@@ -1087,7 +1091,9 @@
                 this.loadTerminalPreferences();
 
                 this.safeInitTerminal();
-                this.initHomeDirectory();
+                if (!this.isAgentMode) {
+                    this.initHomeDirectory();
+                }
                 this.updateTitle();
             },
             methods: {
@@ -1764,6 +1770,9 @@
                             port: this.serverInfo.port,
                             username: this.serverInfo.username,
                             password: this.serverInfo.password,
+                            connectionMode: this.serverInfo.connectionMode || 'ssh',
+                            agentBaseUrl: this.serverInfo.agentBaseUrl,
+                            agentId: this.serverInfo.agentId,
                             cols: initialCols,   // 携带真实列数，后端 PTY 用此值初始化
                             rows: initialRows,   // 携带真实行数，后端 PTY 用此值初始化
                             charset: this.terminalPreferences.charset
@@ -2010,6 +2019,7 @@
                     });
                 },
                 async initHomeDirectory() {
+                    if (this.isAgentMode) return;
                     try {
                         // 获取用户家目录
                         const res = await axios.post('/api/sftp/home', {
@@ -2080,6 +2090,7 @@
                     return `${fallbackPrefix}: ${error.message}`;
                 },
                 async listFiles(path = this.currentPath) {
+                    if (this.isAgentMode) return;
                     // 确保凭据已初始化
                     if (!this.sftpCredentials) {
                         console.error('SFTP credentials not initialized');
@@ -2309,6 +2320,7 @@
                     }, 5 * 60 * 1000);
                 },
                 async downloadFile(name) {
+                    if (this.isAgentMode) return;
                     const path = this.currentPath.endsWith('/') ? this.currentPath + name : this.currentPath + '/' + name;
 
                     try {
@@ -2346,6 +2358,7 @@
                 },
                 // 文件夹下载（打包为 ZIP）
                 async downloadFolder(folderName) {
+                    if (this.isAgentMode) return;
                     const folderPath = this.currentPath.endsWith('/')
                         ? this.currentPath + folderName
                         : this.currentPath + '/' + folderName;
@@ -2384,13 +2397,16 @@
                     }
                 },
                 uploadFileClick() {
+                    if (this.isAgentMode) return;
                     this.$refs.fileInput.click();
                 },
                 // 点击上传文件夹按钮
                 uploadFolderClick() {
+                    if (this.isAgentMode) return;
                     this.$refs.folderInput.click();
                 },
                 async handleFileUpload() {
+                    if (this.isAgentMode) return;
                     const files = this.$refs.fileInput.files;
                     if (!files || files.length === 0) return;
 
@@ -2450,6 +2466,7 @@
                 },
                 // 处理文件夹上传
                 async handleFolderUpload() {
+                    if (this.isAgentMode) return;
                     const files = this.$refs.folderInput.files;
                     if (!files || files.length === 0) return;
 

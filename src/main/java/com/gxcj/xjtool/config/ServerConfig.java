@@ -17,10 +17,18 @@ import java.util.Map;
 public class ServerConfig {
     private List<ServerInfo> servers = new ArrayList<>();
     private List<ServerGroup> serverGroups = new ArrayList<>();
+    private AgentConfig agent = new AgentConfig();
     private boolean commonWebsitesEnabled = true;
     private List<CommonWebsite> commonWebsites = new ArrayList<>();
     private String serversConfigFile;
     private Map<String, String> passwordOverrides = new java.util.HashMap<>();
     private String commonPassword;
     private String defaultGroupName = "Default Group";
+
+    @Data
+    public static class AgentConfig {
+        private boolean enabled = false;
+        private int port = 18080;
+        private String token;
+    }
 }
