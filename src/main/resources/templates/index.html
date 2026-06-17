@@ -780,6 +780,9 @@
                                             <ul class="dropdown-menu dropdown-menu-end show" v-if="activeMenuId === server.id" @click.stop style="position:absolute;z-index:1000;top:100%;right:0;margin-top:4px;">
                                                 <li><a class="dropdown-item" href="#"
                                                         @click.prevent="activeMenuId = null; openEditModal(server)">{{ t('index.editServer') }}</a></li>
+                                                <li><hr class="dropdown-divider"></li>
+                                                <li><a class="dropdown-item text-danger" href="#"
+                                                        @click.prevent="activeMenuId = null; deleteServer(server)">{{ t('index.deleteServer') }}</a></li>
                                             </ul>
                                         </div>
                                     </div>
@@ -823,6 +826,9 @@
                                     <ul class="dropdown-menu dropdown-menu-end show" v-if="activeMenuId === server.id" @click.stop style="position:absolute;z-index:1000;top:100%;right:0;margin-top:4px;">
                                         <li><a class="dropdown-item" href="#"
                                                 @click.prevent="activeMenuId = null; openEditModal(server)">{{ t('index.editServer') }}</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item text-danger" href="#"
+                                                @click.prevent="activeMenuId = null; deleteServer(server)">{{ t('index.deleteServer') }}</a></li>
                                     </ul>
                                 </div>
                             </div>
@@ -995,6 +1001,7 @@
             'index.removeSelectedServer': 'Remove',
             'index.editServer': 'Edit Server',
             'index.deleteServer': 'Delete Server',
+            'index.confirmDeleteServer': 'Delete server "{0}"? This cannot be undone.',
             'index.gridView': 'Grid View',
             'index.listView': 'List View',
             'index.commonWebsites': 'Common Websites',
@@ -1025,6 +1032,7 @@
             'alert.usernameRequired': 'Please enter username',
             'alert.passwordRequired': 'Please enter password',
             'alert.loadFailed': 'Failed to load server info',
+            'alert.deleteFailed': 'Failed to delete server',
             'alert.connectionLimit': 'Connection limit reached, please close some connections and retry.'
         };
 
@@ -1051,6 +1059,7 @@
             'index.removeSelectedServer': '移除',
             'index.editServer': '修改服务器',
             'index.deleteServer': '删除服务器',
+            'index.confirmDeleteServer': '确认删除服务器“{0}”吗？此操作不可恢复。',
             'index.gridView': '网格视图',
             'index.listView': '列表视图',
             'index.commonWebsites': '常用网站',
@@ -1081,6 +1090,7 @@
             'alert.usernameRequired': '请输入用户名',
             'alert.passwordRequired': '请输入密码',
             'alert.loadFailed': '加载服务器信息失败',
+            'alert.deleteFailed': '删除服务器失败',
             'alert.connectionLimit': '当前服务器连接数已达上限，请关闭部分连接后重试。'
         };
 
@@ -1277,7 +1287,7 @@
                 },
                 loadServers: function() {
                     var self = this;
-                    axios.get('/api/server/list').then(function(res) {
+                    return axios.get('/api/server/list').then(function(res) {
                         self.serverGroups = res.data.map(function(group) {
                             return {
                                 name: group.name,
@@ -1386,9 +1396,25 @@
                         self.loadServers();
                     });
                 },
+                deleteServer: function(server) {
+                    var self = this;
+                    if (!server || !server.id) return;
+                    var name = server.name || server.host || server.id;
+                    if (!confirm(this.t('index.confirmDeleteServer', name))) return;
+
+                    axios.delete('/api/server/' + encodeURIComponent(server.id)).then(function() {
+                        self.removeSelectedServer(server);
+                        return self.loadServers();
+                    }).then(function() {
+                        return self.loadGroups();
+                    }).catch(function(e) {
+                        alert(self.t('alert.deleteFailed'));
+                        console.error(e);
+                    });
+                },
                 loadGroups: function() {
                     var self = this;
-                    axios.get('/api/server/groups').then(function(res) {
+                    return axios.get('/api/server/groups').then(function(res) {
                         self.existingGroups = Array.isArray(res.data) ? res.data : [];
                     }).catch(function(e) {
                         self.existingGroups = [];

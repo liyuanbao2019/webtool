@@ -306,6 +306,54 @@ security:
     per-ip: 100       # requests per IP per minute
 ```
 
+#### 7. Agent Mode (Optional)
+
+Agent Mode changes the terminal path from direct SSH to a target-side local agent:
+
+```text
+Browser xterm.js -> WebTool -> WebSocket API -> webtool-agent -> local PTY shell
+```
+
+In this mode, WebTool no longer SSHs into the target server. The target server runs `webtool-agent`, and the agent starts a local PTY shell as the OS user that launched the agent. This keeps the central service out of direct SSH login flows while preserving interactive terminal behavior for tools such as `vim`, `top`, `mysql`, `su`, and `sudo`.
+
+Build and deploy the agent:
+
+```bash
+cd webtool-agent
+mvn -q -DskipTests package
+```
+
+Copy `webtool-agent/target/webtool-agent-1.0.0-SNAPSHOT.jar` and an agent `application.yml` to each target server, then start it with JDK 11 or another compatible Java runtime:
+
+```bash
+java -jar webtool-agent-1.0.0-SNAPSHOT.jar --spring.config.location=./application.yml
+```
+
+Enable Agent Mode on the WebTool main service:
+
+```yaml
+app:
+  agent:
+    enabled: true
+    port: 18080
+    token: change-me-to-a-strong-shared-secret
+```
+
+Configure the same token and an optional WebTool IP allowlist on every target-side agent:
+
+```yaml
+agent:
+  token: change-me-to-a-strong-shared-secret
+  security:
+    require-token: true
+    allowed-clients:
+      - 10.238.89.10
+```
+
+When Agent Mode is enabled, WebTool derives the agent address from the selected server IP plus `app.agent.port`. The token stays server-side and is not sent to the browser. SFTP is disabled in Agent Mode to avoid leaving a direct SSH/SFTP bypass path open.
+
+Full deployment, security policy, and flow diagrams are documented in [docs/agent-mode-deployment-security.md](docs/agent-mode-deployment-security.md).
+
 ### Run
 
 ```bash
@@ -337,6 +385,9 @@ The application starts on `**http://localhost:9090**`.
 xjtool/
 ├── pom.xml
 ├── README.md
+├── webtool-agent/                       # Target-side Agent service
+├── docs/
+│   └── agent-mode-deployment-security.md
 ├── src/main/
 │   ├── java/com/gxcj/xjtool/
 │   │   ├── XjToolApplication.java        # Entry point
@@ -694,6 +745,54 @@ security:
     per-ip: 100      # 每 IP 每分钟请求数
 ```
 
+#### 7. Agent 模式（可选）
+
+Agent 模式将终端链路从主服务直接 SSH 改为目标服务器本机 Agent 执行：
+
+```text
+浏览器 xterm.js -> WebTool 主服务 -> WebSocket API -> webtool-agent -> 本机 PTY shell
+```
+
+开启后，WebTool 主服务不再直接 SSH 登录目标服务器，而是调用目标服务器上部署的 `webtool-agent`。Agent 在目标机本机启动真实 PTY 终端，命令执行身份就是启动 Agent 的系统用户，因此可以继续支持 `vim`、`top`、`mysql`、`su`、`sudo` 等交互式终端体验。
+
+构建 Agent 包：
+
+```bash
+cd webtool-agent
+mvn -q -DskipTests package
+```
+
+将 `webtool-agent/target/webtool-agent-1.0.0-SNAPSHOT.jar` 和 Agent 的 `application.yml` 上传到每台目标服务器，然后用 JDK 11 或兼容 Java 运行环境启动：
+
+```bash
+java -jar webtool-agent-1.0.0-SNAPSHOT.jar --spring.config.location=./application.yml
+```
+
+主服务只需要开启 Agent 模式并配置 Agent 端口和服务端 token：
+
+```yaml
+app:
+  agent:
+    enabled: true
+    port: 18080
+    token: change-me-to-a-strong-shared-secret
+```
+
+每台目标服务器的 Agent 配置同一个 token，并建议限制只允许 WebTool 主服务 IP 调用：
+
+```yaml
+agent:
+  token: change-me-to-a-strong-shared-secret
+  security:
+    require-token: true
+    allowed-clients:
+      - 10.238.89.10
+```
+
+Agent 模式下，主服务会从服务器列表中读取目标服务器 IP，再拼接 `app.agent.port` 形成 Agent 地址，不需要在 Excel 中额外维护 Agent URL。token 仅保存在主服务和 Agent 配置文件中，不下发到浏览器。为避免绕过终端权限控制，Agent 模式下 SFTP 文件侧栏和 SFTP 接口会被禁用。
+
+完整部署方式、安全策略、传统 SSH 直连问题说明和流程图见：[docs/agent-mode-deployment-security.md](docs/agent-mode-deployment-security.md)。
+
 ### 运行
 
 ```bash
@@ -725,6 +824,9 @@ java -jar target/webtool-1.0.0-SNAPSHOT.jar --spring.config.location=./applicati
 xjtool/
 ├── pom.xml
 ├── README.md
+├── webtool-agent/                      # 目标服务器侧 Agent 服务
+├── docs/
+│   └── agent-mode-deployment-security.md
 ├── src/main/
 │   ├── java/com/gxcj/xjtool/
 │   │   ├── XjToolApplication.java        # 程序入口
@@ -776,4 +878,3 @@ MIT License。详见 [LICENSE](LICENSE)。
 **李金才 (lijincaic)** — 首席工程师 & 架构师
 
 > 精准构建，放心部署。
-

@@ -11,7 +11,9 @@ import com.gxcj.xjtool.config.ExcelServerConfigLoader;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import javax.validation.Valid;
 import java.util.ArrayList;
@@ -310,6 +312,74 @@ public class ServerController {
         }
 
         return toDTO(updated);
+    }
+
+    @DeleteMapping("/{id}")
+    public void delete(@PathVariable String id) {
+        ServerInfo existing = findById(id);
+        if (existing == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Server not found");
+        }
+
+        boolean removed = removeServerFromConfig(id);
+        if (!removed) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Server not found");
+        }
+
+        serverList.removeIf(s -> id.equals(s.getId()));
+
+        if (serverConfig.getServerGroups() != null) {
+            serverConfig.getServerGroups().removeIf(g -> g.getServers() == null || g.getServers().isEmpty());
+        }
+
+        if (excelServerConfigLoader != null) {
+            excelServerConfigLoader.deleteServer(id);
+        }
+    }
+
+    private ServerInfo findById(String id) {
+        if (id == null || id.trim().isEmpty()) {
+            return null;
+        }
+        for (ServerInfo s : serverList) {
+            if (id.equals(s.getId())) {
+                return s;
+            }
+        }
+        if (serverConfig.getServerGroups() != null) {
+            for (ServerGroup group : serverConfig.getServerGroups()) {
+                if (group.getServers() != null) {
+                    for (ServerInfo s : group.getServers()) {
+                        if (id.equals(s.getId())) {
+                            return s;
+                        }
+                    }
+                }
+            }
+        }
+        if (serverConfig.getServers() != null) {
+            for (ServerInfo s : serverConfig.getServers()) {
+                if (id.equals(s.getId())) {
+                    return s;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean removeServerFromConfig(String id) {
+        boolean removed = false;
+        if (serverConfig.getServerGroups() != null) {
+            for (ServerGroup g : serverConfig.getServerGroups()) {
+                if (g.getServers() != null) {
+                    removed = g.getServers().removeIf(s -> id.equals(s.getId())) || removed;
+                }
+            }
+        }
+        if (serverConfig.getServers() != null) {
+            removed = serverConfig.getServers().removeIf(s -> id.equals(s.getId())) || removed;
+        }
+        return removed;
     }
 
     private ServerInfoDTO toDTO(ServerInfo serverInfo) {

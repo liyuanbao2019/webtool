@@ -36,6 +36,7 @@
   "index.removeSelectedServer": "Remove",
   "index.editServer": "Edit Server",
   "index.deleteServer": "Delete Server",
+  "index.confirmDeleteServer": "Delete server \"{0}\"? This cannot be undone.",
   "index.gridView": "Grid View",
   "index.listView": "List View",
   "index.commonWebsites": "Common Websites",
@@ -71,6 +72,7 @@
   "alert.usernameRequired": "Please enter username",
   "alert.passwordRequired": "Please enter password",
   "alert.loadFailed": "Failed to load server info",
+  "alert.deleteFailed": "Failed to delete server",
   "alert.connectionLimit": "Connection limit reached, please close some connections and retry.",
 
   "sql.title": "SQL Executor",

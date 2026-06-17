@@ -602,7 +602,7 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
 
         try {
             List<ServerInfo> allServers = collectAllServers();
-            allServers.removeIf(s -> s.getId() == null || !s.getId().equals(serverId));
+            allServers.removeIf(s -> serverId.equals(s.getId()));
             writeToExcel(outputPath, allServers);
             log.info("服务器 {} 已从 Excel 中删除", serverId);
         } catch (Exception e) {
