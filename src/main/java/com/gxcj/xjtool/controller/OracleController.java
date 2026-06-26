@@ -6,12 +6,21 @@ import com.gxcj.xjtool.dto.ResultEditCommitRequest;
 import com.gxcj.xjtool.dto.SqlResultResponse;
 import com.gxcj.xjtool.service.OracleService;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.CreationHelper;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -25,6 +34,7 @@ import java.util.HashMap;
 public class OracleController {
 
     private final OracleService oracleService;
+    private static final int XLSX_MAX_ROWS_PER_SHEET = 1_048_576;
 
     /**
      * 获取配置的数据源列表
@@ -97,15 +107,15 @@ public class OracleController {
         }
 
         String normalizedFormat = format == null ? "csv" : format.toLowerCase();
-        String extension = "sql".equals(normalizedFormat) ? "sql" : ("excel".equals(normalizedFormat) ? "xls" : "csv");
+        String extension = "sql".equals(normalizedFormat) ? "sql" : ("excel".equals(normalizedFormat) ? "xlsx" : "csv");
         String fileName = "query_result_" + System.currentTimeMillis() + "." + extension;
         servletResponse.setCharacterEncoding(StandardCharsets.UTF_8.name());
         servletResponse.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"; filename*=UTF-8''"
                 + URLEncoder.encode(fileName, StandardCharsets.UTF_8.name()));
 
         if ("excel".equals(normalizedFormat)) {
-            servletResponse.setContentType("application/vnd.ms-excel;charset=UTF-8");
-            writeExcelHtml(servletResponse.getWriter(), exportResult);
+            servletResponse.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            writeExcelXlsx(servletResponse.getOutputStream(), exportResult);
         } else if ("sql".equals(normalizedFormat)) {
             servletResponse.setContentType("text/plain;charset=UTF-8");
             writeInsertSql(servletResponse.getWriter(), exportResult, inferExportTableName(request.getSql()));
@@ -289,6 +299,73 @@ public class OracleController {
             return "";
         }
         return String.valueOf(value).replace("\"", "\"\"");
+    }
+
+    private void writeExcelXlsx(OutputStream outputStream, SqlResultResponse result) throws IOException {
+        try (SXSSFWorkbook workbook = new SXSSFWorkbook(500)) {
+            workbook.setCompressTempFiles(true);
+            CreationHelper creationHelper = workbook.getCreationHelper();
+
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+
+            CellStyle dateStyle = workbook.createCellStyle();
+            dateStyle.setDataFormat(creationHelper.createDataFormat().getFormat("yyyy-mm-dd hh:mm:ss"));
+
+            int sheetIndex = 1;
+            Sheet sheet = createResultSheet(workbook, sheetIndex, result.getColumns(), headerStyle);
+            int rowIndex = 1;
+
+            for (Map<String, Object> dataRow : result.getRows()) {
+                if (rowIndex >= XLSX_MAX_ROWS_PER_SHEET) {
+                    sheetIndex++;
+                    sheet = createResultSheet(workbook, sheetIndex, result.getColumns(), headerStyle);
+                    rowIndex = 1;
+                }
+                Row row = sheet.createRow(rowIndex++);
+                writeExcelDataRow(row, result.getColumns(), dataRow, dateStyle);
+            }
+
+            workbook.write(outputStream);
+            workbook.dispose();
+        }
+    }
+
+    private Sheet createResultSheet(SXSSFWorkbook workbook, int sheetIndex, List<String> columns, CellStyle headerStyle) {
+        Sheet sheet = workbook.createSheet("Result " + sheetIndex);
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < columns.size(); i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(columns.get(i));
+            cell.setCellStyle(headerStyle);
+            sheet.setColumnWidth(i, 20 * 256);
+        }
+        return sheet;
+    }
+
+    private void writeExcelDataRow(Row row, List<String> columns, Map<String, Object> dataRow, CellStyle dateStyle) {
+        for (int i = 0; i < columns.size(); i++) {
+            Cell cell = row.createCell(i);
+            Object value = dataRow.get(columns.get(i));
+            writeExcelCell(cell, value, dateStyle);
+        }
+    }
+
+    private void writeExcelCell(Cell cell, Object value, CellStyle dateStyle) {
+        if (value == null) {
+            cell.setBlank();
+        } else if (value instanceof Date) {
+            cell.setCellValue((Date) value);
+            cell.setCellStyle(dateStyle);
+        } else if (value instanceof Number) {
+            cell.setCellValue(((Number) value).doubleValue());
+        } else if (value instanceof Boolean) {
+            cell.setCellValue((Boolean) value);
+        } else {
+            cell.setCellValue(String.valueOf(value));
+        }
     }
 
     private void writeExcelHtml(PrintWriter writer, SqlResultResponse result) {

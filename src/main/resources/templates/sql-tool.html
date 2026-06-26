@@ -4717,7 +4717,7 @@
                             return match[1];
                         }
                     }
-                    const ext = format === 'excel' ? 'xls' : (format === 'sql' ? 'sql' : 'csv');
+                    const ext = format === 'excel' ? 'xlsx' : (format === 'sql' ? 'sql' : 'csv');
                     return 'query_result_' + Date.now() + '.' + ext;
                 },
                 /**
