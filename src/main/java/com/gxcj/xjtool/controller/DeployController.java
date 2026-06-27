@@ -617,7 +617,7 @@ public class DeployController {
         if (stderr == null || stderr.isEmpty()) {
             return stderr;
         }
-        return stderr.replaceAll("(?m)^bash: cannot set terminal process group \\([^\\r\\n]*\\): Inappropriate ioctl for device\\r?\\n?", "")
+        return stderr.replaceAll("(?m)^bash: cannot set terminal process group \\([^\\r\\n]*\\): [^\\r\\n]*\\r?\\n?", "")
                 .replaceAll("(?m)^bash: no job control in this shell\\r?\\n?", "");
     }
 

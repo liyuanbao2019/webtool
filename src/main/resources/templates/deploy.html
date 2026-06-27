@@ -339,9 +339,17 @@
             border-radius: 50%;
         }
 
-        .terminal-dot.red { background-color: #ef4444; }
-        .terminal-dot.yellow { background-color: #f59e0b; }
-        .terminal-dot.green { background-color: #10b981; }
+        .terminal-dot.red {
+            background-color: #ef4444;
+        }
+
+        .terminal-dot.yellow {
+            background-color: #f59e0b;
+        }
+
+        .terminal-dot.green {
+            background-color: #10b981;
+        }
 
         .result-log {
             margin: 0;
@@ -360,13 +368,16 @@
             width: 8px;
             height: 8px;
         }
+
         .result-log::-webkit-scrollbar-track {
             background: #0f172a;
         }
+
         .result-log::-webkit-scrollbar-thumb {
             background: #334155;
             border-radius: 4px;
         }
+
         .result-log::-webkit-scrollbar-thumb:hover {
             background: #475569;
         }
@@ -402,13 +413,44 @@
             gap: 12px;
         }
 
-        .result-card { flex: 1; min-height: 210px; display: flex; flex-direction: column; }
-        .result-list { flex: 1; min-height: 0; overflow-y: auto; }
-        .compact-label { font-size: 11px; margin-bottom: 3px; }
-        .command-workbench { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-        .command-config-card { padding: 8px 10px; }
-        .command-config-card .row { --bs-gutter-y: .35rem; }
-        .command-config-card .command-editor { min-height: 90px; }
+        .result-card {
+            flex: 1;
+            min-height: 210px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .result-list {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
+        .compact-label {
+            font-size: 11px;
+            margin-bottom: 3px;
+        }
+
+        .command-workbench {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .command-config-card {
+            padding: 8px 10px;
+        }
+
+        .command-config-card .row {
+            --bs-gutter-y: .35rem;
+        }
+
+        .command-config-card .command-editor {
+            min-height: 90px;
+        }
+
         .deploy-modal-mask {
             position: fixed;
             inset: 0;
@@ -419,6 +461,7 @@
             justify-content: center;
             padding: 16px;
         }
+
         .deploy-modal {
             width: min(560px, 100%);
             max-height: 92vh;
@@ -429,6 +472,7 @@
             border-radius: 10px;
             box-shadow: 0 24px 60px rgba(15, 23, 42, .22);
         }
+
         .deploy-modal-header,
         .deploy-modal-footer {
             padding: 12px 16px;
@@ -437,18 +481,22 @@
             justify-content: space-between;
             gap: 12px;
         }
+
         .deploy-modal-header {
             border-bottom: 1px solid #eef2f7;
         }
+
         .deploy-modal-body {
             padding: 14px 16px;
             overflow-y: auto;
         }
+
         .deploy-modal-footer {
             border-top: 1px solid #eef2f7;
             background: #f8fafc;
             justify-content: flex-end;
         }
+
         .server-pick-list {
             display: flex;
             flex-direction: column;
@@ -456,6 +504,7 @@
             max-height: 58vh;
             overflow-y: auto;
         }
+
         .server-pick-toolbar {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto auto;
@@ -463,12 +512,14 @@
             align-items: center;
             margin-bottom: 10px;
         }
+
         .server-pick-stats {
             display: flex;
             flex-wrap: wrap;
             gap: 6px;
             margin-bottom: 8px;
         }
+
         .server-pick-stat {
             border: 1px solid #e5e7eb;
             border-radius: 999px;
@@ -477,12 +528,14 @@
             color: #475569;
             background: #f8fafc;
         }
+
         .server-pick-group {
             border: 1px solid #e5e7eb;
             border-radius: 8px;
             overflow: hidden;
             background: #fff;
         }
+
         .server-pick-group-title {
             font-size: 12px;
             font-weight: 800;
@@ -496,16 +549,19 @@
             cursor: pointer;
             user-select: none;
         }
+
         .server-pick-group-name {
             min-width: 0;
             display: flex;
             align-items: center;
             gap: 6px;
         }
+
         .server-pick-rows {
             max-height: 260px;
             overflow-y: auto;
         }
+
         .server-pick-item {
             border-top: 1px solid #eef2f7;
             padding: 6px 10px;
@@ -515,21 +571,25 @@
             align-items: center;
             background: #fff;
         }
+
         .server-pick-item.is-added {
             background: #f8fafc;
             color: #94a3b8;
         }
+
         .server-pick-name {
             font-size: 13px;
             font-weight: 800;
             color: #111827;
         }
+
         .server-pick-meta {
             font-family: Consolas, Monaco, monospace;
             font-size: 11px;
             color: #64748b;
             margin-top: 1px;
         }
+
         .server-pick-added {
             font-size: 12px;
             color: #64748b;
@@ -540,9 +600,11 @@
             .server-pick-toolbar {
                 grid-template-columns: 1fr;
             }
+
             .server-pick-item {
                 grid-template-columns: minmax(0, 1fr) auto;
             }
+
             .server-pick-item .server-pick-meta {
                 display: none;
             }
@@ -579,7 +641,8 @@
                         <i class="fas fa-server text-primary"></i>目标节点
                         <span class="badge bg-primary">{{ servers.length }}</span>
                     </h2>
-                    <button class="btn btn-outline-primary btn-sm node-add-btn" title="从已有服务器添加目标主机" @click="openServerPicker">
+                    <button class="btn btn-outline-primary btn-sm node-add-btn" title="从已有服务器添加目标主机"
+                        @click="openServerPicker">
                         <i class="fas fa-plus"></i>
                     </button>
                 </div>
@@ -589,7 +652,8 @@
                 <div class="node-list" v-if="filteredServers.length > 0">
                     <div class="node-item" v-for="server in filteredServers" :key="server.id || server.host">
                         <div>
-                            <div class="node-name text-truncate" :title="server.name || server.host">{{ server.name || server.host }}</div>
+                            <div class="node-name text-truncate" :title="server.name || server.host">{{ server.name ||
+                                server.host }}</div>
                             <div class="node-meta">{{ server.username }}@{{ server.host }}:{{ server.port || 22 }}</div>
                         </div>
                         <button class="btn btn-link btn-sm text-danger p-0" @click="removeServer(server)">移除</button>
@@ -607,10 +671,12 @@
                         操作配置
                     </h2>
                     <div class="task-type-tabs" aria-label="任务类型">
-                        <button class="task-type-tab" :class="{ active: form.taskType === 'command' }" @click="form.taskType = 'command'">
+                        <button class="task-type-tab" :class="{ active: form.taskType === 'command' }"
+                            @click="form.taskType = 'command'">
                             <i class="fas fa-terminal me-1"></i>批量执行
                         </button>
-                        <button class="task-type-tab" :class="{ active: form.taskType === 'upload' }" @click="form.taskType = 'upload'">
+                        <button class="task-type-tab" :class="{ active: form.taskType === 'upload' }"
+                            @click="form.taskType = 'upload'">
                             <i class="fas fa-file-arrow-up me-1"></i>文件分发
                         </button>
                     </div>
@@ -618,176 +684,191 @@
 
                 <div class="main-scroll">
                     <div class="command-workbench" v-if="form.taskType === 'command'">
-                    <div class="section-card command-config-card">
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-4">
-                                <label class="form-label compact-label fw-bold text-muted">执行策略</label>
-                                <select class="form-select form-select-sm" v-model="form.executionStrategy">
-                                    <option value="serial">串行（逐台执行）</option>
-                                    <option value="parallel">并发执行</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4" v-if="form.executionStrategy === 'parallel'">
-                                <label class="form-label compact-label fw-bold text-muted">最大并发数</label>
-                                <input class="form-control form-control-sm" type="number" min="1" max="20" v-model.number="form.maxParallel">
-                            </div>
-                            <div class="col-md-4 d-flex align-items-end" v-if="form.executionStrategy === 'serial'">
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="checkbox" v-model="form.stopOnError" id="stopOnError">
-                                    <label class="form-check-label" for="stopOnError">任一节点失败后停止</label>
+                        <div class="section-card command-config-card">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label compact-label fw-bold text-muted">执行策略</label>
+                                    <select class="form-select form-select-sm" v-model="form.executionStrategy">
+                                        <option value="serial">串行（逐台执行）</option>
+                                        <option value="parallel">并发执行</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4" v-if="form.executionStrategy === 'parallel'">
+                                    <label class="form-label compact-label fw-bold text-muted">最大并发数</label>
+                                    <input class="form-control form-control-sm" type="number" min="1" max="20"
+                                        v-model.number="form.maxParallel">
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end" v-if="form.executionStrategy === 'serial'">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" v-model="form.stopOnError"
+                                            id="stopOnError">
+                                        <label class="form-check-label" for="stopOnError">任一节点失败后停止</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox"
+                                            v-model="form.privilegedExecution" id="privilegedExecution">
+                                        <label class="form-check-label" for="privilegedExecution">切换特权账号执行</label>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="col-md-4 d-flex align-items-end">
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="checkbox" v-model="form.privilegedExecution" id="privilegedExecution">
-                                    <label class="form-check-label" for="privilegedExecution">普通账号登录后 su root 执行</label>
-                                </div>
-                            </div>
-                        </div>
-                        <textarea class="form-control form-control-sm command-editor" v-model="form.commands" placeholder="输入将在每台服务器执行的 Linux 命令，例如：
+                            <textarea class="form-control form-control-sm command-editor" v-model="form.commands"
+                                placeholder="输入将在每台服务器执行的 Linux 命令，例如：
 mkdir -p {targetDir}
 ls -lh {targetDir}
 echo uploaded: {targetFile}"></textarea>
-                        <div class="mt-1 d-flex align-items-center gap-2">
-                            <div class="small text-muted text-nowrap">变量：</div>
-                            <div class="variable-grid">
-                                <span class="variable-chip" v-for="v in variables" :key="v" @click="insertVariable(v)">{{ v }}</span>
+                            <div class="mt-1 d-flex align-items-center gap-2">
+                                <div class="small text-muted text-nowrap">变量：</div>
+                                <div class="variable-grid">
+                                    <span class="variable-chip" v-for="v in variables" :key="v"
+                                        @click="insertVariable(v)">{{ v }}</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="section-card result-card">
-                        <div class="section-head">
-                            <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
-                            <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0" @click="results = []; expandedResults = {}">
-                                <i class="fas fa-trash-can me-1"></i>清空结果
-                            </button>
-                        </div>
-                        <div class="result-list">
-                            <div v-if="results.length === 0" class="result-empty-state">
-                                <i class="fas fa-terminal"></i>
-                                <p>执行任务后，每台服务器的实时命令状态和日志将会在此处呈现。</p>
+                        <div class="section-card result-card">
+                            <div class="section-head">
+                                <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
+                                <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0"
+                                    @click="results = []; expandedResults = {}">
+                                    <i class="fas fa-trash-can me-1"></i>清空结果
+                                </button>
                             </div>
-                            <div v-for="(result, index) in results"
-                                 :key="resultKey(result, index)"
-                                 class="result-row"
-                                 :class="[result.success ? 'status-success' : 'status-error', { 'is-expanded': isResultExpanded(result, index) }]">
-                                <div class="result-head" @click="toggleResult(result, index)">
-                                    <div class="result-summary">
-                                        <i class="fas fa-chevron-right toggle-arrow"></i>
-                                        <i class="fas" :class="result.success ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger'"></i>
-                                        <strong>{{ result.host || result.name }}</strong>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="badge rounded-pill px-2 py-1" :class="result.success ? 'badge-success-light' : 'badge-danger-light'">
-                                            {{ result.success ? '成功' : '失败' }}
-                                        </span>
-                                        <span class="text-muted small d-flex align-items-center gap-1">
-                                            <i class="far fa-clock"></i>{{ result.durationMs || 0 }}ms
-                                        </span>
-                                    </div>
+                            <div class="result-list">
+                                <div v-if="results.length === 0" class="result-empty-state">
+                                    <i class="fas fa-terminal"></i>
+                                    <p>执行任务后，每台服务器的实时命令状态和日志将会在此处呈现。</p>
                                 </div>
-                                <div class="result-log-wrapper" v-if="isResultExpanded(result, index)">
-                                    <div class="terminal-header">
-                                        <div class="terminal-dots">
-                                            <span class="terminal-dot red"></span>
-                                            <span class="terminal-dot yellow"></span>
-                                            <span class="terminal-dot green"></span>
+                                <div v-for="(result, index) in results" :key="resultKey(result, index)"
+                                    class="result-row"
+                                    :class="[result.success ? 'status-success' : 'status-error', { 'is-expanded': isResultExpanded(result, index) }]">
+                                    <div class="result-head" @click="toggleResult(result, index)">
+                                        <div class="result-summary">
+                                            <i class="fas fa-chevron-right toggle-arrow"></i>
+                                            <i class="fas"
+                                                :class="result.success ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger'"></i>
+                                            <strong>{{ result.host || result.name }}</strong>
                                         </div>
-                                        <span>EXECUTION LOG</span>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge rounded-pill px-2 py-1"
+                                                :class="result.success ? 'badge-success-light' : 'badge-danger-light'">
+                                                {{ result.success ? '成功' : '失败' }}
+                                            </span>
+                                            <span class="text-muted small d-flex align-items-center gap-1">
+                                                <i class="far fa-clock"></i>{{ result.durationMs || 0 }}ms
+                                            </span>
+                                        </div>
                                     </div>
-                                    <pre class="result-log">{{ (result.logs || []).join('\n\n') }}</pre>
+                                    <div class="result-log-wrapper" v-if="isResultExpanded(result, index)">
+                                        <div class="terminal-header">
+                                            <div class="terminal-dots">
+                                                <span class="terminal-dot red"></span>
+                                                <span class="terminal-dot yellow"></span>
+                                                <span class="terminal-dot green"></span>
+                                            </div>
+                                            <span>EXECUTION LOG</span>
+                                        </div>
+                                        <pre class="result-log">{{ (result.logs || []).join('\n\n') }}</pre>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
                     </div>
 
                     <div class="command-workbench" v-if="form.taskType === 'upload'">
-                    <div class="section-card">
-                        <div class="section-head">
-                            <div class="section-title"><i class="fas fa-paperclip text-primary"></i>批量上传配置</div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-lg-5">
-                                <label class="form-label compact-label fw-bold text-muted">上传附件（不限类型）</label>
-                                <input class="form-control form-control-sm" type="file" @change="onFileChange">
-                                <div class="form-text" v-if="selectedFile">{{ selectedFile.name }}，{{ formatSize(selectedFile.size) }}</div>
+                        <div class="section-card">
+                            <div class="section-head">
+                                <div class="section-title"><i class="fas fa-paperclip text-primary"></i>批量上传配置</div>
                             </div>
-                            <div class="col-lg-4">
-                                <label class="form-label compact-label fw-bold text-muted">目标目录</label>
-                                <input class="form-control form-control-sm" v-model.trim="form.targetDir" placeholder="/home/{username}/">
-                                <div class="quick-dir-list">
-                                    <span class="quick-dir" v-for="dir in quickDirs" :key="dir" @click="useDir(dir)">{{ dir }}</span>
-                                    <span class="quick-dir" v-for="dir in recentDirs" :key="'r-' + dir" @click="useDir(dir)">历史: {{ dir }}</span>
+                            <div class="row g-3">
+                                <div class="col-lg-5">
+                                    <label class="form-label compact-label fw-bold text-muted">上传附件（不限类型）</label>
+                                    <input class="form-control form-control-sm" type="file" @change="onFileChange">
+                                    <div class="form-text" v-if="selectedFile">{{ selectedFile.name }}，{{
+                                        formatSize(selectedFile.size) }}</div>
                                 </div>
-                            </div>
-                            <div class="col-lg-3">
-                                <label class="form-label compact-label fw-bold text-muted">同名文件策略</label>
-                                <select class="form-select form-select-sm" v-model="form.existsPolicy">
-                                    <option value="backup">自动备份后覆盖</option>
-                                    <option value="overwrite">直接覆盖</option>
-                                    <option value="skip">跳过</option>
-                                    <option value="rename">重命名上传</option>
-                                </select>
-                                <div class="form-check mt-2">
-                                    <input class="form-check-input" type="checkbox" v-model="form.chmodExecutable" id="chmodExecutable">
-                                    <label class="form-check-label" for="chmodExecutable">上传后 chmod +x</label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="section-card result-card">
-                        <div class="section-head">
-                            <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
-                            <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0" @click="results = []; expandedResults = {}">
-                                <i class="fas fa-trash-can me-1"></i>清空结果
-                            </button>
-                        </div>
-                        <div class="result-list">
-                            <div v-if="results.length === 0" class="result-empty-state">
-                                <i class="fas fa-cloud-arrow-up"></i>
-                                <p>分发文件后，每台服务器的传输进度和执行结果将会在此处呈现。</p>
-                            </div>
-                            <div v-for="(result, index) in results"
-                                 :key="resultKey(result, index)"
-                                 class="result-row"
-                                 :class="[result.success ? 'status-success' : 'status-error', { 'is-expanded': isResultExpanded(result, index) }]">
-                                <div class="result-head" @click="toggleResult(result, index)">
-                                    <div class="result-summary">
-                                        <i class="fas fa-chevron-right toggle-arrow"></i>
-                                        <i class="fas" :class="result.success ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger'"></i>
-                                        <strong>{{ result.host || result.name }}</strong>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="badge rounded-pill px-2 py-1" :class="result.success ? 'badge-success-light' : 'badge-danger-light'">
-                                            {{ result.success ? '成功' : '失败' }}
-                                        </span>
-                                        <span class="text-muted small d-flex align-items-center gap-1">
-                                            <i class="far fa-clock"></i>{{ result.durationMs || 0 }}ms
-                                        </span>
+                                <div class="col-lg-4">
+                                    <label class="form-label compact-label fw-bold text-muted">目标目录</label>
+                                    <input class="form-control form-control-sm" v-model.trim="form.targetDir"
+                                        placeholder="/home/{username}/">
+                                    <div class="quick-dir-list">
+                                        <span class="quick-dir" v-for="dir in quickDirs" :key="dir"
+                                            @click="useDir(dir)">{{ dir }}</span>
+                                        <span class="quick-dir" v-for="dir in recentDirs" :key="'r-' + dir"
+                                            @click="useDir(dir)">历史: {{ dir }}</span>
                                     </div>
                                 </div>
-                                <div class="result-log-wrapper" v-if="isResultExpanded(result, index)">
-                                    <div class="terminal-header">
-                                        <div class="terminal-dots">
-                                            <span class="terminal-dot red"></span>
-                                            <span class="terminal-dot yellow"></span>
-                                            <span class="terminal-dot green"></span>
+                                <div class="col-lg-3">
+                                    <label class="form-label compact-label fw-bold text-muted">同名文件策略</label>
+                                    <select class="form-select form-select-sm" v-model="form.existsPolicy">
+                                        <option value="backup">自动备份后覆盖</option>
+                                        <option value="overwrite">直接覆盖</option>
+                                        <option value="skip">跳过</option>
+                                        <option value="rename">重命名上传</option>
+                                    </select>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" v-model="form.chmodExecutable"
+                                            id="chmodExecutable">
+                                        <label class="form-check-label" for="chmodExecutable">上传后 chmod +x</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="section-card result-card">
+                            <div class="section-head">
+                                <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
+                                <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0"
+                                    @click="results = []; expandedResults = {}">
+                                    <i class="fas fa-trash-can me-1"></i>清空结果
+                                </button>
+                            </div>
+                            <div class="result-list">
+                                <div v-if="results.length === 0" class="result-empty-state">
+                                    <i class="fas fa-cloud-arrow-up"></i>
+                                    <p>分发文件后，每台服务器的传输进度和执行结果将会在此处呈现。</p>
+                                </div>
+                                <div v-for="(result, index) in results" :key="resultKey(result, index)"
+                                    class="result-row"
+                                    :class="[result.success ? 'status-success' : 'status-error', { 'is-expanded': isResultExpanded(result, index) }]">
+                                    <div class="result-head" @click="toggleResult(result, index)">
+                                        <div class="result-summary">
+                                            <i class="fas fa-chevron-right toggle-arrow"></i>
+                                            <i class="fas"
+                                                :class="result.success ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger'"></i>
+                                            <strong>{{ result.host || result.name }}</strong>
                                         </div>
-                                        <span>DEPLOY LOG</span>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge rounded-pill px-2 py-1"
+                                                :class="result.success ? 'badge-success-light' : 'badge-danger-light'">
+                                                {{ result.success ? '成功' : '失败' }}
+                                            </span>
+                                            <span class="text-muted small d-flex align-items-center gap-1">
+                                                <i class="far fa-clock"></i>{{ result.durationMs || 0 }}ms
+                                            </span>
+                                        </div>
                                     </div>
-                                    <pre class="result-log">{{ (result.logs || []).join('\n\n') }}</pre>
+                                    <div class="result-log-wrapper" v-if="isResultExpanded(result, index)">
+                                        <div class="terminal-header">
+                                            <div class="terminal-dots">
+                                                <span class="terminal-dot red"></span>
+                                                <span class="terminal-dot yellow"></span>
+                                                <span class="terminal-dot green"></span>
+                                            </div>
+                                            <span>DEPLOY LOG</span>
+                                        </div>
+                                        <pre class="result-log">{{ (result.logs || []).join('\n\n') }}</pre>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
                     </div>
                 </div>
 
                 <div class="action-footer">
                     <div class="text-muted small">
-                        将对 {{ servers.length }} 台节点{{ form.executionStrategy === 'parallel' && form.taskType === 'command' ? '并发' : '串行' }}执行{{ form.taskType === 'upload' ? '文件分发' : '命令任务' }}。
+                        将对 {{ servers.length }} 台节点{{ form.executionStrategy === 'parallel' && form.taskType ===
+                        'command' ? '并发' : '串行' }}执行{{ form.taskType === 'upload' ? '文件分发' : '命令任务' }}。
                     </div>
                     <button class="btn btn-success px-4" :disabled="running || !canRun" @click="runBatch">
                         <span class="spinner-border spinner-border-sm me-1" v-if="running"></span>
@@ -805,12 +886,15 @@ echo uploaded: {targetFile}"></textarea>
                 </div>
                 <div class="deploy-modal-body">
                     <div class="server-pick-toolbar">
-                        <input class="form-control form-control-sm" v-model.trim="serverPoolSearch" placeholder="搜索服务器名称/IP/用户/分组">
+                        <input class="form-control form-control-sm" v-model.trim="serverPoolSearch"
+                            placeholder="搜索服务器名称/IP/用户/分组">
                         <div class="form-check form-switch m-0 text-nowrap">
-                            <input class="form-check-input" type="checkbox" v-model="serverPoolOnlyAvailable" id="serverPoolOnlyAvailable">
+                            <input class="form-check-input" type="checkbox" v-model="serverPoolOnlyAvailable"
+                                id="serverPoolOnlyAvailable">
                             <label class="form-check-label small" for="serverPoolOnlyAvailable">只看未添加</label>
                         </div>
-                        <button class="btn btn-outline-primary btn-sm text-nowrap" :disabled="availableFilteredServers.length === 0" @click="addFilteredServers">
+                        <button class="btn btn-outline-primary btn-sm text-nowrap"
+                            :disabled="availableFilteredServers.length === 0" @click="addFilteredServers">
                             加入当前筛选
                         </button>
                     </div>
@@ -827,31 +911,38 @@ echo uploaded: {targetFile}"></textarea>
                         <div>{{ serverPoolSearch ? '没有匹配的服务器' : '暂无可添加服务器' }}</div>
                     </div>
                     <div v-else class="server-pick-list">
-                        <div class="server-pick-group" v-for="group in filteredServerPoolGroups" :key="group.name || 'ungrouped'">
+                        <div class="server-pick-group" v-for="group in filteredServerPoolGroups"
+                            :key="group.name || 'ungrouped'">
                             <div class="server-pick-group-title" @click="toggleServerPoolGroup(group.name)">
                                 <div class="server-pick-group-name">
-                                    <i class="fas" :class="isServerPoolGroupCollapsed(group.name) ? 'fa-chevron-right' : 'fa-chevron-down'"></i>
+                                    <i class="fas"
+                                        :class="isServerPoolGroupCollapsed(group.name) ? 'fa-chevron-right' : 'fa-chevron-down'"></i>
                                     <i class="fas fa-layer-group"></i>
                                     <span class="text-truncate">{{ group.name || '默认分组' }}</span>
                                 </div>
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="badge bg-secondary">{{ group.servers.length }}</span>
-                                    <button class="btn btn-outline-primary btn-sm py-0" @click.stop="addServers(group.servers)" :disabled="availableServers(group.servers).length === 0">
+                                    <button class="btn btn-outline-primary btn-sm py-0"
+                                        @click.stop="addServers(group.servers)"
+                                        :disabled="availableServers(group.servers).length === 0">
                                         加入本组
                                     </button>
                                 </div>
                             </div>
                             <div class="server-pick-rows" v-if="!isServerPoolGroupCollapsed(group.name)">
-                                <div class="server-pick-item" v-for="server in group.servers" :key="server.id || server.host"
-                                     :class="{ 'is-added': isTargetServer(server) }">
+                                <div class="server-pick-item" v-for="server in group.servers"
+                                    :key="server.id || server.host" :class="{ 'is-added': isTargetServer(server) }">
                                     <div>
-                                        <div class="server-pick-name text-truncate" :title="server.name || server.host">{{ server.name || server.host }}</div>
+                                        <div class="server-pick-name text-truncate" :title="server.name || server.host">
+                                            {{ server.name || server.host }}</div>
                                     </div>
-                                    <div class="server-pick-meta text-truncate" :title="server.username + '@' + server.host + ':' + (server.port || 22)">
+                                    <div class="server-pick-meta text-truncate"
+                                        :title="server.username + '@' + server.host + ':' + (server.port || 22)">
                                         {{ server.username }}@{{ server.host }}:{{ server.port || 22 }}
                                     </div>
-                                    <button class="btn btn-sm" :class="isTargetServer(server) ? 'btn-light' : 'btn-outline-primary'"
-                                            :disabled="isTargetServer(server)" @click="addExistingServer(server)">
+                                    <button class="btn btn-sm"
+                                        :class="isTargetServer(server) ? 'btn-light' : 'btn-outline-primary'"
+                                        :disabled="isTargetServer(server)" @click="addExistingServer(server)">
                                         {{ isTargetServer(server) ? '已添加' : '加入' }}
                                     </button>
                                 </div>
@@ -907,7 +998,7 @@ echo uploaded: {targetFile}"></textarea>
                 filteredServers() {
                     const q = this.nodeSearch.trim().toLowerCase();
                     if (!q) return this.servers;
-                    return this.servers.filter(function(server) {
+                    return this.servers.filter(function (server) {
                         return String(server.name || '').toLowerCase().includes(q)
                             || String(server.host || '').toLowerCase().includes(q)
                             || String(server.username || '').toLowerCase().includes(q);
@@ -917,42 +1008,42 @@ echo uploaded: {targetFile}"></textarea>
                     const q = this.serverPoolSearch.trim().toLowerCase();
                     var self = this;
                     return this.serverPool
-                        .map(function(group) {
+                        .map(function (group) {
                             var groupName = group.name || '';
                             var groupMatched = groupName.toLowerCase().includes(q);
                             var matchedServers = !q || groupMatched
                                 ? group.servers
-                                : group.servers.filter(function(server) {
+                                : group.servers.filter(function (server) {
                                     return String(server.name || '').toLowerCase().includes(q)
                                         || String(server.host || '').toLowerCase().includes(q)
                                         || String(server.username || '').toLowerCase().includes(q);
                                 });
                             if (self.serverPoolOnlyAvailable) {
-                                matchedServers = matchedServers.filter(function(server) { return !self.isTargetServer(server); });
+                                matchedServers = matchedServers.filter(function (server) { return !self.isTargetServer(server); });
                             }
                             return {
                                 name: group.name,
                                 servers: matchedServers
                             };
                         })
-                        .filter(function(group) { return group.servers && group.servers.length > 0; });
+                        .filter(function (group) { return group.servers && group.servers.length > 0; });
                 },
                 serverPoolTotalCount() {
-                    return this.serverPool.reduce(function(sum, group) {
+                    return this.serverPool.reduce(function (sum, group) {
                         return sum + ((group.servers && group.servers.length) || 0);
                     }, 0);
                 },
                 serverPoolAddedCount() {
                     var self = this;
-                    return this.serverPool.reduce(function(sum, group) {
-                        return sum + (group.servers || []).filter(function(server) { return self.isTargetServer(server); }).length;
+                    return this.serverPool.reduce(function (sum, group) {
+                        return sum + (group.servers || []).filter(function (server) { return self.isTargetServer(server); }).length;
                     }, 0);
                 },
                 availableFilteredServers() {
                     var self = this;
                     return this.filteredServerPoolGroups
-                        .reduce(function(list, group) { return list.concat(group.servers || []); }, [])
-                        .filter(function(server) { return !self.isTargetServer(server); });
+                        .reduce(function (list, group) { return list.concat(group.servers || []); }, [])
+                        .filter(function (server) { return !self.isTargetServer(server); });
                 },
                 recentDirs() {
                     try {
@@ -981,11 +1072,11 @@ echo uploaded: {targetFile}"></textarea>
             methods: {
                 getCsrfToken() {
                     var self = this;
-                    axios.get('/api/csrf/token').then(function(res) {
+                    axios.get('/api/csrf/token').then(function (res) {
                         if (res.data && res.data.success) {
                             self.csrfToken = res.data.token;
                         }
-                    }).catch(function(e) {
+                    }).catch(function (e) {
                         console.error('Failed to get CSRF token:', e);
                     });
                 },
@@ -1034,32 +1125,32 @@ echo uploaded: {targetFile}"></textarea>
                 loadServerPool() {
                     var self = this;
                     this.loadingServerPool = true;
-                    return axios.get('/api/server/list').then(function(res) {
-                        self.serverPool = (res.data || []).map(function(group) {
+                    return axios.get('/api/server/list').then(function (res) {
+                        self.serverPool = (res.data || []).map(function (group) {
                             return {
                                 name: group.name,
                                 servers: (group.servers || [])
-                                    .map(function(dto) { return self.decryptData(dto.encryptedData); })
-                                    .filter(function(server) { return server !== null; })
+                                    .map(function (dto) { return self.decryptData(dto.encryptedData); })
+                                    .filter(function (server) { return server !== null; })
                             };
-                        }).filter(function(group) {
+                        }).filter(function (group) {
                             return group.servers && group.servers.length > 0;
                         });
                         self.resetServerPoolCollapse();
-                    }).catch(function(e) {
+                    }).catch(function (e) {
                         console.error('Failed to load server pool:', e);
                         self.serverPool = [];
-                    }).finally(function() {
+                    }).finally(function () {
                         self.loadingServerPool = false;
                     });
                 },
                 syncServersStorage() {
                     sessionStorage.setItem('deploy_selected_servers', JSON.stringify(this.servers));
-                    sessionStorage.setItem('deploy_server_ids', JSON.stringify(this.servers.map(function(item) { return item.id || item.host; })));
+                    sessionStorage.setItem('deploy_server_ids', JSON.stringify(this.servers.map(function (item) { return item.id || item.host; })));
                 },
                 isTargetServer(server) {
                     if (!server) return false;
-                    return this.servers.some(function(item) {
+                    return this.servers.some(function (item) {
                         return (server.id && item.id === server.id) || (server.host && item.host === server.host);
                     });
                 },
@@ -1075,11 +1166,11 @@ echo uploaded: {targetFile}"></textarea>
                 },
                 availableServers(serverList) {
                     var self = this;
-                    return (serverList || []).filter(function(server) { return !self.isTargetServer(server); });
+                    return (serverList || []).filter(function (server) { return !self.isTargetServer(server); });
                 },
                 addServers(serverList) {
                     var self = this;
-                    this.availableServers(serverList).forEach(function(server) {
+                    this.availableServers(serverList).forEach(function (server) {
                         self.addServerToTargets(server);
                     });
                 },
@@ -1098,7 +1189,7 @@ echo uploaded: {targetFile}"></textarea>
                 },
                 resetServerPoolCollapse() {
                     var collapsed = {};
-                    this.serverPool.forEach(function(group, index) {
+                    this.serverPool.forEach(function (group, index) {
                         if (index >= 3) {
                             collapsed[group.name || '__ungrouped__'] = true;
                         }
@@ -1106,7 +1197,7 @@ echo uploaded: {targetFile}"></textarea>
                     this.collapsedServerPoolGroups = collapsed;
                 },
                 removeServer(server) {
-                    this.servers = this.servers.filter(function(item) {
+                    this.servers = this.servers.filter(function (item) {
                         if (server.id) return item.id !== server.id;
                         return item.host !== server.host;
                     });
