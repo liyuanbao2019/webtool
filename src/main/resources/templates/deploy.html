@@ -4,11 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>批量分发与执行</title>
+    <title>批量任务中心</title>
     <link href="/css/bootstrap.min.css" rel="stylesheet">
     <link href="/css/all.min.css" rel="stylesheet">
     <script src="/js/vue.global.prod.js"></script>
     <script src="/js/axios.min.js"></script>
+    <script src="/js/crypto-js.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -20,25 +21,25 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
-            padding: 18px;
-            gap: 14px;
+            padding: 10px 12px;
+            gap: 8px;
         }
 
         .deploy-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 16px;
+            gap: 12px;
         }
 
         .deploy-title {
             margin: 0;
-            font-size: 22px;
+            font-size: 18px;
             font-weight: 800;
         }
 
         .deploy-subtitle {
-            margin: 4px 0 0;
+            margin: 2px 0 0;
             color: #64748b;
             font-size: 13px;
         }
@@ -47,14 +48,14 @@
             flex: 1;
             min-height: 0;
             display: grid;
-            grid-template-columns: 320px minmax(0, 1fr);
-            gap: 14px;
+            grid-template-columns: 240px minmax(0, 1fr);
+            gap: 8px;
         }
 
         .panel {
             background: #fff;
             border: 1px solid #e5e7eb;
-            border-radius: 8px;
+            border-radius: 6px;
             box-shadow: 0 1px 5px rgba(15, 23, 42, .06);
             min-height: 0;
         }
@@ -66,7 +67,7 @@
         }
 
         .panel-header {
-            padding: 14px;
+            padding: 9px 12px;
             border-bottom: 1px solid #eef2f7;
             display: flex;
             align-items: center;
@@ -83,23 +84,32 @@
             gap: 8px;
         }
 
+        .node-add-btn {
+            width: 26px;
+            height: 26px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         .node-search {
-            padding: 10px 14px;
+            padding: 7px 10px;
             border-bottom: 1px solid #eef2f7;
         }
 
         .node-list {
-            padding: 10px;
+            padding: 7px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 5px;
         }
 
         .node-item {
             border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 10px;
+            border-radius: 6px;
+            padding: 7px 8px;
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
             gap: 8px;
@@ -108,15 +118,15 @@
 
         .node-name {
             font-weight: 800;
-            font-size: 13px;
+            font-size: 12px;
             color: #111827;
         }
 
         .node-meta {
             font-family: Consolas, Monaco, monospace;
             color: #64748b;
-            font-size: 12px;
-            margin-top: 3px;
+            font-size: 11px;
+            margin-top: 1px;
         }
 
         .main-panel {
@@ -126,16 +136,51 @@
         }
 
         .main-scroll {
-            padding: 16px;
+            padding: 8px;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .section-card {
             border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 14px;
-            margin-bottom: 14px;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin: 0;
             background: #fff;
+        }
+
+        .task-type-tabs {
+            display: inline-flex;
+            padding: 4px;
+            gap: 4px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #f1f5f9;
+        }
+
+        .task-type-tab {
+            border: 0;
+            border-radius: 6px;
+            padding: 6px 14px;
+            background: transparent;
+            color: #475569;
+            font-size: 13.5px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all .2s ease;
+        }
+
+        .task-type-tab:hover {
+            color: #0f172a;
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .task-type-tab.active {
+            color: #fff;
+            background: #1d4ed8;
+            box-shadow: 0 2px 4px rgba(29, 78, 216, 0.25);
         }
 
         .section-head {
@@ -143,7 +188,7 @@
             align-items: center;
             justify-content: space-between;
             gap: 10px;
-            margin-bottom: 12px;
+            margin-bottom: 7px;
         }
 
         .section-title {
@@ -176,7 +221,7 @@
 
         .command-editor {
             font-family: Consolas, Monaco, monospace;
-            min-height: 170px;
+            min-height: 110px;
             resize: vertical;
         }
 
@@ -198,10 +243,25 @@
         }
 
         .result-row {
-            border: 1px solid #e5e7eb;
+            border: 1px solid #e2e8f0;
             border-radius: 8px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             overflow: hidden;
+            background: #fff;
+            transition: all 0.2s ease;
+        }
+
+        .result-row:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border-color: #cbd5e1;
+        }
+
+        .result-row.status-success {
+            border-left: 4px solid #10b981;
+        }
+
+        .result-row.status-error {
+            border-left: 4px solid #ef4444;
         }
 
         .result-head {
@@ -209,29 +269,283 @@
             align-items: center;
             justify-content: space-between;
             gap: 10px;
-            padding: 10px 12px;
+            padding: 10px 14px;
+            background: #fff;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .result-head:hover {
             background: #f8fafc;
         }
 
+        .result-summary {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            font-size: 13.5px;
+            color: #334155;
+        }
+
+        .result-summary .toggle-arrow {
+            transition: transform 0.2s ease;
+            color: #94a3b8;
+        }
+
+        .result-row.is-expanded .toggle-arrow {
+            transform: rotate(90deg);
+        }
+
+        .badge-success-light {
+            background-color: #ecfdf5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+            font-weight: 600;
+        }
+
+        .badge-danger-light {
+            background-color: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+            font-weight: 600;
+        }
+
+        .result-log-wrapper {
+            background: #0f172a;
+            border-top: 1px solid #1e293b;
+        }
+
+        .terminal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 12px;
+            background: #1e293b;
+            font-size: 11px;
+            color: #94a3b8;
+            font-family: Consolas, Monaco, monospace;
+            border-bottom: 1px solid #0f172a;
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .terminal-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background-color: #ef4444; }
+        .terminal-dot.yellow { background-color: #f59e0b; }
+        .terminal-dot.green { background-color: #10b981; }
+
         .result-log {
             margin: 0;
-            padding: 12px;
+            padding: 12px 14px;
             background: #0f172a;
-            color: #e5e7eb;
+            color: #cbd5e1;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
             font-size: 12px;
-            max-height: 260px;
-            overflow: auto;
+            line-height: 1.6;
+            max-height: 240px;
+            overflow-y: auto;
             white-space: pre-wrap;
         }
 
+        .result-log::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .result-log::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        .result-log::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        .result-log::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        .result-empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            color: #94a3b8;
+            text-align: center;
+        }
+
+        .result-empty-state i {
+            font-size: 32px;
+            color: #cbd5e1;
+            margin-bottom: 12px;
+        }
+
+        .result-empty-state p {
+            margin: 0;
+            font-size: 13px;
+        }
+
         .action-footer {
-            padding: 12px 16px;
+            padding: 8px 12px;
             border-top: 1px solid #eef2f7;
             background: #fff;
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 12px;
+        }
+
+        .result-card { flex: 1; min-height: 210px; display: flex; flex-direction: column; }
+        .result-list { flex: 1; min-height: 0; overflow-y: auto; }
+        .compact-label { font-size: 11px; margin-bottom: 3px; }
+        .command-workbench { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+        .command-config-card { padding: 8px 10px; }
+        .command-config-card .row { --bs-gutter-y: .35rem; }
+        .command-config-card .command-editor { min-height: 90px; }
+        .deploy-modal-mask {
+            position: fixed;
+            inset: 0;
+            z-index: 1050;
+            background: rgba(15, 23, 42, .45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .deploy-modal {
+            width: min(560px, 100%);
+            max-height: 92vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, .22);
+        }
+        .deploy-modal-header,
+        .deploy-modal-footer {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .deploy-modal-header {
+            border-bottom: 1px solid #eef2f7;
+        }
+        .deploy-modal-body {
+            padding: 14px 16px;
+            overflow-y: auto;
+        }
+        .deploy-modal-footer {
+            border-top: 1px solid #eef2f7;
+            background: #f8fafc;
+            justify-content: flex-end;
+        }
+        .server-pick-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 58vh;
+            overflow-y: auto;
+        }
+        .server-pick-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .server-pick-stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .server-pick-stat {
+            border: 1px solid #e5e7eb;
+            border-radius: 999px;
+            padding: 3px 8px;
+            font-size: 12px;
+            color: #475569;
+            background: #f8fafc;
+        }
+        .server-pick-group {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .server-pick-group-title {
+            font-size: 12px;
+            font-weight: 800;
+            color: #64748b;
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            background: #f8fafc;
+            cursor: pointer;
+            user-select: none;
+        }
+        .server-pick-group-name {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .server-pick-rows {
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .server-pick-item {
+            border-top: 1px solid #eef2f7;
+            padding: 6px 10px;
+            display: grid;
+            grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+            background: #fff;
+        }
+        .server-pick-item.is-added {
+            background: #f8fafc;
+            color: #94a3b8;
+        }
+        .server-pick-name {
+            font-size: 13px;
+            font-weight: 800;
+            color: #111827;
+        }
+        .server-pick-meta {
+            font-family: Consolas, Monaco, monospace;
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 1px;
+        }
+        .server-pick-added {
+            font-size: 12px;
+            color: #64748b;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 720px) {
+            .server-pick-toolbar {
+                grid-template-columns: 1fr;
+            }
+            .server-pick-item {
+                grid-template-columns: minmax(0, 1fr) auto;
+            }
+            .server-pick-item .server-pick-meta {
+                display: none;
+            }
         }
 
         @media (max-width: 980px) {
@@ -250,8 +564,8 @@
     <div id="app" class="deploy-shell">
         <header class="deploy-header">
             <div>
-                <h1 class="deploy-title">批量分发与执行</h1>
-                <p class="deploy-subtitle">支持任意附件分发、目标目录快捷选择、变量替换和批量 Linux 命令串行执行。</p>
+                <h1 class="deploy-title">批量任务中心</h1>
+                <p class="deploy-subtitle">将文件分发与批量执行拆为专项任务，按目标节点统一编排与追踪结果。</p>
             </div>
             <button class="btn btn-outline-secondary btn-sm" @click="backHome">
                 <i class="fas fa-arrow-left me-1"></i>返回服务器列表
@@ -265,6 +579,9 @@
                         <i class="fas fa-server text-primary"></i>目标节点
                         <span class="badge bg-primary">{{ servers.length }}</span>
                     </h2>
+                    <button class="btn btn-outline-primary btn-sm node-add-btn" title="从已有服务器添加目标主机" @click="openServerPicker">
+                        <i class="fas fa-plus"></i>
+                    </button>
                 </div>
                 <div class="node-search">
                     <input class="form-control form-control-sm" v-model="nodeSearch" placeholder="搜索节点/IP/用户">
@@ -287,37 +604,127 @@
             <section class="panel main-panel">
                 <div class="panel-header">
                     <h2 class="panel-title">
-                        <i class="fas fa-terminal text-success"></i>操作配置
+                        操作配置
                     </h2>
-                    <span class="text-muted small">执行方式：串行</span>
+                    <div class="task-type-tabs" aria-label="任务类型">
+                        <button class="task-type-tab" :class="{ active: form.taskType === 'command' }" @click="form.taskType = 'command'">
+                            <i class="fas fa-terminal me-1"></i>批量执行
+                        </button>
+                        <button class="task-type-tab" :class="{ active: form.taskType === 'upload' }" @click="form.taskType = 'upload'">
+                            <i class="fas fa-file-arrow-up me-1"></i>文件分发
+                        </button>
+                    </div>
                 </div>
 
                 <div class="main-scroll">
+                    <div class="command-workbench" v-if="form.taskType === 'command'">
+                    <div class="section-card command-config-card">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label compact-label fw-bold text-muted">执行策略</label>
+                                <select class="form-select form-select-sm" v-model="form.executionStrategy">
+                                    <option value="serial">串行（逐台执行）</option>
+                                    <option value="parallel">并发执行</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4" v-if="form.executionStrategy === 'parallel'">
+                                <label class="form-label compact-label fw-bold text-muted">最大并发数</label>
+                                <input class="form-control form-control-sm" type="number" min="1" max="20" v-model.number="form.maxParallel">
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end" v-if="form.executionStrategy === 'serial'">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" v-model="form.stopOnError" id="stopOnError">
+                                    <label class="form-check-label" for="stopOnError">任一节点失败后停止</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" v-model="form.privilegedExecution" id="privilegedExecution">
+                                    <label class="form-check-label" for="privilegedExecution">普通账号登录后 su root 执行</label>
+                                </div>
+                            </div>
+                        </div>
+                        <textarea class="form-control form-control-sm command-editor" v-model="form.commands" placeholder="输入将在每台服务器执行的 Linux 命令，例如：
+mkdir -p {targetDir}
+ls -lh {targetDir}
+echo uploaded: {targetFile}"></textarea>
+                        <div class="mt-1 d-flex align-items-center gap-2">
+                            <div class="small text-muted text-nowrap">变量：</div>
+                            <div class="variable-grid">
+                                <span class="variable-chip" v-for="v in variables" :key="v" @click="insertVariable(v)">{{ v }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-card result-card">
+                        <div class="section-head">
+                            <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
+                            <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0" @click="results = []; expandedResults = {}">
+                                <i class="fas fa-trash-can me-1"></i>清空结果
+                            </button>
+                        </div>
+                        <div class="result-list">
+                            <div v-if="results.length === 0" class="result-empty-state">
+                                <i class="fas fa-terminal"></i>
+                                <p>执行任务后，每台服务器的实时命令状态和日志将会在此处呈现。</p>
+                            </div>
+                            <div v-for="(result, index) in results"
+                                 :key="resultKey(result, index)"
+                                 class="result-row"
+                                 :class="[result.success ? 'status-success' : 'status-error', { 'is-expanded': isResultExpanded(result, index) }]">
+                                <div class="result-head" @click="toggleResult(result, index)">
+                                    <div class="result-summary">
+                                        <i class="fas fa-chevron-right toggle-arrow"></i>
+                                        <i class="fas" :class="result.success ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger'"></i>
+                                        <strong>{{ result.host || result.name }}</strong>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge rounded-pill px-2 py-1" :class="result.success ? 'badge-success-light' : 'badge-danger-light'">
+                                            {{ result.success ? '成功' : '失败' }}
+                                        </span>
+                                        <span class="text-muted small d-flex align-items-center gap-1">
+                                            <i class="far fa-clock"></i>{{ result.durationMs || 0 }}ms
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="result-log-wrapper" v-if="isResultExpanded(result, index)">
+                                    <div class="terminal-header">
+                                        <div class="terminal-dots">
+                                            <span class="terminal-dot red"></span>
+                                            <span class="terminal-dot yellow"></span>
+                                            <span class="terminal-dot green"></span>
+                                        </div>
+                                        <span>EXECUTION LOG</span>
+                                    </div>
+                                    <pre class="result-log">{{ (result.logs || []).join('\n\n') }}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <div class="command-workbench" v-if="form.taskType === 'upload'">
                     <div class="section-card">
                         <div class="section-head">
-                            <div class="section-title"><i class="fas fa-paperclip text-primary"></i>附件分发</div>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" v-model="form.enableUpload" id="enableUpload">
-                                <label class="form-check-label" for="enableUpload">启用</label>
-                            </div>
+                            <div class="section-title"><i class="fas fa-paperclip text-primary"></i>批量上传配置</div>
                         </div>
                         <div class="row g-3">
                             <div class="col-lg-5">
-                                <label class="form-label small fw-bold text-muted">上传附件（不限类型）</label>
-                                <input class="form-control" type="file" @change="onFileChange">
+                                <label class="form-label compact-label fw-bold text-muted">上传附件（不限类型）</label>
+                                <input class="form-control form-control-sm" type="file" @change="onFileChange">
                                 <div class="form-text" v-if="selectedFile">{{ selectedFile.name }}，{{ formatSize(selectedFile.size) }}</div>
                             </div>
                             <div class="col-lg-4">
-                                <label class="form-label small fw-bold text-muted">目标目录</label>
-                                <input class="form-control" v-model.trim="form.targetDir" placeholder="/home/{username}/">
+                                <label class="form-label compact-label fw-bold text-muted">目标目录</label>
+                                <input class="form-control form-control-sm" v-model.trim="form.targetDir" placeholder="/home/{username}/">
                                 <div class="quick-dir-list">
                                     <span class="quick-dir" v-for="dir in quickDirs" :key="dir" @click="useDir(dir)">{{ dir }}</span>
                                     <span class="quick-dir" v-for="dir in recentDirs" :key="'r-' + dir" @click="useDir(dir)">历史: {{ dir }}</span>
                                 </div>
                             </div>
                             <div class="col-lg-3">
-                                <label class="form-label small fw-bold text-muted">同名文件策略</label>
-                                <select class="form-select" v-model="form.existsPolicy">
+                                <label class="form-label compact-label fw-bold text-muted">同名文件策略</label>
+                                <select class="form-select form-select-sm" v-model="form.existsPolicy">
                                     <option value="backup">自动备份后覆盖</option>
                                     <option value="overwrite">直接覆盖</option>
                                     <option value="skip">跳过</option>
@@ -330,54 +737,57 @@
                             </div>
                         </div>
                     </div>
-
-                    <div class="section-card">
+                    <div class="section-card result-card">
                         <div class="section-head">
-                            <div class="section-title"><i class="fas fa-code text-success"></i>批量 Linux 命令</div>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" v-model="form.enableCommand" id="enableCommand">
-                                <label class="form-check-label" for="enableCommand">启用</label>
-                            </div>
+                            <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
+                            <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0" @click="results = []; expandedResults = {}">
+                                <i class="fas fa-trash-can me-1"></i>清空结果
+                            </button>
                         </div>
-                        <textarea class="form-control command-editor" v-model="form.commands" placeholder="每台服务器串行执行，例如：
-mkdir -p {targetDir}
-ls -lh {targetDir}
-echo uploaded: {targetFile}"></textarea>
-                        <div class="mt-2">
-                            <div class="small text-muted mb-1">可用变量，点击可插入命令：</div>
-                            <div class="variable-grid">
-                                <span class="variable-chip" v-for="v in variables" :key="v" @click="insertVariable(v)">{{ v }}</span>
+                        <div class="result-list">
+                            <div v-if="results.length === 0" class="result-empty-state">
+                                <i class="fas fa-cloud-arrow-up"></i>
+                                <p>分发文件后，每台服务器的传输进度和执行结果将会在此处呈现。</p>
+                            </div>
+                            <div v-for="(result, index) in results"
+                                 :key="resultKey(result, index)"
+                                 class="result-row"
+                                 :class="[result.success ? 'status-success' : 'status-error', { 'is-expanded': isResultExpanded(result, index) }]">
+                                <div class="result-head" @click="toggleResult(result, index)">
+                                    <div class="result-summary">
+                                        <i class="fas fa-chevron-right toggle-arrow"></i>
+                                        <i class="fas" :class="result.success ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger'"></i>
+                                        <strong>{{ result.host || result.name }}</strong>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge rounded-pill px-2 py-1" :class="result.success ? 'badge-success-light' : 'badge-danger-light'">
+                                            {{ result.success ? '成功' : '失败' }}
+                                        </span>
+                                        <span class="text-muted small d-flex align-items-center gap-1">
+                                            <i class="far fa-clock"></i>{{ result.durationMs || 0 }}ms
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="result-log-wrapper" v-if="isResultExpanded(result, index)">
+                                    <div class="terminal-header">
+                                        <div class="terminal-dots">
+                                            <span class="terminal-dot red"></span>
+                                            <span class="terminal-dot yellow"></span>
+                                            <span class="terminal-dot green"></span>
+                                        </div>
+                                        <span>DEPLOY LOG</span>
+                                    </div>
+                                    <pre class="result-log">{{ (result.logs || []).join('\n\n') }}</pre>
+                                </div>
                             </div>
                         </div>
                     </div>
-
-                    <div class="section-card">
-                        <div class="section-head">
-                            <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
-                            <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0" @click="results = []">清空结果</button>
-                        </div>
-                        <div v-if="results.length === 0" class="text-muted small">执行后将在这里显示每台服务器的上传、命令和日志结果。</div>
-                        <div v-for="result in results" :key="result.serverId || result.host" class="result-row">
-                            <div class="result-head">
-                                <div>
-                                    <strong>{{ result.name || result.host }}</strong>
-                                    <span class="text-muted small ms-2">{{ result.host }}</span>
-                                </div>
-                                <div>
-                                    <span class="badge" :class="result.success ? 'bg-success' : 'bg-danger'">
-                                        {{ result.success ? '成功' : '失败' }}
-                                    </span>
-                                    <span class="text-muted small ms-2">{{ result.durationMs || 0 }} ms</span>
-                                </div>
-                            </div>
-                            <pre class="result-log">{{ (result.logs || []).join('\n\n') }}</pre>
-                        </div>
                     </div>
                 </div>
 
                 <div class="action-footer">
                     <div class="text-muted small">
-                        将对 {{ servers.length }} 台节点串行执行。启用附件分发或命令执行至少一项。
+                        将对 {{ servers.length }} 台节点{{ form.executionStrategy === 'parallel' && form.taskType === 'command' ? '并发' : '串行' }}执行{{ form.taskType === 'upload' ? '文件分发' : '命令任务' }}。
                     </div>
                     <button class="btn btn-success px-4" :disabled="running || !canRun" @click="runBatch">
                         <span class="spinner-border spinner-border-sm me-1" v-if="running"></span>
@@ -386,6 +796,74 @@ echo uploaded: {targetFile}"></textarea>
                 </div>
             </section>
         </main>
+
+        <div class="deploy-modal-mask" v-if="showServerPicker" @click.self="closeServerPicker">
+            <div class="deploy-modal">
+                <div class="deploy-modal-header">
+                    <h5 class="m-0 fw-bold">添加已有目标主机</h5>
+                    <button type="button" class="btn-close" @click="closeServerPicker"></button>
+                </div>
+                <div class="deploy-modal-body">
+                    <div class="server-pick-toolbar">
+                        <input class="form-control form-control-sm" v-model.trim="serverPoolSearch" placeholder="搜索服务器名称/IP/用户/分组">
+                        <div class="form-check form-switch m-0 text-nowrap">
+                            <input class="form-check-input" type="checkbox" v-model="serverPoolOnlyAvailable" id="serverPoolOnlyAvailable">
+                            <label class="form-check-label small" for="serverPoolOnlyAvailable">只看未添加</label>
+                        </div>
+                        <button class="btn btn-outline-primary btn-sm text-nowrap" :disabled="availableFilteredServers.length === 0" @click="addFilteredServers">
+                            加入当前筛选
+                        </button>
+                    </div>
+                    <div class="server-pick-stats">
+                        <span class="server-pick-stat">全部 {{ serverPoolTotalCount }}</span>
+                        <span class="server-pick-stat">已添加 {{ serverPoolAddedCount }}</span>
+                        <span class="server-pick-stat">当前可加入 {{ availableFilteredServers.length }}</span>
+                    </div>
+                    <div v-if="loadingServerPool" class="text-center text-muted py-4">
+                        <span class="spinner-border spinner-border-sm me-1"></span>正在加载服务器列表...
+                    </div>
+                    <div v-else-if="filteredServerPoolGroups.length === 0" class="text-center text-muted py-4">
+                        <i class="fas fa-inbox fa-2x mb-2"></i>
+                        <div>{{ serverPoolSearch ? '没有匹配的服务器' : '暂无可添加服务器' }}</div>
+                    </div>
+                    <div v-else class="server-pick-list">
+                        <div class="server-pick-group" v-for="group in filteredServerPoolGroups" :key="group.name || 'ungrouped'">
+                            <div class="server-pick-group-title" @click="toggleServerPoolGroup(group.name)">
+                                <div class="server-pick-group-name">
+                                    <i class="fas" :class="isServerPoolGroupCollapsed(group.name) ? 'fa-chevron-right' : 'fa-chevron-down'"></i>
+                                    <i class="fas fa-layer-group"></i>
+                                    <span class="text-truncate">{{ group.name || '默认分组' }}</span>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-secondary">{{ group.servers.length }}</span>
+                                    <button class="btn btn-outline-primary btn-sm py-0" @click.stop="addServers(group.servers)" :disabled="availableServers(group.servers).length === 0">
+                                        加入本组
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="server-pick-rows" v-if="!isServerPoolGroupCollapsed(group.name)">
+                                <div class="server-pick-item" v-for="server in group.servers" :key="server.id || server.host"
+                                     :class="{ 'is-added': isTargetServer(server) }">
+                                    <div>
+                                        <div class="server-pick-name text-truncate" :title="server.name || server.host">{{ server.name || server.host }}</div>
+                                    </div>
+                                    <div class="server-pick-meta text-truncate" :title="server.username + '@' + server.host + ':' + (server.port || 22)">
+                                        {{ server.username }}@{{ server.host }}:{{ server.port || 22 }}
+                                    </div>
+                                    <button class="btn btn-sm" :class="isTargetServer(server) ? 'btn-light' : 'btn-outline-primary'"
+                                            :disabled="isTargetServer(server)" @click="addExistingServer(server)">
+                                        {{ isTargetServer(server) ? '已添加' : '加入' }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="deploy-modal-footer">
+                    <button class="btn btn-light btn-sm" @click="closeServerPicker">关闭</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -400,17 +878,27 @@ echo uploaded: {targetFile}"></textarea>
                     selectedFile: null,
                     running: false,
                     results: [],
+                    expandedResults: {},
+                    showServerPicker: false,
+                    loadingServerPool: false,
+                    serverPool: [],
+                    serverPoolSearch: '',
+                    serverPoolOnlyAvailable: false,
+                    collapsedServerPoolGroups: {},
                     quickDirs: [
                         '/home/{username}/'
                     ],
                     variables: ['{host}', '{username}', '{targetDir}', '{targetFile}', '{fileName}', '{fileBaseName}', '{date}', '{timestamp}'],
                     form: {
-                        enableUpload: true,
-                        enableCommand: true,
+                        taskType: 'command',
                         targetDir: '/home/{username}/',
                         existsPolicy: 'backup',
                         chmodExecutable: false,
                         customPermission: '',
+                        executionStrategy: 'serial',
+                        maxParallel: 5,
+                        stopOnError: false,
+                        privilegedExecution: false,
                         commands: 'ls -lh {targetDir}\necho target file: {targetFile}'
                     }
                 };
@@ -425,6 +913,47 @@ echo uploaded: {targetFile}"></textarea>
                             || String(server.username || '').toLowerCase().includes(q);
                     });
                 },
+                filteredServerPoolGroups() {
+                    const q = this.serverPoolSearch.trim().toLowerCase();
+                    var self = this;
+                    return this.serverPool
+                        .map(function(group) {
+                            var groupName = group.name || '';
+                            var groupMatched = groupName.toLowerCase().includes(q);
+                            var matchedServers = !q || groupMatched
+                                ? group.servers
+                                : group.servers.filter(function(server) {
+                                    return String(server.name || '').toLowerCase().includes(q)
+                                        || String(server.host || '').toLowerCase().includes(q)
+                                        || String(server.username || '').toLowerCase().includes(q);
+                                });
+                            if (self.serverPoolOnlyAvailable) {
+                                matchedServers = matchedServers.filter(function(server) { return !self.isTargetServer(server); });
+                            }
+                            return {
+                                name: group.name,
+                                servers: matchedServers
+                            };
+                        })
+                        .filter(function(group) { return group.servers && group.servers.length > 0; });
+                },
+                serverPoolTotalCount() {
+                    return this.serverPool.reduce(function(sum, group) {
+                        return sum + ((group.servers && group.servers.length) || 0);
+                    }, 0);
+                },
+                serverPoolAddedCount() {
+                    var self = this;
+                    return this.serverPool.reduce(function(sum, group) {
+                        return sum + (group.servers || []).filter(function(server) { return self.isTargetServer(server); }).length;
+                    }, 0);
+                },
+                availableFilteredServers() {
+                    var self = this;
+                    return this.filteredServerPoolGroups
+                        .reduce(function(list, group) { return list.concat(group.servers || []); }, [])
+                        .filter(function(server) { return !self.isTargetServer(server); });
+                },
                 recentDirs() {
                     try {
                         return JSON.parse(localStorage.getItem('deploy_recent_dirs') || '[]');
@@ -434,10 +963,9 @@ echo uploaded: {targetFile}"></textarea>
                 },
                 canRun() {
                     if (this.servers.length === 0) return false;
-                    if (!this.form.enableUpload && !this.form.enableCommand) return false;
-                    if (this.form.enableUpload && !this.selectedFile) return false;
-                    if (this.form.enableUpload && !this.form.targetDir) return false;
-                    if (this.form.enableCommand && !this.form.commands.trim()) return false;
+                    if (this.form.taskType === 'upload' && !this.selectedFile) return false;
+                    if (this.form.taskType === 'upload' && !this.form.targetDir) return false;
+                    if (this.form.taskType === 'command' && !this.form.commands.trim()) return false;
                     return true;
                 }
             },
@@ -470,10 +998,119 @@ echo uploaded: {targetFile}"></textarea>
                 insertVariable(variable) {
                     this.form.commands = (this.form.commands || '') + variable;
                 },
-                removeServer(server) {
-                    this.servers = this.servers.filter(function(item) { return item.id !== server.id; });
+                resultKey(result, index) {
+                    return (result && (result.serverId || result.host)) || String(index);
+                },
+                isResultExpanded(result, index) {
+                    return !!this.expandedResults[this.resultKey(result, index)];
+                },
+                toggleResult(result, index) {
+                    const key = this.resultKey(result, index);
+                    this.expandedResults[key] = !this.expandedResults[key];
+                },
+                decryptData(encryptedData) {
+                    if (!encryptedData) return null;
+                    try {
+                        var key = CryptoJS.enc.Utf8.parse('XjToolSecretKey1');
+                        var decrypted = CryptoJS.AES.decrypt(encryptedData, key, {
+                            mode: CryptoJS.mode.ECB,
+                            padding: CryptoJS.pad.Pkcs7
+                        });
+                        var decryptedStr = decrypted.toString(CryptoJS.enc.Utf8);
+                        return JSON.parse(decryptedStr);
+                    } catch (e) {
+                        console.error('Decryption failed:', e);
+                        return null;
+                    }
+                },
+                openServerPicker() {
+                    this.serverPoolSearch = '';
+                    this.showServerPicker = true;
+                    this.loadServerPool();
+                },
+                closeServerPicker() {
+                    this.showServerPicker = false;
+                },
+                loadServerPool() {
+                    var self = this;
+                    this.loadingServerPool = true;
+                    return axios.get('/api/server/list').then(function(res) {
+                        self.serverPool = (res.data || []).map(function(group) {
+                            return {
+                                name: group.name,
+                                servers: (group.servers || [])
+                                    .map(function(dto) { return self.decryptData(dto.encryptedData); })
+                                    .filter(function(server) { return server !== null; })
+                            };
+                        }).filter(function(group) {
+                            return group.servers && group.servers.length > 0;
+                        });
+                        self.resetServerPoolCollapse();
+                    }).catch(function(e) {
+                        console.error('Failed to load server pool:', e);
+                        self.serverPool = [];
+                    }).finally(function() {
+                        self.loadingServerPool = false;
+                    });
+                },
+                syncServersStorage() {
                     sessionStorage.setItem('deploy_selected_servers', JSON.stringify(this.servers));
-                    sessionStorage.setItem('deploy_server_ids', JSON.stringify(this.servers.map(function(item) { return item.id; })));
+                    sessionStorage.setItem('deploy_server_ids', JSON.stringify(this.servers.map(function(item) { return item.id || item.host; })));
+                },
+                isTargetServer(server) {
+                    if (!server) return false;
+                    return this.servers.some(function(item) {
+                        return (server.id && item.id === server.id) || (server.host && item.host === server.host);
+                    });
+                },
+                addServerToTargets(server) {
+                    if (!server) return;
+                    if (!this.isTargetServer(server)) {
+                        this.servers.push(server);
+                        this.syncServersStorage();
+                    }
+                },
+                addExistingServer(server) {
+                    this.addServerToTargets(server);
+                },
+                availableServers(serverList) {
+                    var self = this;
+                    return (serverList || []).filter(function(server) { return !self.isTargetServer(server); });
+                },
+                addServers(serverList) {
+                    var self = this;
+                    this.availableServers(serverList).forEach(function(server) {
+                        self.addServerToTargets(server);
+                    });
+                },
+                addFilteredServers() {
+                    this.addServers(this.availableFilteredServers);
+                },
+                serverPoolGroupKey(groupName) {
+                    return groupName || '__ungrouped__';
+                },
+                isServerPoolGroupCollapsed(groupName) {
+                    return !!this.collapsedServerPoolGroups[this.serverPoolGroupKey(groupName)];
+                },
+                toggleServerPoolGroup(groupName) {
+                    var key = this.serverPoolGroupKey(groupName);
+                    this.collapsedServerPoolGroups[key] = !this.collapsedServerPoolGroups[key];
+                },
+                resetServerPoolCollapse() {
+                    var collapsed = {};
+                    this.serverPool.forEach(function(group, index) {
+                        if (index >= 3) {
+                            collapsed[group.name || '__ungrouped__'] = true;
+                        }
+                    });
+                    this.collapsedServerPoolGroups = collapsed;
+                },
+                removeServer(server) {
+                    this.servers = this.servers.filter(function(item) {
+                        if (server.id) return item.id !== server.id;
+                        return item.host !== server.host;
+                    });
+                    this.syncServersStorage();
                 },
                 backHome() {
                     window.location.href = '/';
@@ -493,17 +1130,23 @@ echo uploaded: {targetFile}"></textarea>
                     if (!this.canRun) return;
                     this.running = true;
                     this.results = [];
+                    this.expandedResults = {};
                     this.saveRecentDir();
                     const data = new FormData();
-                    this.servers.forEach(server => data.append('serverIds', server.host));
+                    this.servers.forEach(server => data.append('serverIds', server.id || server.host));
                     data.append('targetDir', this.form.targetDir || '');
                     data.append('commands', this.form.commands || '');
-                    data.append('enableUpload', this.form.enableUpload);
-                    data.append('enableCommand', this.form.enableCommand);
+                    data.append('taskType', this.form.taskType);
+                    data.append('enableUpload', this.form.taskType === 'upload');
+                    data.append('enableCommand', this.form.taskType === 'command');
                     data.append('existsPolicy', this.form.existsPolicy);
                     data.append('chmodExecutable', this.form.chmodExecutable);
                     data.append('customPermission', this.form.customPermission || '');
-                    if (this.selectedFile) {
+                    data.append('executionStrategy', this.form.executionStrategy);
+                    data.append('maxParallel', this.form.maxParallel || 5);
+                    data.append('stopOnError', this.form.stopOnError);
+                    data.append('privilegedExecution', this.form.taskType === 'command' && this.form.privilegedExecution);
+                    if (this.form.taskType === 'upload' && this.selectedFile) {
                         data.append('file', this.selectedFile);
                     }
                     try {

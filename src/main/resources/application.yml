@@ -64,7 +64,7 @@ app:
   # Agent 连接默认配置（服务端 webtool 调用目标服务器 webtool-agent）
   # 默认关闭，不影响现有 SSH 模式。启用后，所有服务器终端连接统一通过 http://{服务器IP}:{port} 调用 Agent。
   agent:
-    enabled: true
+    enabled: false
     port: 18080
     # 仅保存在 webtool 服务端，不下发浏览器；与每台目标机 webtool-agent 的 agent.token 保持一致。
     # 生产请改成高强度随机值。

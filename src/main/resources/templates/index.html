@@ -1501,6 +1501,8 @@
                     sessionStorage.setItem('deploy_server_ids', JSON.stringify(this.selectedServerIds));
                     sessionStorage.setItem('deploy_selected_servers', JSON.stringify(safeServers));
                     window.open('/deploy', '_blank');
+                    this.batchDeployMode = false;
+                    this.clearSelectedServers();
                 },
                 connect: function(server) {
                     if (this.monitor.currentConnections >= this.monitor.maxConnections) {

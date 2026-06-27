@@ -66,6 +66,11 @@ public class ServerController {
         }
     }
 
+    private void rebuildServerList() {
+        serverList.clear();
+        doLoadServers();
+    }
+
     private void assignIdIfAbsent(ServerInfo server) {
         if (server.getId() == null) {
             server.setId(UUID.randomUUID().toString());
@@ -132,13 +137,7 @@ public class ServerController {
 
     @GetMapping("/{idOrHost}")
     public ServerInfo getById(@PathVariable String idOrHost) {
-        // 1. 先从 serverList 中按 ID 或 Host 查找
-        for (ServerInfo s : serverList) {
-            if (idOrHost.equals(s.getId()) || idOrHost.equals(s.getHost())) {
-                return s;
-            }
-        }
-        // 2. fallback: 从 serverConfig 中按 ID 或 Host 查找（覆盖 ExcelServerConfigLoader 后加载的服务器）
+        // 1. 优先从最新 serverConfig 中按 ID 或 Host 查找，避免命中 serverList 旧缓存
         if (serverConfig.getServerGroups() != null) {
             for (ServerGroup group : serverConfig.getServerGroups()) {
                 if (group.getServers() != null) {
@@ -157,7 +156,13 @@ public class ServerController {
                 }
             }
         }
-        // 3. 按 host 从 Excel 加载器中查找
+        // 2. fallback: 从 serverList 中按 ID 或 Host 查找
+        for (ServerInfo s : serverList) {
+            if (idOrHost.equals(s.getId()) || idOrHost.equals(s.getHost())) {
+                return s;
+            }
+        }
+        // 3. fallback: 按 host 从 Excel 加载器中查找
         if (excelServerConfigLoader != null) {
             ServerInfo found = excelServerConfigLoader.findServerByHost(idOrHost);
             if (found != null) {
@@ -172,19 +177,7 @@ public class ServerController {
         if (excelServerConfigLoader != null) {
             excelServerConfigLoader.reload();
         }
-        serverList.clear();
-        if (serverConfig.getServerGroups() != null) {
-            for (ServerGroup group : serverConfig.getServerGroups()) {
-                if (group.getServers() != null) {
-                    for (ServerInfo server : group.getServers()) {
-                        serverList.add(server);
-                    }
-                }
-            }
-        }
-        if (serverConfig.getServers() != null) {
-            serverList.addAll(serverConfig.getServers());
-        }
+        rebuildServerList();
     }
 
     @PostMapping("/add")
@@ -225,6 +218,8 @@ public class ServerController {
 
         if (excelServerConfigLoader != null) {
             excelServerConfigLoader.saveServer(serverInfo, groupName);
+            excelServerConfigLoader.reload();
+            rebuildServerList();
         }
 
         return toDTO(serverInfo);
@@ -309,6 +304,8 @@ public class ServerController {
         // 5. 保存更新至 Excel
         if (excelServerConfigLoader != null) {
             excelServerConfigLoader.updateServer(updated);
+            excelServerConfigLoader.reload();
+            rebuildServerList();
         }
 
         return toDTO(updated);
@@ -334,6 +331,8 @@ public class ServerController {
 
         if (excelServerConfigLoader != null) {
             excelServerConfigLoader.deleteServer(id);
+            excelServerConfigLoader.reload();
+            rebuildServerList();
         }
     }
 

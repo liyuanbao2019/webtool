@@ -173,6 +173,15 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <excludes>
+                    <exclude>~$*</exclude>
+                    <exclude>**/~$*</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <!-- 不打包依赖，只打包业务代码 -->
             <plugin>
