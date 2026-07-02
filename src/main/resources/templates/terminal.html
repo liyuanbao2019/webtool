@@ -2113,7 +2113,16 @@
                             password: this.sftpCredentials.password,
                             path: path
                         });
-                        this.files = res.data.sort((a, b) => {
+                        if (!Array.isArray(res.data)) {
+                            throw {
+                                message: res.data?.message || 'Invalid SFTP list response',
+                                response: {
+                                    status: res.status,
+                                    data: res.data
+                                }
+                            };
+                        }
+                        this.files = res.data.slice().sort((a, b) => {
                             if (a.dir === b.dir) return a.name.localeCompare(b.name);
                             return a.dir ? -1 : 1;
                         });

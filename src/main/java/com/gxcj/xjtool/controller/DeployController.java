@@ -1,6 +1,11 @@
 package com.gxcj.xjtool.controller;
 
+import com.gxcj.xjtool.agent.AgentTerminalCallback;
+import com.gxcj.xjtool.agent.AgentTerminalClient;
+import com.gxcj.xjtool.agent.AgentTerminalSession;
+import com.gxcj.xjtool.config.ServerConfig;
 import com.gxcj.xjtool.model.ServerInfo;
+import com.gxcj.xjtool.model.WebSshData;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.sshd.client.SshClient;
@@ -13,14 +18,22 @@ import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.SftpClientFactory;
 import org.apache.sshd.common.channel.PtyChannelConfiguration;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -30,6 +43,10 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -46,7 +63,15 @@ public class DeployController {
     @Autowired
     private ServerController serverController;
 
+    @Autowired
+    private ServerConfig serverConfig;
+
+    @Autowired(required = false)
+    private AgentTerminalClient agentTerminalClient;
+
     private SshClient sshClient;
+    private final ExecutorService batchTaskExecutor = Executors.newCachedThreadPool();
+    private final Map<String, BatchTaskState> batchTasks = new ConcurrentHashMap<>();
 
     @PostConstruct
     public void init() {
@@ -60,6 +85,7 @@ public class DeployController {
         if (sshClient != null) {
             sshClient.stop();
         }
+        batchTaskExecutor.shutdownNow();
     }
 
     @PostMapping("/batch-run")
@@ -130,6 +156,228 @@ public class DeployController {
         }
 
         return response;
+    }
+
+    @PostMapping("/batch-start")
+    public BatchStartResponse batchStart(
+            @RequestParam("serverIds") List<String> serverIds,
+            @RequestParam(value = "targetDir", required = false) String targetDir,
+            @RequestParam(value = "commands", required = false) String commands,
+            @RequestParam(value = "enableUpload", defaultValue = "false") boolean enableUpload,
+            @RequestParam(value = "enableCommand", defaultValue = "false") boolean enableCommand,
+            @RequestParam(value = "existsPolicy", defaultValue = DEFAULT_EXISTS_POLICY) String existsPolicy,
+            @RequestParam(value = "chmodExecutable", defaultValue = "false") boolean chmodExecutable,
+            @RequestParam(value = "customPermission", required = false) String customPermission,
+            @RequestParam(value = "taskType", defaultValue = "mixed") String taskType,
+            @RequestParam(value = "executionStrategy", defaultValue = "serial") String executionStrategy,
+            @RequestParam(value = "maxParallel", defaultValue = "5") int maxParallel,
+            @RequestParam(value = "stopOnError", defaultValue = "false") boolean stopOnError,
+            @RequestParam(value = "privilegedExecution", defaultValue = "false") boolean privilegedExecution,
+            @RequestParam(value = "file", required = false) MultipartFile file) {
+
+        BatchStartResponse response = new BatchStartResponse();
+        response.setSuccess(false);
+
+        String normalizedTaskType = isBlank(taskType) ? "mixed" : taskType.trim().toLowerCase();
+        if ("upload".equals(normalizedTaskType)) {
+            enableUpload = true;
+            enableCommand = false;
+        } else if ("command".equals(normalizedTaskType)) {
+            enableUpload = false;
+            enableCommand = true;
+        } else if (!"mixed".equals(normalizedTaskType)) {
+            response.setMessage("不支持的任务类型: " + taskType);
+            return response;
+        }
+
+        if ((serverIds == null || serverIds.isEmpty()) || (!enableUpload && !enableCommand)) {
+            response.setMessage("请选择服务器并至少启用一种操作");
+            return response;
+        }
+        if (enableUpload && (file == null || file.isEmpty())) {
+            response.setMessage("启用附件分发时必须选择附件");
+            return response;
+        }
+        if (enableUpload && isBlank(targetDir)) {
+            response.setMessage("启用附件分发时必须填写目标目录");
+            return response;
+        }
+        if (enableCommand && isBlank(commands)) {
+            response.setMessage("启用批量执行时必须填写命令内容");
+            return response;
+        }
+        if (!enableCommand) {
+            privilegedExecution = false;
+        }
+
+        try {
+            BatchRunRequest request = new BatchRunRequest();
+            request.setServerIds(new ArrayList<>(serverIds));
+            request.setTargetDir(targetDir);
+            request.setCommands(commands);
+            request.setEnableUpload(enableUpload);
+            request.setEnableCommand(enableCommand);
+            request.setExistsPolicy(existsPolicy);
+            request.setChmodExecutable(chmodExecutable);
+            request.setCustomPermission(customPermission);
+            request.setTaskType(normalizedTaskType);
+            request.setExecutionStrategy(executionStrategy);
+            request.setMaxParallel(Math.min(Math.max(maxParallel, 1), 20));
+            request.setStopOnError(stopOnError);
+            request.setPrivilegedExecution(privilegedExecution);
+            request.setFile(copyUploadedFile(file));
+
+            String taskId = UUID.randomUUID().toString();
+            BatchTaskState state = new BatchTaskState(taskId);
+            batchTasks.put(taskId, state);
+            batchTaskExecutor.submit(() -> executeBatchTask(state, request));
+
+            response.setSuccess(true);
+            response.setTaskId(taskId);
+            response.setMessage("任务已启动");
+            return response;
+        } catch (Exception e) {
+            response.setMessage("启动任务失败: " + e.getMessage());
+            log.error("启动批量任务失败", e);
+            return response;
+        }
+    }
+
+    @GetMapping(value = "/batch-events/{taskId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter batchEvents(@PathVariable("taskId") String taskId) {
+        BatchTaskState state = batchTasks.get(taskId);
+        if (state == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在或已过期");
+        }
+        SseEmitter emitter = new SseEmitter(COMMAND_TIMEOUT + 60000L);
+        state.attach(emitter);
+        return emitter;
+    }
+
+    private void executeBatchTask(BatchTaskState state, BatchRunRequest request) {
+        try {
+            state.emit(BatchTaskEvent.taskStart(state.getTaskId(), request.getServerIds().size(),
+                    request.getExecutionStrategy(), request.getMaxParallel()));
+            for (int i = 0; i < request.getServerIds().size(); i++) {
+                state.emit(nodeEvent("node-pending", state.getTaskId(), request.getServerIds().get(i), i,
+                        request.getServerIds().size(), "等待执行", null));
+            }
+
+            if ("parallel".equalsIgnoreCase(request.getExecutionStrategy())) {
+                runParallelStream(state, request);
+            } else {
+                runSerialStream(state, request);
+            }
+
+            state.emit(BatchTaskEvent.taskComplete(state.getTaskId(), state.isSuccess(), state.getResults()));
+            state.complete();
+        } catch (Exception e) {
+            log.error("批量任务执行异常 taskId={}", state.getTaskId(), e);
+            state.emit(BatchTaskEvent.taskError(state.getTaskId(), "任务执行异常: " + e.getMessage()));
+            state.completeWithError(e);
+        }
+    }
+
+    private void runSerialStream(BatchTaskState state, BatchRunRequest request) {
+        boolean stopped = false;
+        for (int i = 0; i < request.getServerIds().size(); i++) {
+            String serverId = request.getServerIds().get(i);
+            if (stopped) {
+                NodeDeployResult skipped = skippedResult(serverId, "因前序节点失败而跳过");
+                skipped.setStatus("skipped");
+                enrichResultServerInfo(skipped, serverId);
+                state.addResult(skipped);
+                state.emit(nodeEvent("node-result", state.getTaskId(), serverId, i, request.getServerIds().size(),
+                        "已跳过", skipped));
+                continue;
+            }
+
+            state.emit(nodeEvent("node-running", state.getTaskId(), serverId, i, request.getServerIds().size(),
+                    "正在执行", null));
+            NodeDeployResult result = runOne(serverId, request.getTargetDir(), request.getCommands(),
+                    request.isEnableUpload(), request.isEnableCommand(), request.getExistsPolicy(),
+                    request.isChmodExecutable(), request.getCustomPermission(), request.isPrivilegedExecution(),
+                    request.getFile());
+            result.setStatus(result.isSuccess() ? "success" : "error");
+            state.addResult(result);
+            state.emit(nodeEvent("node-result", state.getTaskId(), serverId, i, request.getServerIds().size(),
+                    result.isSuccess() ? "执行成功" : "执行失败", result));
+            if (!result.isSuccess()) {
+                state.setSuccess(false);
+                stopped = request.isStopOnError();
+            }
+        }
+    }
+
+    private void runParallelStream(BatchTaskState state, BatchRunRequest request) {
+        ExecutorService executor = Executors.newFixedThreadPool(request.getMaxParallel());
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < request.getServerIds().size(); i++) {
+                final int index = i;
+                final String serverId = request.getServerIds().get(i);
+                futures.add(executor.submit(() -> {
+                    state.emit(nodeEvent("node-running", state.getTaskId(), serverId, index,
+                            request.getServerIds().size(), "正在执行", null));
+                    NodeDeployResult result = runOne(serverId, request.getTargetDir(), request.getCommands(),
+                            request.isEnableUpload(), request.isEnableCommand(), request.getExistsPolicy(),
+                            request.isChmodExecutable(), request.getCustomPermission(), request.isPrivilegedExecution(),
+                            request.getFile());
+                    result.setStatus(result.isSuccess() ? "success" : "error");
+                    state.addResult(result);
+                    if (!result.isSuccess()) {
+                        state.setSuccess(false);
+                    }
+                    state.emit(nodeEvent("node-result", state.getTaskId(), serverId, index,
+                            request.getServerIds().size(), result.isSuccess() ? "执行成功" : "执行失败", result));
+                }));
+            }
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        } catch (Exception e) {
+            state.setSuccess(false);
+            state.emit(BatchTaskEvent.taskError(state.getTaskId(), "并行任务执行异常: " + e.getMessage()));
+            log.error("并行流式批量任务执行失败", e);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private BatchTaskEvent nodeEvent(String type, String taskId, String serverId, int index, int total,
+            String message, NodeDeployResult result) {
+        BatchTaskEvent event = new BatchTaskEvent();
+        event.setType(type);
+        event.setTaskId(taskId);
+        event.setServerId(serverId);
+        event.setIndex(index);
+        event.setTotal(total);
+        event.setMessage(message);
+        event.setResult(result);
+        ServerInfo server = serverController.getById(serverId);
+        if (server != null) {
+            event.setHost(server.getHost());
+            event.setName(server.getName() != null ? server.getName() : server.getHost());
+        } else if (result != null) {
+            event.setHost(result.getHost());
+            event.setName(result.getName());
+        }
+        return event;
+    }
+
+    private void enrichResultServerInfo(NodeDeployResult result, String serverId) {
+        ServerInfo server = serverController.getById(serverId);
+        if (server != null) {
+            result.setName(server.getName() != null ? server.getName() : server.getHost());
+            result.setHost(server.getHost());
+        }
+    }
+
+    private MultipartFile copyUploadedFile(MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            return file;
+        }
+        return new StoredMultipartFile(file.getName(), file.getOriginalFilename(), file.getContentType(), file.getBytes());
     }
 
     private void runSerial(List<String> serverIds, String targetDir, String commands, boolean enableUpload,
@@ -215,6 +463,12 @@ public class DeployController {
             result.getLogs().add("[特权] 已启用 root 特权账号执行策略，将通过登录账号切换到 root 后执行");
         }
 
+        if (isAgentMode(server)) {
+            runOneByAgent(server, renderedOrEmpty(targetDir, server, file), commands, enableUpload, enableCommand,
+                    privilegedExecution, privilegedPassword, file, result, start);
+            return result;
+        }
+
         try (ClientSession session = openSession(server)) {
             String targetFile = null;
             String renderedTargetDir = renderVariables(targetOrDefault(targetDir, ""), server, "", null, file);
@@ -246,6 +500,44 @@ public class DeployController {
         return result;
     }
 
+    private String renderedOrEmpty(String targetDir, ServerInfo server, MultipartFile file) {
+        return renderVariables(targetOrDefault(targetDir, ""), server, "", null, file);
+    }
+
+    private void runOneByAgent(ServerInfo server, String renderedTargetDir, String commands, boolean enableUpload,
+            boolean enableCommand, boolean privilegedExecution, String privilegedPassword, MultipartFile file,
+            NodeDeployResult result, long start) {
+        result.getLogs().add("[Agent] 使用 agent 模式执行");
+        if (enableUpload) {
+            result.fail("Agent 模式暂不支持文件分发，请使用批量执行命令或补充 agent 文件接口");
+            result.setDurationMs(System.currentTimeMillis() - start);
+            return;
+        }
+        if (!enableCommand || isBlank(commands)) {
+            result.setDurationMs(System.currentTimeMillis() - start);
+            return;
+        }
+        try {
+            String rendered = renderVariables(commands, server, renderedTargetDir, null, file);
+            CommandResult commandResult = executeAgentCommand(server, rendered, privilegedExecution, privilegedPassword);
+            result.setCommandExitCode(commandResult.getExitCode());
+            result.getLogs().add("[命令] exitCode=" + commandResult.getExitCode());
+            if (!isBlank(commandResult.getStdout())) {
+                result.getLogs().add("[stdout]\n" + commandResult.getStdout());
+            }
+            if (!isBlank(commandResult.getStderr())) {
+                result.getLogs().add("[stderr]\n" + commandResult.getStderr());
+            }
+            if (commandResult.getExitCode() != 0) {
+                result.fail("命令执行失败，exitCode=" + commandResult.getExitCode());
+            }
+        } catch (Exception e) {
+            log.error("Agent 批量执行失败: {}", server.getHost(), e);
+            result.fail(e.getMessage());
+        }
+        result.setDurationMs(System.currentTimeMillis() - start);
+    }
+
     private String validateRootPrivilege(ServerInfo server, NodeDeployResult result) {
         Map<String, String> suPasswords = server.getSuPasswords();
         if (suPasswords == null || suPasswords.isEmpty()) {
@@ -270,6 +562,186 @@ public class DeployController {
             return null;
         }
         return rootPassword;
+    }
+
+    private boolean isAgentMode(ServerInfo server) {
+        if (server == null) {
+            return false;
+        }
+        if ("agent".equalsIgnoreCase(targetOrDefault(server.getConnectionMode(), "").trim())) {
+            return true;
+        }
+        return serverConfig != null && serverConfig.getAgent() != null && serverConfig.getAgent().isEnabled();
+    }
+
+    private CommandResult executeAgentCommand(ServerInfo server, String command, boolean useRootPrivilege,
+            String rootPassword) throws Exception {
+        if (agentTerminalClient == null) {
+            throw new IllegalStateException("Agent 客户端未初始化");
+        }
+        String marker = "__XJTOOL_AGENT_DONE_" + System.currentTimeMillis() + "__";
+        String outputStartMarker = "__XJTOOL_AGENT_OUTPUT_START_" + System.currentTimeMillis() + "__";
+        String baseCommand = buildBashCommand(buildShellScript(command), false);
+        String commandScript = buildAgentCommandScript(baseCommand, outputStartMarker, marker, useRootPrivilege);
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ByteArrayOutputStream errors = new ByteArrayOutputStream();
+        CountDownLatch closed = new CountDownLatch(1);
+        AgentTerminalSession agentSession = null;
+        try {
+            agentSession = agentTerminalClient.open(buildAgentRequest(server), "deploy-" + UUID.randomUUID(),
+                    new AgentTerminalCallback() {
+                        @Override
+                        public void onOutput(byte[] data) {
+                            synchronized (output) {
+                                try {
+                                    output.write(data);
+                                } catch (Exception ignored) {
+                                }
+                            }
+                        }
+
+                        @Override
+                        public void onError(String message) {
+                            synchronized (errors) {
+                                try {
+                                    errors.write(targetOrDefault(message, "").getBytes(StandardCharsets.UTF_8));
+                                    errors.write('\n');
+                                } catch (Exception ignored) {
+                                }
+                            }
+                        }
+
+                        @Override
+                        public void onClosed(String reason) {
+                            closed.countDown();
+                        }
+                    });
+
+            Thread.sleep(500L);
+            if (useRootPrivilege) {
+                int beforeSu = readAgentOutput(output, errors).length();
+                agentSession.sendInput("su - root\n");
+                if (!waitForAgentPasswordPrompt(output, errors, beforeSu, 8000L)) {
+                    CommandResult result = new CommandResult();
+                    result.setExitCode(126);
+                    result.setStdout("");
+                    result.setStderr("特权切换失败：未检测到 root 密码提示");
+                    return result;
+                }
+                agentSession.sendInput(targetOrDefault(rootPassword, "") + "\n");
+                Thread.sleep(350L);
+            }
+            agentSession.sendInput(commandScript);
+
+            long deadline = System.currentTimeMillis() + COMMAND_TIMEOUT;
+            while (System.currentTimeMillis() < deadline) {
+                String combined = readAgentOutput(output, errors);
+                Integer exitCode = extractMarkedExitCode(combined, marker);
+                if (exitCode != null) {
+                    CommandResult result = new CommandResult();
+                    result.setExitCode(exitCode);
+                    result.setStdout(cleanPrivilegedShellOutput(new String(output.toByteArray(), StandardCharsets.UTF_8),
+                            outputStartMarker, marker, rootPassword, baseCommand));
+                    result.setStderr(removeInteractiveShellWarnings(new String(errors.toByteArray(), StandardCharsets.UTF_8)));
+                    return result;
+                }
+                if (closed.getCount() == 0) {
+                    break;
+                }
+                Thread.sleep(120L);
+            }
+
+            CommandResult result = new CommandResult();
+            result.setExitCode(-1);
+            result.setStdout(cleanPrivilegedShellOutput(new String(output.toByteArray(), StandardCharsets.UTF_8),
+                    outputStartMarker, marker, rootPassword, baseCommand));
+            String stderr = removeInteractiveShellWarnings(new String(errors.toByteArray(), StandardCharsets.UTF_8));
+            result.setStderr(appendMessage(stderr, "Agent 命令执行超时或连接关闭，未检测到结束标记: " + marker));
+            return result;
+        } finally {
+            if (agentSession != null) {
+                try {
+                    agentSession.close();
+                } catch (Exception e) {
+                    log.debug("关闭 Agent 临时会话失败: {}", e.getMessage());
+                }
+            }
+        }
+    }
+
+    private String buildAgentCommandScript(String baseCommand, String outputStartMarker, String marker,
+            boolean requireRoot) {
+        String rootCheck = requireRoot
+                ? "if [ \"$(id -u)\" != \"0\" ]; then echo '特权切换失败：未成功切换到 root'; printf '\\n" + marker + ":126\\n'; exit; fi\n"
+                : "";
+        return "stty -echo 2>/dev/null || true\n"
+                + rootCheck
+                + "printf '\\n" + outputStartMarker + "\\n'\n"
+                + baseCommand + "\n"
+                + "printf '\\n" + marker + ":%s\\n' \"$?\"\n"
+                + "stty echo 2>/dev/null || true\n";
+    }
+
+    private String buildShellScript(String command) {
+        String cleanCommand = command == null ? "" : command.replace("\r\n", "\n").replace("\r", "\n");
+        return "shopt -s expand_aliases\n"
+                + "[ -f ~/.bashrc ] && . ~/.bashrc >/dev/null 2>&1\n"
+                + "alias ll >/dev/null 2>&1 || alias ll='ls -alF'\n"
+                + "alias la >/dev/null 2>&1 || alias la='ls -A'\n"
+                + "alias l >/dev/null 2>&1 || alias l='ls -CF'\n"
+                + cleanCommand;
+    }
+
+    private WebSshData buildAgentRequest(ServerInfo server) {
+        WebSshData data = new WebSshData();
+        data.setConnectionMode("agent");
+        data.setHost(server.getHost());
+        data.setUsername(server.getUsername());
+        data.setCols(160);
+        data.setRows(48);
+        data.setCharset(StandardCharsets.UTF_8.name());
+        data.setAgentBaseUrl(resolveAgentBaseUrl(server));
+        data.setAgentId(!isBlank(server.getAgentId()) ? server.getAgentId() : server.getHost());
+        data.setAgentToken(!isBlank(server.getAgentToken()) ? server.getAgentToken() : resolveAgentToken());
+        return data;
+    }
+
+    private String resolveAgentBaseUrl(ServerInfo server) {
+        if (!isBlank(server.getAgentBaseUrl())) {
+            return server.getAgentBaseUrl();
+        }
+        int port = serverConfig != null && serverConfig.getAgent() != null && serverConfig.getAgent().getPort() > 0
+                ? serverConfig.getAgent().getPort()
+                : 18080;
+        return "http://" + server.getHost() + ":" + port;
+    }
+
+    private String resolveAgentToken() {
+        return serverConfig != null && serverConfig.getAgent() != null ? serverConfig.getAgent().getToken() : null;
+    }
+
+    private boolean waitForAgentPasswordPrompt(ByteArrayOutputStream stdout, ByteArrayOutputStream stderr, int startSize,
+            long timeoutMs) throws Exception {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            String combined = readAgentOutput(stdout, stderr);
+            String recent = combined.length() > startSize ? combined.substring(startSize) : combined;
+            if (containsPasswordPrompt(recent)) {
+                return true;
+            }
+            Thread.sleep(120L);
+        }
+        return false;
+    }
+
+    private String readAgentOutput(ByteArrayOutputStream stdout, ByteArrayOutputStream stderr) {
+        synchronized (stdout) {
+            synchronized (stderr) {
+                return new String(stdout.toByteArray(), StandardCharsets.UTF_8)
+                        + "\n" + new String(stderr.toByteArray(), StandardCharsets.UTF_8);
+            }
+        }
     }
 
     private ClientSession openSession(ServerInfo server) throws Exception {
@@ -672,10 +1144,224 @@ public class DeployController {
     }
 
     @Data
+    public static class BatchStartResponse {
+        private boolean success;
+        private String message;
+        private String taskId;
+    }
+
+    @Data
+    public static class BatchRunRequest {
+        private List<String> serverIds;
+        private String targetDir;
+        private String commands;
+        private boolean enableUpload;
+        private boolean enableCommand;
+        private String existsPolicy;
+        private boolean chmodExecutable;
+        private String customPermission;
+        private String taskType;
+        private String executionStrategy;
+        private int maxParallel;
+        private boolean stopOnError;
+        private boolean privilegedExecution;
+        private MultipartFile file;
+    }
+
+    @Data
+    public static class BatchTaskEvent {
+        private String type;
+        private String taskId;
+        private String serverId;
+        private String name;
+        private String host;
+        private int index;
+        private int total;
+        private String message;
+        private boolean success;
+        private String executionStrategy;
+        private int maxParallel;
+        private NodeDeployResult result;
+        private List<NodeDeployResult> results;
+
+        static BatchTaskEvent taskStart(String taskId, int total, String executionStrategy, int maxParallel) {
+            BatchTaskEvent event = new BatchTaskEvent();
+            event.setType("task-start");
+            event.setTaskId(taskId);
+            event.setTotal(total);
+            event.setExecutionStrategy(executionStrategy);
+            event.setMaxParallel(maxParallel);
+            event.setSuccess(true);
+            event.setMessage("任务开始执行");
+            return event;
+        }
+
+        static BatchTaskEvent taskComplete(String taskId, boolean success, List<NodeDeployResult> results) {
+            BatchTaskEvent event = new BatchTaskEvent();
+            event.setType("task-complete");
+            event.setTaskId(taskId);
+            event.setSuccess(success);
+            event.setResults(new ArrayList<>(results));
+            event.setMessage(success ? "任务执行完成" : "任务执行完成，存在失败节点");
+            return event;
+        }
+
+        static BatchTaskEvent taskError(String taskId, String message) {
+            BatchTaskEvent event = new BatchTaskEvent();
+            event.setType("task-error");
+            event.setTaskId(taskId);
+            event.setSuccess(false);
+            event.setMessage(message);
+            return event;
+        }
+    }
+
+    private static class BatchTaskState {
+        private final String taskId;
+        private final List<BatchTaskEvent> events = new CopyOnWriteArrayList<>();
+        private final List<NodeDeployResult> results = Collections.synchronizedList(new ArrayList<>());
+        private volatile SseEmitter emitter;
+        private volatile boolean success = true;
+        private volatile boolean completed = false;
+
+        BatchTaskState(String taskId) {
+            this.taskId = taskId;
+        }
+
+        String getTaskId() {
+            return taskId;
+        }
+
+        List<NodeDeployResult> getResults() {
+            synchronized (results) {
+                return new ArrayList<>(results);
+            }
+        }
+
+        boolean isSuccess() {
+            return success;
+        }
+
+        void setSuccess(boolean success) {
+            this.success = success;
+        }
+
+        void addResult(NodeDeployResult result) {
+            results.add(result);
+        }
+
+        void attach(SseEmitter emitter) {
+            this.emitter = emitter;
+            emitter.onCompletion(() -> clearEmitter(emitter));
+            emitter.onTimeout(() -> clearEmitter(emitter));
+            emitter.onError((e) -> clearEmitter(emitter));
+            for (BatchTaskEvent event : events) {
+                send(event);
+            }
+            if (completed) {
+                complete();
+            }
+        }
+
+        void emit(BatchTaskEvent event) {
+            events.add(event);
+            send(event);
+        }
+
+        synchronized void send(BatchTaskEvent event) {
+            if (emitter == null) {
+                return;
+            }
+            try {
+                emitter.send(SseEmitter.event().name(event.getType()).data(event));
+            } catch (IOException | IllegalStateException e) {
+                clearEmitter(emitter);
+            }
+        }
+
+        void complete() {
+            completed = true;
+            SseEmitter current = emitter;
+            if (current != null) {
+                current.complete();
+            }
+        }
+
+        void completeWithError(Exception e) {
+            completed = true;
+            SseEmitter current = emitter;
+            if (current != null) {
+                current.completeWithError(e);
+            }
+        }
+
+        void clearEmitter(SseEmitter target) {
+            if (this.emitter == target) {
+                this.emitter = null;
+            }
+        }
+    }
+
+    private static class StoredMultipartFile implements MultipartFile {
+        private final String name;
+        private final String originalFilename;
+        private final String contentType;
+        private final byte[] bytes;
+
+        StoredMultipartFile(String name, String originalFilename, String contentType, byte[] bytes) {
+            this.name = name;
+            this.originalFilename = originalFilename;
+            this.contentType = contentType;
+            this.bytes = bytes == null ? new byte[0] : bytes;
+        }
+
+        @Override
+        public String getName() {
+            return name;
+        }
+
+        @Override
+        public String getOriginalFilename() {
+            return originalFilename;
+        }
+
+        @Override
+        public String getContentType() {
+            return contentType;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return bytes.length == 0;
+        }
+
+        @Override
+        public long getSize() {
+            return bytes.length;
+        }
+
+        @Override
+        public byte[] getBytes() {
+            return bytes.clone();
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            return new ByteArrayInputStream(bytes);
+        }
+
+        @Override
+        public void transferTo(File dest) throws IOException {
+            Files.write(dest.toPath(), bytes);
+        }
+    }
+
+    @Data
     public static class NodeDeployResult {
         private String serverId;
         private String name;
         private String host;
+        private String status;
         private boolean success;
         private String message;
         private String uploadStatus;

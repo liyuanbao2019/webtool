@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
@@ -198,6 +198,72 @@
             gap: 8px;
         }
 
+        .field-help {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            margin-left: 4px;
+            border: 1px solid #cbd5e1;
+            border-radius: 50%;
+            color: #64748b;
+            background: #fff;
+            font-size: 11px;
+            line-height: 1;
+            cursor: help;
+            vertical-align: middle;
+        }
+
+        .field-help-popover {
+            position: absolute;
+            z-index: 2000;
+            left: 50%;
+            top: calc(100% + 8px);
+            transform: translateX(-50%);
+            width: 310px;
+            padding: 9px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #0f172a;
+            color: #e5e7eb;
+            box-shadow: 0 12px 28px rgba(15, 23, 42, .18);
+            font-size: 12px;
+            font-weight: 400;
+            line-height: 1.55;
+            text-align: left;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .15s ease;
+        }
+
+        .field-help:hover .field-help-popover,
+        .field-help:focus .field-help-popover,
+        .field-help:focus-within .field-help-popover {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .field-help-popover::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: -6px;
+            transform: translateX(-50%);
+            border-width: 0 6px 6px;
+            border-style: solid;
+            border-color: transparent transparent #0f172a;
+        }
+
+        .field-help-popover p {
+            margin: 0 0 4px;
+        }
+
+        .field-help-popover p:last-child {
+            margin-bottom: 0;
+        }
+
         .quick-dir-list {
             display: flex;
             flex-wrap: wrap;
@@ -231,6 +297,59 @@
             gap: 6px;
         }
 
+        .command-helper-bar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .common-command-menu {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 8px;
+            max-height: 56vh;
+            overflow: auto;
+            padding: 2px;
+        }
+
+        .common-command-item {
+            width: 100%;
+            border: 1px solid #e2e8f0;
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px 12px;
+            text-align: left;
+            color: #334155;
+        }
+
+        .common-command-item:hover {
+            background: #f1f5f9;
+        }
+
+        .common-command-item-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .common-command-item-code {
+            margin-top: 3px;
+            color: #64748b;
+            font-size: 12px;
+            font-family: Consolas, Monaco, monospace;
+            white-space: pre-wrap;
+            overflow: hidden;
+            word-break: break-all;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+        }
+
         .variable-chip {
             border: 1px solid #e5e7eb;
             background: #f8fafc;
@@ -262,6 +381,21 @@
 
         .result-row.status-error {
             border-left: 4px solid #ef4444;
+        }
+
+        .result-row.status-running {
+            border-left: 4px solid #3b82f6;
+            background: #eff6ff;
+        }
+
+        .result-row.status-pending {
+            border-left: 4px solid #94a3b8;
+            background: #f8fafc;
+        }
+
+        .result-row.status-skipped {
+            border-left: 4px solid #f59e0b;
+            background: #fffbeb;
         }
 
         .result-head {
@@ -308,6 +442,27 @@
             background-color: #fef2f2;
             color: #991b1b;
             border: 1px solid #fca5a5;
+            font-weight: 600;
+        }
+
+        .badge-running-light {
+            background-color: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            font-weight: 600;
+        }
+
+        .badge-pending-light {
+            background-color: #f8fafc;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            font-weight: 600;
+        }
+
+        .badge-skipped-light {
+            background-color: #fffbeb;
+            color: #92400e;
+            border: 1px solid #fcd34d;
             font-weight: 600;
         }
 
@@ -403,14 +558,31 @@
             font-size: 13px;
         }
 
-        .action-footer {
-            padding: 8px 12px;
-            border-top: 1px solid #eef2f7;
-            background: #fff;
+        .run-inline-action {
+            height: 100%;
+            min-height: 58px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
+            flex-direction: column;
+            align-items: flex-end;
+            justify-content: flex-end;
+            gap: 4px;
+        }
+
+        .run-inline-summary {
+            max-width: 100%;
+            color: #64748b;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 992px) {
+            .run-inline-action {
+                align-items: stretch;
+            }
+
+            .run-inline-summary {
+                white-space: normal;
+            }
         }
 
         .result-card {
@@ -685,31 +857,52 @@
                 <div class="main-scroll">
                     <div class="command-workbench" v-if="form.taskType === 'command'">
                         <div class="section-card command-config-card">
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-4">
+                            <div class="row g-3 mb-3 align-items-end">
+                                <div class="col-lg-3 col-md-6">
                                     <label class="form-label compact-label fw-bold text-muted">执行策略</label>
                                     <select class="form-select form-select-sm" v-model="form.executionStrategy">
                                         <option value="serial">串行（逐台执行）</option>
                                         <option value="parallel">并发执行</option>
                                     </select>
                                 </div>
-                                <div class="col-md-4" v-if="form.executionStrategy === 'parallel'">
-                                    <label class="form-label compact-label fw-bold text-muted">最大并发数</label>
+                                <div class="col-lg-3 col-md-6" v-if="form.executionStrategy === 'parallel'">
+                                    <label class="form-label compact-label fw-bold text-muted">
+                                        最大并发数
+                                        <span class="field-help" tabindex="0" aria-label="最大并发数填写建议">?
+                                            <span class="field-help-popover">
+                                                <p>10 台以内：可填服务器数量，例如选 10 台就填 10。</p>
+                                                <p>几十到几百台：建议先填 5~20，不要一上来全量并发。</p>
+                                                <p>轻量命令如 pwd、hostname、ls：可适当高一点。</p>
+                                                <p>重命令如压缩、重启服务、大量 IO、数据库操作：建议 3~10。</p>
+                                                <p>后端最大并发限制为 20，填更大也会按 20 执行。</p>
+                                            </span>
+                                        </span>
+                                    </label>
                                     <input class="form-control form-control-sm" type="number" min="1" max="20"
                                         v-model.number="form.maxParallel">
                                 </div>
-                                <div class="col-md-4 d-flex align-items-end" v-if="form.executionStrategy === 'serial'">
+                                <div class="col-lg-3 col-md-6 d-flex align-items-end" v-if="form.executionStrategy === 'serial'">
                                     <div class="form-check mb-2">
                                         <input class="form-check-input" type="checkbox" v-model="form.stopOnError"
                                             id="stopOnError">
                                         <label class="form-check-label" for="stopOnError">任一节点失败后停止</label>
                                     </div>
                                 </div>
-                                <div class="col-md-4 d-flex align-items-end">
+                                <div class="col-lg-3 col-md-6 d-flex align-items-end">
                                     <div class="form-check mb-2">
                                         <input class="form-check-input" type="checkbox"
                                             v-model="form.privilegedExecution" id="privilegedExecution">
                                         <label class="form-check-label" for="privilegedExecution">切换特权账号执行</label>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3 col-md-6">
+                                    <div class="run-inline-action">
+                                        <div class="run-inline-summary">{{ runSummaryText }}</div>
+                                        <button class="btn btn-success btn-sm px-4" :disabled="running || !canRun"
+                                            @click="runBatch">
+                                            <span class="spinner-border spinner-border-sm me-1" v-if="running"></span>
+                                            {{ running ? '执行中...' : '开始执行' }}
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -718,11 +911,19 @@
 mkdir -p {targetDir}
 ls -lh {targetDir}
 echo uploaded: {targetFile}"></textarea>
-                            <div class="mt-1 d-flex align-items-center gap-2">
-                                <div class="small text-muted text-nowrap">变量：</div>
-                                <div class="variable-grid">
-                                    <span class="variable-chip" v-for="v in variables" :key="v"
-                                        @click="insertVariable(v)">{{ v }}</span>
+                            <div class="mt-1 command-helper-bar">
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <div class="small text-muted text-nowrap">&#21464;&#37327;&#65306;</div>
+                                    <div class="variable-grid">
+                                        <span class="variable-chip" v-for="v in variables" :key="v"
+                                            @click="insertVariable(v)">{{ v }}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <button class="btn btn-outline-primary btn-sm" type="button"
+                                        @click="openCommonCommandDialog">
+                                        <i class="fas fa-wand-magic-sparkles me-1"></i>&#24120;&#29992;&#21629;&#20196;
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -730,8 +931,8 @@ echo uploaded: {targetFile}"></textarea>
                         <div class="section-card result-card">
                             <div class="section-head">
                                 <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
-                                <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0"
-                                    @click="results = []; expandedResults = {}">
+                                <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0 || running"
+                                    @click="clearResults">
                                     <i class="fas fa-trash-can me-1"></i>清空结果
                                 </button>
                             </div>
@@ -742,18 +943,18 @@ echo uploaded: {targetFile}"></textarea>
                                 </div>
                                 <div v-for="(result, index) in results" :key="resultKey(result, index)"
                                     class="result-row"
-                                    :class="[result.success ? 'status-success' : 'status-error', { 'is-expanded': isResultExpanded(result, index) }]">
+                                    :class="[resultStatusClass(result), { 'is-expanded': isResultExpanded(result, index) }]">
                                     <div class="result-head" @click="toggleResult(result, index)">
                                         <div class="result-summary">
                                             <i class="fas fa-chevron-right toggle-arrow"></i>
                                             <i class="fas"
-                                                :class="result.success ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger'"></i>
+                                                :class="resultIconClass(result)"></i>
                                             <strong>{{ result.host || result.name }}</strong>
                                         </div>
                                         <div class="d-flex align-items-center gap-2">
                                             <span class="badge rounded-pill px-2 py-1"
-                                                :class="result.success ? 'badge-success-light' : 'badge-danger-light'">
-                                                {{ result.success ? '成功' : '失败' }}
+                                                :class="resultBadgeClass(result)">
+                                                {{ resultStatusText(result) }}
                                             </span>
                                             <span class="text-muted small d-flex align-items-center gap-1">
                                                 <i class="far fa-clock"></i>{{ result.durationMs || 0 }}ms
@@ -781,14 +982,14 @@ echo uploaded: {targetFile}"></textarea>
                             <div class="section-head">
                                 <div class="section-title"><i class="fas fa-paperclip text-primary"></i>批量上传配置</div>
                             </div>
-                            <div class="row g-3">
-                                <div class="col-lg-5">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-xl-4 col-lg-6">
                                     <label class="form-label compact-label fw-bold text-muted">上传附件（不限类型）</label>
                                     <input class="form-control form-control-sm" type="file" @change="onFileChange">
                                     <div class="form-text" v-if="selectedFile">{{ selectedFile.name }}，{{
                                         formatSize(selectedFile.size) }}</div>
                                 </div>
-                                <div class="col-lg-4">
+                                <div class="col-xl-3 col-lg-6">
                                     <label class="form-label compact-label fw-bold text-muted">目标目录</label>
                                     <input class="form-control form-control-sm" v-model.trim="form.targetDir"
                                         placeholder="/home/{username}/">
@@ -799,7 +1000,7 @@ echo uploaded: {targetFile}"></textarea>
                                             @click="useDir(dir)">历史: {{ dir }}</span>
                                     </div>
                                 </div>
-                                <div class="col-lg-3">
+                                <div class="col-xl-3 col-lg-6">
                                     <label class="form-label compact-label fw-bold text-muted">同名文件策略</label>
                                     <select class="form-select form-select-sm" v-model="form.existsPolicy">
                                         <option value="backup">自动备份后覆盖</option>
@@ -813,13 +1014,23 @@ echo uploaded: {targetFile}"></textarea>
                                         <label class="form-check-label" for="chmodExecutable">上传后 chmod +x</label>
                                     </div>
                                 </div>
+                                <div class="col-xl-2 col-lg-6">
+                                    <div class="run-inline-action">
+                                        <div class="run-inline-summary">{{ runSummaryText }}</div>
+                                        <button class="btn btn-success btn-sm px-4" :disabled="running || !canRun"
+                                            @click="runBatch">
+                                            <span class="spinner-border spinner-border-sm me-1" v-if="running"></span>
+                                            {{ running ? '执行中...' : '开始执行' }}
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="section-card result-card">
                             <div class="section-head">
                                 <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
-                                <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0"
-                                    @click="results = []; expandedResults = {}">
+                                <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0 || running"
+                                    @click="clearResults">
                                     <i class="fas fa-trash-can me-1"></i>清空结果
                                 </button>
                             </div>
@@ -830,18 +1041,18 @@ echo uploaded: {targetFile}"></textarea>
                                 </div>
                                 <div v-for="(result, index) in results" :key="resultKey(result, index)"
                                     class="result-row"
-                                    :class="[result.success ? 'status-success' : 'status-error', { 'is-expanded': isResultExpanded(result, index) }]">
+                                    :class="[resultStatusClass(result), { 'is-expanded': isResultExpanded(result, index) }]">
                                     <div class="result-head" @click="toggleResult(result, index)">
                                         <div class="result-summary">
                                             <i class="fas fa-chevron-right toggle-arrow"></i>
                                             <i class="fas"
-                                                :class="result.success ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger'"></i>
+                                                :class="resultIconClass(result)"></i>
                                             <strong>{{ result.host || result.name }}</strong>
                                         </div>
                                         <div class="d-flex align-items-center gap-2">
                                             <span class="badge rounded-pill px-2 py-1"
-                                                :class="result.success ? 'badge-success-light' : 'badge-danger-light'">
-                                                {{ result.success ? '成功' : '失败' }}
+                                                :class="resultBadgeClass(result)">
+                                                {{ resultStatusText(result) }}
                                             </span>
                                             <span class="text-muted small d-flex align-items-center gap-1">
                                                 <i class="far fa-clock"></i>{{ result.durationMs || 0 }}ms
@@ -865,16 +1076,6 @@ echo uploaded: {targetFile}"></textarea>
                     </div>
                 </div>
 
-                <div class="action-footer">
-                    <div class="text-muted small">
-                        将对 {{ servers.length }} 台节点{{ form.executionStrategy === 'parallel' && form.taskType ===
-                        'command' ? '并发' : '串行' }}执行{{ form.taskType === 'upload' ? '文件分发' : '命令任务' }}。
-                    </div>
-                    <button class="btn btn-success px-4" :disabled="running || !canRun" @click="runBatch">
-                        <span class="spinner-border spinner-border-sm me-1" v-if="running"></span>
-                        {{ running ? '执行中...' : '开始执行' }}
-                    </button>
-                </div>
             </section>
         </main>
 
@@ -955,6 +1156,31 @@ echo uploaded: {targetFile}"></textarea>
                 </div>
             </div>
         </div>
+
+        <div class="deploy-modal-mask" v-if="showCommonCommandDialog" @click.self="closeCommonCommandDialog">
+            <div class="deploy-modal">
+                <div class="deploy-modal-header">
+                    <h5 class="m-0 fw-bold">&#36873;&#25321;&#24120;&#29992;&#21629;&#20196;</h5>
+                    <button type="button" class="btn-close" @click="closeCommonCommandDialog"></button>
+                </div>
+                <div class="deploy-modal-body">
+                    <div class="common-command-menu">
+                        <button class="common-command-item" type="button"
+                            v-for="cmd in commonCommands" :key="cmd.name"
+                            @click="insertCommonCommand(cmd)">
+                            <div class="common-command-item-title">
+                                <span>{{ cmd.name }}</span>
+                                <span class="badge bg-light text-secondary">{{ cmd.category }}</span>
+                            </div>
+                            <div class="common-command-item-code">{{ cmd.command }}</div>
+                        </button>
+                    </div>
+                </div>
+                <div class="deploy-modal-footer">
+                    <button class="btn btn-light btn-sm" @click="closeCommonCommandDialog">&#20851;&#38381;</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -970,16 +1196,36 @@ echo uploaded: {targetFile}"></textarea>
                     running: false,
                     results: [],
                     expandedResults: {},
+                    eventSource: null,
+                    activeTaskId: null,
                     showServerPicker: false,
                     loadingServerPool: false,
                     serverPool: [],
                     serverPoolSearch: '',
                     serverPoolOnlyAvailable: false,
+                    showCommonCommandDialog: false,
                     collapsedServerPoolGroups: {},
                     quickDirs: [
                         '/home/{username}/'
                     ],
                     variables: ['{host}', '{username}', '{targetDir}', '{targetFile}', '{fileName}', '{fileBaseName}', '{date}', '{timestamp}'],
+                    commonCommands: [
+                        { category: '\u6027\u80fd', name: '\u8ffd\u8e2a CPU \u6700\u9ad8\u8fdb\u7a0b', command: 'echo "=== load ==="\nuptime\necho "=== top cpu processes ==="\nps -eo pid,ppid,user,stat,%cpu,%mem,etime,cmd --sort=-%cpu | head -n 15' },
+                        { category: '\u6027\u80fd', name: '\u81ea\u52a8\u5b9a\u4f4d CPU \u6700\u9ad8\u8fdb\u7a0b\u7ebf\u7a0b', command: 'PID=$(ps -eo pid --sort=-%cpu | awk "NR==2{print \\$1}")\necho "=== target process: $PID ==="\nps -p "$PID" -o pid,ppid,user,stat,%cpu,%mem,etime,cmd\necho "=== top threads ==="\nps -Lp "$PID" -o pid,tid,psr,pcpu,pmem,stat,comm --sort=-pcpu | head -n 20' },
+                        { category: '\u5185\u5b58', name: '\u8ffd\u8e2a\u5185\u5b58 RSS \u6700\u9ad8\u8fdb\u7a0b', command: 'echo "=== top rss processes ==="\nps -eo pid,ppid,user,rss,vsz,%mem,etime,cmd --sort=-rss | awk "NR==1{print;next}{printf \\"%s %s %s %.1fG %.1fG %s %s %s\\\\n\\",\\$1,\\$2,\\$3,\\$4/1024/1024,\\$5/1024/1024,\\$6,\\$7,substr(\\$0,index(\\$0,\\$8))}" | head -n 15' },
+                        { category: '\u5185\u5b58', name: '\u5185\u5b58\u6700\u9ad8\u8fdb\u7a0b\u660e\u7ec6', command: 'PID=$(ps -eo pid --sort=-rss | awk "NR==2{print \\$1}")\necho "=== target process: $PID ==="\nps -p "$PID" -o pid,ppid,user,rss,vsz,%mem,etime,cmd\ncat /proc/$PID/status 2>/dev/null | egrep "Name|State|Threads|VmRSS|VmSize|VmSwap"\npmap -x "$PID" 2>/dev/null | tail -n 20' },
+                        { category: 'Java', name: 'Java \u8fdb\u7a0b\u7ebf\u7a0b CPU \u5b9a\u4f4d', command: 'PID=$(jps -l 2>/dev/null | head -n 1 | awk "{print \\$1}")\n[ -z "$PID" ] && PID=$(pgrep -f java | head -n 1)\necho "=== java pid: $PID ==="\nps -p "$PID" -o pid,ppid,user,%cpu,%mem,etime,cmd\necho "=== top java threads ==="\ntop -b -H -n 1 -p "$PID" | head -n 30\necho "=== jstack preview ==="\njstack "$PID" 2>/dev/null | head -n 120 || echo "jstack not available"' },
+                        { category: '\u8fdb\u7a0b', name: '\u6307\u5b9a PID \u7ebf\u7a0b\u8d44\u6e90\u660e\u7ec6', command: 'PID=1\nps -p "$PID" -o pid,ppid,user,stat,%cpu,%mem,etime,cmd\nps -Lp "$PID" -o pid,tid,psr,pcpu,pmem,stat,comm --sort=-pcpu | head -n 30\nls /proc/$PID/task 2>/dev/null | wc -l | awk "{print \\"threads=\\",$1}"' },
+                        { category: '\u8fdb\u7a0b', name: '\u50f5\u5c38\u8fdb\u7a0b\u4e0e\u7236\u8fdb\u7a0b', command: 'echo "=== zombie processes ==="\nps -eo stat,pid,ppid,user,etime,cmd | awk "\\$1 ~ /Z/ || NR==1"\necho "=== parent detail ==="\nfor ppid in $(ps -eo stat,ppid | awk "\\$1 ~ /Z/ {print \\$2}" | sort -u); do ps -p "$ppid" -o pid,ppid,user,stat,etime,cmd; done' },
+                        { category: '\u8fdb\u7a0b', name: '\u6587\u4ef6\u53e5\u67c4\u6700\u591a\u8fdb\u7a0b', command: 'for pid in /proc/[0-9]*; do n=$(ls "$pid/fd" 2>/dev/null | wc -l); cmd=$(tr "\\0" " " < "$pid/cmdline" 2>/dev/null); echo "$n ${pid#/proc/} $cmd"; done | sort -nr | head -n 15' },
+                        { category: '\u7f51\u7edc', name: '\u7aef\u53e3\u5bf9\u5e94\u8fdb\u7a0b\u8ffd\u8e2a', command: 'PORT=8080\necho "=== listening process for port $PORT ==="\nss -lntup 2>/dev/null | grep ":$PORT\\\\b" || netstat -lntup 2>/dev/null | grep ":$PORT\\\\b"\necho "=== connections ==="\nss -tanp 2>/dev/null | grep ":$PORT\\\\b" | head -n 30' },
+                        { category: '\u7f51\u7edc', name: '\u8fde\u63a5\u6570\u6700\u591a IP/Port', command: 'echo "=== remote ip count ==="\nss -tan 2>/dev/null | awk "NR>1{print \\$5}" | sed "s/::ffff://;s/:.*//" | sort | uniq -c | sort -nr | head -n 20\necho "=== local port count ==="\nss -tan 2>/dev/null | awk "NR>1{print \\$4}" | sed "s/.*://g" | sort | uniq -c | sort -nr | head -n 20' },
+                        { category: 'IO', name: '\u8ffd\u8e2a\u78c1\u76d8 IO \u9ad8\u7684\u8fdb\u7a0b', command: 'if command -v pidstat >/dev/null 2>&1; then pidstat -d 1 3; elif command -v iotop >/dev/null 2>&1; then iotop -b -n 3 -o; else echo "pidstat/iotop not found, show D state processes"; ps -eo state,pid,ppid,user,cmd | awk "\\$1 ~ /D/ || NR==1"; fi' },
+                        { category: '\u65e5\u5fd7', name: 'OOM / Kill \u8bb0\u5f55\u6392\u67e5', command: 'echo "=== dmesg oom ==="\ndmesg -T 2>/dev/null | egrep -i "killed process|out of memory|oom" | tail -n 80\necho "=== journal kernel oom in 24h ==="\njournalctl -k --since "24 hours ago" --no-pager 2>/dev/null | egrep -i "killed process|out of memory|oom" | tail -n 80' },
+                        { category: '\u670d\u52a1', name: '\u670d\u52a1\u5931\u8d25\u539f\u56e0\u8ffd\u8e2a', command: 'SERVICE=sshd\necho "=== service status ==="\nsystemctl status "$SERVICE" --no-pager -l\necho "=== recent service logs ==="\njournalctl -u "$SERVICE" -n 120 --no-pager' },
+                        { category: '\u6587\u4ef6', name: '\u76ee\u6807\u76ee\u5f55\u5927\u6587\u4ef6\u8ffd\u8e2a', command: 'DIR={targetDir}\n[ -d "$DIR" ] || DIR=.\necho "=== large files in $DIR ==="\nfind "$DIR" -xdev -type f -size +100M -printf "%s %p\\\\n" 2>/dev/null | sort -nr | head -n 30 | awk "{printf \\"%.2fG %s\\\\n\\",\\$1/1024/1024/1024,substr(\\$0,index(\\$0,\\$2))}"' },
+                        { category: '\u7cfb\u7edf', name: '\u4e00\u952e\u7efc\u5408\u5de1\u68c0\u6458\u8981', command: 'echo "=== host ==="; hostname; date\necho "=== load ==="; uptime\necho "=== top cpu ==="; ps -eo pid,user,%cpu,%mem,etime,cmd --sort=-%cpu | head -n 8\necho "=== top memory ==="; ps -eo pid,user,rss,%mem,etime,cmd --sort=-rss | head -n 8\necho "=== disk pressure ==="; df -hT | awk "NR==1 || \\$6+0>=80"\necho "=== recent errors ==="; journalctl -p err -n 50 --no-pager 2>/dev/null' }
+                    ],
                     form: {
                         taskType: 'command',
                         targetDir: '/home/{username}/',
@@ -1058,6 +1304,13 @@ echo uploaded: {targetFile}"></textarea>
                     if (this.form.taskType === 'upload' && !this.form.targetDir) return false;
                     if (this.form.taskType === 'command' && !this.form.commands.trim()) return false;
                     return true;
+                },
+                runSummaryText() {
+                    const strategy = this.form.executionStrategy === 'parallel' && this.form.taskType === 'command'
+                        ? '并发'
+                        : '串行';
+                    const taskName = this.form.taskType === 'upload' ? '文件分发' : '命令任务';
+                    return '将对 ' + this.servers.length + ' 台节点' + strategy + '执行' + taskName;
                 }
             },
             mounted() {
@@ -1068,6 +1321,9 @@ echo uploaded: {targetFile}"></textarea>
                 }
                 // 获取 CSRF Token
                 this.getCsrfToken();
+            },
+            beforeUnmount() {
+                this.closeEventSource();
             },
             methods: {
                 getCsrfToken() {
@@ -1089,6 +1345,19 @@ echo uploaded: {targetFile}"></textarea>
                 insertVariable(variable) {
                     this.form.commands = (this.form.commands || '') + variable;
                 },
+                openCommonCommandDialog() {
+                    this.showCommonCommandDialog = true;
+                },
+                closeCommonCommandDialog() {
+                    this.showCommonCommandDialog = false;
+                },
+                insertCommonCommand(item) {
+                    if (!item || !item.command) return;
+                    const current = this.form.commands || '';
+                    const prefix = current.trim() ? '\n' : '';
+                    this.form.commands = current + prefix + item.command;
+                    this.closeCommonCommandDialog();
+                },
                 resultKey(result, index) {
                     return (result && (result.serverId || result.host)) || String(index);
                 },
@@ -1098,6 +1367,43 @@ echo uploaded: {targetFile}"></textarea>
                 toggleResult(result, index) {
                     const key = this.resultKey(result, index);
                     this.expandedResults[key] = !this.expandedResults[key];
+                },
+                clearResults() {
+                    if (this.running) return;
+                    this.results = [];
+                    this.expandedResults = {};
+                },
+                normalizeResultStatus(result) {
+                    if (!result) return 'pending';
+                    if (result.status) return result.status;
+                    return result.success ? 'success' : 'error';
+                },
+                resultStatusClass(result) {
+                    return 'status-' + this.normalizeResultStatus(result);
+                },
+                resultIconClass(result) {
+                    const status = this.normalizeResultStatus(result);
+                    if (status === 'running') return 'fa-spinner fa-spin text-primary';
+                    if (status === 'pending') return 'fa-clock text-secondary';
+                    if (status === 'skipped') return 'fa-circle-minus text-warning';
+                    if (status === 'success') return 'fa-circle-check text-success';
+                    return 'fa-circle-xmark text-danger';
+                },
+                resultBadgeClass(result) {
+                    const status = this.normalizeResultStatus(result);
+                    if (status === 'running') return 'badge-running-light';
+                    if (status === 'pending') return 'badge-pending-light';
+                    if (status === 'skipped') return 'badge-skipped-light';
+                    if (status === 'success') return 'badge-success-light';
+                    return 'badge-danger-light';
+                },
+                resultStatusText(result) {
+                    const status = this.normalizeResultStatus(result);
+                    if (status === 'running') return '执行中';
+                    if (status === 'pending') return '等待中';
+                    if (status === 'skipped') return '已跳过';
+                    if (status === 'success') return '成功';
+                    return '失败';
                 },
                 decryptData(encryptedData) {
                     if (!encryptedData) return null;
@@ -1217,8 +1523,88 @@ echo uploaded: {targetFile}"></textarea>
                     dirs.unshift(this.form.targetDir);
                     localStorage.setItem('deploy_recent_dirs', JSON.stringify(dirs.slice(0, 5)));
                 },
+                closeEventSource() {
+                    if (this.eventSource) {
+                        this.eventSource.close();
+                        this.eventSource = null;
+                    }
+                },
+                serverLabelFromEvent(event) {
+                    return event.host || event.name || event.serverId || 'unknown';
+                },
+                upsertResult(result) {
+                    if (!result) return;
+                    const key = result.serverId || result.host || result.name;
+                    const index = this.results.findIndex(function (item) {
+                        return (item.serverId || item.host || item.name) === key;
+                    });
+                    if (index >= 0) {
+                        this.results[index] = Object.assign({}, this.results[index], result);
+                    } else {
+                        this.results.push(result);
+                    }
+                },
+                handleBatchEvent(event) {
+                    if (!event || !event.type) return;
+                    if (event.type === 'node-pending' || event.type === 'node-running') {
+                        this.upsertResult({
+                            serverId: event.serverId,
+                            name: event.name,
+                            host: event.host,
+                            status: event.type === 'node-running' ? 'running' : 'pending',
+                            success: false,
+                            durationMs: 0,
+                            logs: [event.message || (event.type === 'node-running' ? '正在执行' : '等待执行')]
+                        });
+                        return;
+                    }
+                    if (event.type === 'node-result' && event.result) {
+                        this.upsertResult(event.result);
+                        return;
+                    }
+                    if (event.type === 'task-complete') {
+                        if (event.results && event.results.length > 0) {
+                            var self = this;
+                            event.results.forEach(function (result) {
+                                self.upsertResult(result);
+                            });
+                        }
+                        this.running = false;
+                        this.closeEventSource();
+                        return;
+                    }
+                    if (event.type === 'task-error') {
+                        this.running = false;
+                        this.closeEventSource();
+                        alert(event.message || '任务执行异常');
+                    }
+                },
+                connectBatchEvents(taskId) {
+                    var self = this;
+                    this.closeEventSource();
+                    this.activeTaskId = taskId;
+                    var source = new EventSource('/api/deploy/batch-events/' + encodeURIComponent(taskId));
+                    this.eventSource = source;
+                    ['task-start', 'node-pending', 'node-running', 'node-result', 'task-complete', 'task-error'].forEach(function (eventName) {
+                        source.addEventListener(eventName, function (message) {
+                            try {
+                                self.handleBatchEvent(JSON.parse(message.data));
+                            } catch (e) {
+                                console.error('Failed to parse batch event:', e, message.data);
+                            }
+                        });
+                    });
+                    source.onerror = function () {
+                        if (self.running) {
+                            self.running = false;
+                            alert('执行状态连接已断开，请刷新结果或重新执行');
+                        }
+                        self.closeEventSource();
+                    };
+                },
                 async runBatch() {
                     if (!this.canRun) return;
+                    this.closeEventSource();
                     this.running = true;
                     this.results = [];
                     this.expandedResults = {};
@@ -1245,16 +1631,19 @@ echo uploaded: {targetFile}"></textarea>
                         if (this.csrfToken) {
                             headers['X-CSRF-Token'] = this.csrfToken;
                         }
-                        const res = await axios.post('/api/deploy/batch-run', data, {
+                        const res = await axios.post('/api/deploy/batch-start', data, {
                             headers: headers
                         });
-                        this.results = res.data && res.data.results ? res.data.results : [];
+                        if (res.data && res.data.success && res.data.taskId) {
+                            this.connectBatchEvents(res.data.taskId);
+                            return;
+                        }
+                        this.running = false;
                         if (res.data && res.data.message) {
                             alert(res.data.message);
                         }
                     } catch (e) {
                         alert('执行失败: ' + (e.response && e.response.data ? e.response.data.message || e.response.data : e.message));
-                    } finally {
                         this.running = false;
                     }
                 }
