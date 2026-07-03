@@ -53,6 +53,12 @@ public class AuthInterceptor implements HandlerInterceptor {
         HttpSession session = request.getSession(false);
         if (session == null || session.getAttribute(SESSION_USER_KEY) == null) {
             // 未登录，重定向到登录页面
+            if (uri.startsWith("/api/")) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"success\":false,\"message\":\"登录已过期，请重新登录\"}");
+                return false;
+            }
             response.sendRedirect("/login");
             return false;
         }

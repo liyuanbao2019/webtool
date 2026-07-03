@@ -133,6 +133,7 @@ oracle:
     # MySQL 数据库示例（注释掉，需要时取消注释）
     - name: MySQL测试库
       type: MYSQL
+      pxc: true  # MySQL 默认按 PXC 处理；非 PXC MySQL 请显式配置为 false
       url: jdbc:mysql://10.238.89.59:3306/tm_xj?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
       username: root
       password: Lctmn!23
@@ -144,6 +145,7 @@ oracle:
       password: Lctmn123
     - name: 盈科Pxc1
       type: MYSQL
+      pxc: true
       url: jdbc:mysql://10.238.89.40:3306/information_schema?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
       username: root
       password: Lctmn123
@@ -211,6 +213,14 @@ security:
       # - REVOKE
     admin-users:         # 管理员白名单（可执行危险SQL）
       - jkyw
+    mysql-pxc-ddl:
+      enabled: true
+      # false=仅保护数据源 pxc=true 的 MySQL；true=所有 MySQL 数据源均启用高风险DDL保护
+      protect-all-mysql: false
+      # information_schema.TABLES.TABLE_ROWS 估算行数达到该阈值时，直接阻断高风险DDL
+      large-table-rows: 1000000
+      # 无法确认表规模时按高风险处理并阻断
+      block-when-table-size-unknown: true
       
   # 来源验证
   origin-check:

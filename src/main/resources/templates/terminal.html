@@ -836,6 +836,8 @@
                         folderName: ''
                     },
                     csrfToken: null, // CSRF Token
+                    sessionExpiredRedirecting: false,
+                    sessionExpiredRedirectTimer: null,
 
                     // 危险命令二次确认
                     dangerousCommandEnabled: true, // 是否启用危险命令确认
@@ -1614,6 +1616,10 @@
                     axios.interceptors.response.use(
                         response => response,
                         async error => {
+                            if (error.response && error.response.status === 401) {
+                                this.handleSessionExpired(error.response.data?.message, 3000);
+                                return Promise.reject(error);
+                            }
                             if (error.response && error.response.status === 403) {
                                 const errorMsg = error.response.data?.message || '';
                                 // 如果是CSRF Token过期，尝试刷新Token
@@ -1633,6 +1639,16 @@
                     );
                 },
                 // 获取CSRF Token
+                handleSessionExpired(message, delayMs = 3000) {
+                    if (this.sessionExpiredRedirectTimer) {
+                        clearTimeout(this.sessionExpiredRedirectTimer);
+                    }
+                    this.sessionExpiredRedirecting = true;
+                    const loginUrl = '/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+                    this.sessionExpiredRedirectTimer = setTimeout(() => {
+                        window.location.href = loginUrl;
+                    }, delayMs);
+                },
                 async getCsrfToken() {
                     try {
                         const res = await axios.get('/api/csrf/token');
@@ -2022,12 +2038,7 @@
                     if (this.isAgentMode) return;
                     try {
                         // 获取用户家目录
-                        const res = await axios.post('/api/sftp/home', {
-                            host: this.sftpCredentials.host,
-                            port: this.sftpCredentials.port,
-                            username: this.sftpCredentials.username,
-                            password: this.sftpCredentials.password
-                        });
+                        const res = await axios.post('/api/sftp/home', this.buildSftpPayload());
                         const homeDir = res.data;
                         // 设置当前路径为家目录
                         this.currentPath = homeDir;
@@ -2039,6 +2050,16 @@
                         this.currentPath = '/';
                         this.listFiles('/');
                     }
+                },
+                buildSftpPayload(extra = {}) {
+                    return {
+                        host: this.sftpCredentials.host,
+                        port: this.sftpCredentials.port,
+                        username: this.sftpCredentials.username,
+                        password: this.sftpCredentials.password,
+                        webSocketSessionId: this.webSocketSessionId || '',
+                        ...extra
+                    };
                 },
                 async extractSftpErrorPayload(error) {
                     const data = error?.response?.data;
@@ -2084,7 +2105,18 @@
                         }
                     }
                     const raw = error?.response?.data;
+                    if (error?.response?.status === 401) {
+                        this.handleSessionExpired(raw?.message, 0);
+                        return raw?.message || '登录已过期，请重新登录';
+                    }
+                    if (raw && typeof raw === 'object' && raw.message) {
+                        return raw.message;
+                    }
                     if (typeof raw === 'string') {
+                        if (raw.trim().startsWith('<!DOCTYPE') || raw.includes('<title')) {
+                            this.handleSessionExpired('登录已过期，请重新登录', 0);
+                            return '登录已过期，请重新登录';
+                        }
                         return `${fallbackPrefix}: ${raw}`;
                     }
                     return `${fallbackPrefix}: ${error.message}`;
@@ -2106,13 +2138,7 @@
                             path: path
                         });
 
-                        const res = await axios.post('/api/sftp/list', {
-                            host: this.sftpCredentials.host,
-                            port: this.sftpCredentials.port,
-                            username: this.sftpCredentials.username,
-                            password: this.sftpCredentials.password,
-                            path: path
-                        });
+                        const res = await axios.post('/api/sftp/list', this.buildSftpPayload({ path: path }));
                         if (!Array.isArray(res.data)) {
                             throw {
                                 message: res.data?.message || 'Invalid SFTP list response',
@@ -2183,13 +2209,7 @@
                     const path = this.buildPathByName(file.name);
                     if (!this.isEditableFileName(file.name)) {
                         try {
-                            const probe = await axios.post('/api/sftp/probe-text', {
-                                host: this.sftpCredentials.host,
-                                port: this.sftpCredentials.port,
-                                username: this.sftpCredentials.username,
-                                password: this.sftpCredentials.password,
-                                path: path
-                            });
+                            const probe = await axios.post('/api/sftp/probe-text', this.buildSftpPayload({ path: path }));
                             if (!probe.data?.editable) {
                                 alert('该文件类型暂不支持在线编辑');
                                 return;
@@ -2205,13 +2225,7 @@
                     this.editingFilePath = path;
                     this.editingFileContent = '';
                     try {
-                        const res = await axios.post('/api/sftp/read-text', {
-                            host: this.sftpCredentials.host,
-                            port: this.sftpCredentials.port,
-                            username: this.sftpCredentials.username,
-                            password: this.sftpCredentials.password,
-                            path: path
-                        });
+                        const res = await axios.post('/api/sftp/read-text', this.buildSftpPayload({ path: path }));
                         this.editingFileContent = res.data?.content || '';
                         this.editingFileOriginalContent = this.editingFileContent; // 记录原始内容
                     } catch (e) {
@@ -2227,14 +2241,10 @@
                     }
                     this.isFileEditorSaving = true;
                     try {
-                        await axios.post('/api/sftp/save-text', {
-                            host: this.sftpCredentials.host,
-                            port: this.sftpCredentials.port,
-                            username: this.sftpCredentials.username,
-                            password: this.sftpCredentials.password,
+                        await axios.post('/api/sftp/save-text', this.buildSftpPayload({
                             path: this.editingFilePath,
                             content: this.editingFileContent
-                        });
+                        }));
                         // 保存成功后同步原始内容，避免关闭时误报"未保存修改"
                         this.editingFileOriginalContent = this.editingFileContent;
                         alert(this.t('terminal.saveSuccess'));
@@ -2284,18 +2294,13 @@
                     this.listFiles(targetPath);
                 },
                 async fetchPathStat(path) {
-                    const res = await axios.post('/api/sftp/stat', {
-                        host: this.sftpCredentials.host,
-                        port: this.sftpCredentials.port,
-                        username: this.sftpCredentials.username,
-                        password: this.sftpCredentials.password,
-                        path: path
-                    });
+                    const res = await axios.post('/api/sftp/stat', this.buildSftpPayload({ path: path }));
                     return res.data;
                 },
                 submitSftpDownloadForm(action, payload) {
                     const finalPayload = {
                         ...payload,
+                        webSocketSessionId: this.webSocketSessionId || '',
                         csrfToken: this.csrfToken || ''
                     };
                     const iframeName = 'sftpDownloadFrame_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
@@ -2444,6 +2449,7 @@
                         formData.append('port', this.sftpCredentials.port);
                         formData.append('username', this.sftpCredentials.username);
                         formData.append('password', this.sftpCredentials.password);
+                        formData.append('webSocketSessionId', this.webSocketSessionId || '');
 
                         try {
                             await axios.post('/api/sftp/upload', formData, {
@@ -2512,6 +2518,7 @@
                         formData.append('port', this.sftpCredentials.port);
                         formData.append('username', this.sftpCredentials.username);
                         formData.append('password', this.sftpCredentials.password);
+                        formData.append('webSocketSessionId', this.webSocketSessionId || '');
 
                         try {
                             await axios.post('/api/sftp/upload-with-path', formData, {

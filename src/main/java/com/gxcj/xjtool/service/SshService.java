@@ -2,9 +2,15 @@ package com.gxcj.xjtool.service;
 
 import com.gxcj.xjtool.dto.ScriptReadResult;
 import com.gxcj.xjtool.model.WebSshData;
+import org.apache.sshd.sftp.client.SftpClient;
 import org.springframework.web.socket.WebSocketSession;
 
 public interface SshService {
+    @FunctionalInterface
+    interface SftpOperation<T> {
+        T apply(SftpClient sftp) throws Exception;
+    }
+
     void initConnection(WebSocketSession session, WebSshData webSshData);
 
     void recvHandle(WebSocketSession session, WebSshData webSshData);
@@ -38,4 +44,7 @@ public interface SshService {
      * @return 内容与 {@link ScriptReadResult#getResolvedRemotePath() 实际读取成功的路径}；读取失败返回 null
      */
     ScriptReadResult readScriptFile(WebSocketSession session, String scriptPath, String charsetName);
+
+    <T> T executeSftpOnExistingSession(WebSocketSession session, String expectedUsername, SftpOperation<T> operation)
+            throws Exception;
 }

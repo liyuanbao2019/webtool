@@ -622,7 +622,7 @@ public class DeployController {
             if (useRootPrivilege) {
                 int beforeSu = readAgentOutput(output, errors).length();
                 agentSession.sendInput("su - root\n");
-                if (!waitForAgentPasswordPrompt(output, errors, beforeSu, 8000L)) {
+                if (!waitForAgentPasswordPrompt(output, errors, beforeSu, 15000L)) {
                     CommandResult result = new CommandResult();
                     result.setExitCode(126);
                     result.setStdout("");
@@ -727,7 +727,7 @@ public class DeployController {
         while (System.currentTimeMillis() < deadline) {
             String combined = readAgentOutput(stdout, stderr);
             String recent = combined.length() > startSize ? combined.substring(startSize) : combined;
-            if (containsPasswordPrompt(recent)) {
+            if (containsPasswordPrompt(recent) || containsPasswordPrompt(combined)) {
                 return true;
             }
             Thread.sleep(120L);
@@ -914,7 +914,7 @@ public class DeployController {
             int beforeSu = readShellOutput(stdout, stderr).length();
             writeShellInput(input, "su - root\n");
 
-            if (!waitForPasswordPrompt(stdout, stderr, beforeSu, 8000L)) {
+            if (!waitForPasswordPrompt(stdout, stderr, beforeSu, 15000L)) {
                 result.setExitCode(126);
                 result.setStdout(cleanPrivilegedShellOutput(new String(stdout.toByteArray(), StandardCharsets.UTF_8),
                         outputStartMarker, marker, rootPassword, baseCommand));
@@ -967,7 +967,7 @@ public class DeployController {
         while (System.currentTimeMillis() < deadline) {
             String combined = readShellOutput(stdout, stderr);
             String recent = combined.length() > startSize ? combined.substring(startSize) : combined;
-            if (containsPasswordPrompt(recent)) {
+            if (containsPasswordPrompt(recent) || containsPasswordPrompt(combined)) {
                 return true;
             }
             Thread.sleep(120L);
@@ -984,12 +984,22 @@ public class DeployController {
         if (output == null) {
             return false;
         }
-        String normalized = output.toLowerCase();
+        String normalized = removeTerminalControlSequences(output)
+                .replace('\u0000', ' ')
+                .replace('\r', '\n')
+                .replace('\b', ' ')
+                .toLowerCase();
+        normalized = normalized.replaceAll("\\s+", " ");
         return normalized.contains("password")
+                || normalized.contains("passphrase")
+                || normalized.contains("[sudo] password for")
                 || normalized.contains("密码")
-                || normalized.contains("口令");
+                || normalized.contains("口令")
+                || normalized.contains("瀵嗙爜")
+                || normalized.contains("鍙ｄ护")
+                || java.util.regex.Pattern.compile("(?i)(password|passphrase)\\s*[:：]?\\s*$").matcher(normalized).find()
+                || java.util.regex.Pattern.compile("(密码|口令)\\s*[:：]?\\s*$").matcher(normalized).find();
     }
-
     private String buildBashCommand(String shellScript, boolean interactiveLoginShell) {
         return (interactiveLoginShell ? "bash -ilc " : "bash -lc ") + shellQuote(shellScript);
     }

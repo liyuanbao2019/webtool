@@ -1901,6 +1901,27 @@ public class SshServiceImpl implements SshService {
         return null;
     }
 
+    @Override
+    public <T> T executeSftpOnExistingSession(WebSocketSession session, String expectedUsername,
+                                             SftpOperation<T> operation) throws Exception {
+        if (session == null) {
+            throw new IllegalStateException("WebSocket session is null");
+        }
+        SshConnection connection = sshMap.get(session.getId());
+        if (connection == null || connection.session == null || !connection.session.isOpen()) {
+            throw new IllegalStateException("SSH session is not available");
+        }
+        if (expectedUsername != null
+                && connection.sshRemoteUsername != null
+                && !expectedUsername.equals(connection.sshRemoteUsername)) {
+            throw new IllegalStateException("SFTP user is different from terminal SSH user");
+        }
+        try (SftpClient sftp = SftpClientFactory.instance().createSftpClient(connection.session)) {
+            connection.updateActivity();
+            return operation.apply(sftp);
+        }
+    }
+
     /**
      * 从已打开的 SFTP 客户端读取单个脚本文件（失败返回 null，不记 error 级别日志）
      */

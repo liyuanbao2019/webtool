@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
@@ -11,176 +11,336 @@
     <script src="/js/axios.min.js"></script>
     <script src="/js/crypto-js.min.js"></script>
     <style>
+        :root {
+            /* 现代 Indigo 科技色调体系 */
+            --primary: 226 70% 50%;       /* #2563eb 靛蓝 */
+            --primary-rgb: 37, 99, 235;
+            --primary-hover: 226 70% 40%;
+            --primary-light: 226 70% 96%;
+            
+            --success: 142 70% 45%;       /* #10b981 翡翠绿 */
+            --success-rgb: 16, 185, 129;
+            --success-hover: 142 70% 35%;
+            --success-light: 142 70% 96%;
+            
+            --warning: 38 92% 50%;        /* #f59e0b 琥珀黄 */
+            --warning-rgb: 245, 158, 11;
+            --warning-light: 38 92% 96%;
+            
+            --danger: 350 84% 60%;        /* #f43f5e 珊瑚红 */
+            --danger-rgb: 244, 63, 94;
+            --danger-hover: 350 84% 50%;
+            --danger-light: 350 84% 96%;
+            
+            --slate-50: 210 40% 98%;
+            --slate-100: 210 40% 96%;
+            --slate-200: 210 40% 90%;
+            --slate-300: 210 40% 80%;
+            --slate-400: 210 40% 65%;
+            --slate-500: 210 30% 50%;
+            --slate-600: 210 30% 40%;
+            --slate-700: 210 30% 30%;
+            --slate-800: 210 30% 20%;
+            --slate-900: 210 30% 12%;
+            
+            /* 字体 */
+            --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace;
+            
+            /* 阴影 */
+            --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+            --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+            --shadow-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+            
+            /* 边框和圆角 */
+            --border-color: rgba(226, 232, 240, 0.8);
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+        }
+
         body {
             margin: 0;
-            background: #f8fafc;
-            color: #1f2937;
+            background: linear-gradient(135deg, hsl(var(--slate-50)) 0%, hsl(210 40% 94%) 100%);
+            color: hsl(var(--slate-800));
+            font-family: var(--font-sans);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            height: 100vh;
+            overflow: hidden;
         }
 
         .deploy-shell {
             height: 100vh;
             display: flex;
             flex-direction: column;
-            padding: 10px 12px;
+            padding: 8px 12px;
             gap: 8px;
+            overflow: hidden;
         }
 
         .deploy-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
+            gap: 16px;
+            padding: 2px 0 6px;
+            border-bottom: 1px solid var(--border-color);
         }
 
         .deploy-title {
             margin: 0;
             font-size: 18px;
             font-weight: 800;
+            background: linear-gradient(135deg, hsl(var(--primary)) 0%, #7c3aed 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+            display: inline-block;
         }
 
         .deploy-subtitle {
-            margin: 2px 0 0;
-            color: #64748b;
-            font-size: 13px;
+            margin: 0 0 0 12px;
+            color: hsl(var(--slate-500));
+            font-size: 12px;
+            font-weight: 500;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .btn-back-home {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            color: hsl(var(--slate-700));
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(4px);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .btn-back-home:hover {
+            color: hsl(var(--primary));
+            background: hsl(var(--primary-light));
+            border-color: hsla(var(--primary), 0.3);
+            transform: translateX(-2px);
+            box-shadow: var(--shadow-sm);
         }
 
         .deploy-layout {
             flex: 1;
             min-height: 0;
             display: grid;
-            grid-template-columns: 240px minmax(0, 1fr);
+            grid-template-columns: 250px minmax(0, 1fr);
             gap: 8px;
         }
 
         .panel {
             background: #fff;
-            border: 1px solid #e5e7eb;
-            border-radius: 6px;
-            box-shadow: 0 1px 5px rgba(15, 23, 42, .06);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-sm);
             min-height: 0;
+            transition: box-shadow 0.25s ease;
         }
 
         .node-panel {
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            background: hsl(var(--slate-50));
+            height: 100%;
         }
 
         .panel-header {
-            padding: 9px 12px;
-            border-bottom: 1px solid #eef2f7;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 10px;
+            background: #fff;
         }
 
         .panel-title {
             margin: 0;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 800;
+            color: hsl(var(--slate-800));
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
 
         .node-add-btn {
-            width: 26px;
-            height: 26px;
+            width: 24px;
+            height: 24px;
             padding: 0;
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            background: hsl(var(--primary-light));
+            color: hsl(var(--primary));
+            border: 1px solid hsla(var(--primary), 0.2);
+            border-radius: var(--radius-sm);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .node-add-btn:hover {
+            background: hsl(var(--primary));
+            color: #fff;
+            border-color: hsl(var(--primary));
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
         }
 
         .node-search {
-            padding: 7px 10px;
-            border-bottom: 1px solid #eef2f7;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-color);
+            background: #fff;
+        }
+
+        .node-search .form-control {
+            border-radius: var(--radius-sm);
+            border: 1px solid hsl(var(--slate-200));
+            padding: 4px 8px;
+            font-size: 12px;
+            transition: all 0.2s ease;
+            background: hsl(var(--slate-50));
+        }
+
+        .node-search .form-control:focus {
+            background: #fff;
+            border-color: hsl(var(--primary));
+            box-shadow: 0 0 0 3px hsla(var(--primary), 0.15);
         }
 
         .node-list {
-            padding: 7px;
+            padding: 8px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 6px;
         }
 
         .node-item {
-            border: 1px solid #e5e7eb;
-            border-radius: 6px;
-            padding: 7px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 8px 10px;
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
             gap: 8px;
             background: #fff;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .node-item:hover {
+            border-color: hsla(var(--primary), 0.25);
+            background: hsl(var(--primary-light));
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
         }
 
         .node-name {
-            font-weight: 800;
+            font-weight: 700;
             font-size: 12px;
-            color: #111827;
+            color: hsl(var(--slate-800));
         }
 
         .node-meta {
-            font-family: Consolas, Monaco, monospace;
-            color: #64748b;
-            font-size: 11px;
+            font-family: var(--font-mono);
+            color: hsl(var(--slate-500));
+            font-size: 10px;
             margin-top: 1px;
+        }
+
+        .btn-node-remove {
+            border: 0;
+            background: transparent;
+            color: hsl(var(--slate-400));
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            transition: all 0.2s;
+            cursor: pointer;
+            align-self: center;
+        }
+
+        .node-item:hover .btn-node-remove {
+            color: hsl(var(--danger));
+            background: hsl(var(--danger-light));
         }
 
         .main-panel {
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            background: #fff;
+            height: 100%;
         }
 
         .main-scroll {
             padding: 8px;
-            overflow-y: auto;
+            overflow: hidden; /* 取消主滚动条 */
             display: flex;
             flex-direction: column;
             gap: 8px;
+            height: 100%;
+            flex: 1;
+            min-height: 0;
         }
 
         .section-card {
-            border: 1px solid #e5e7eb;
-            border-radius: 6px;
-            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
             margin: 0;
             background: #fff;
+            box-shadow: var(--shadow-sm);
         }
 
         .task-type-tabs {
             display: inline-flex;
-            padding: 4px;
-            gap: 4px;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            background: #f1f5f9;
+            padding: 3px;
+            gap: 3px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            background: hsl(var(--slate-100));
+            box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
         }
 
         .task-type-tab {
             border: 0;
-            border-radius: 6px;
-            padding: 6px 14px;
+            border-radius: 4px;
+            padding: 4px 12px;
             background: transparent;
-            color: #475569;
-            font-size: 13.5px;
-            font-weight: 700;
+            color: hsl(var(--slate-600));
+            font-size: 12px;
+            font-weight: 600;
             cursor: pointer;
-            transition: all .2s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .task-type-tab:hover {
-            color: #0f172a;
-            background: rgba(255, 255, 255, 0.4);
+            color: hsl(var(--slate-900));
+            background: rgba(255, 255, 255, 0.6);
         }
 
         .task-type-tab.active {
             color: #fff;
-            background: #1d4ed8;
-            box-shadow: 0 2px 4px rgba(29, 78, 216, 0.25);
+            background: hsl(var(--primary));
+            box-shadow: var(--shadow-sm), 0 2px 8px hsla(var(--primary), 0.2);
         }
 
         .section-head {
@@ -188,14 +348,16 @@
             align-items: center;
             justify-content: space-between;
             gap: 10px;
-            margin-bottom: 7px;
+            margin-bottom: 8px;
         }
 
         .section-title {
             font-weight: 800;
+            font-size: 14px;
+            color: hsl(var(--slate-800));
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
 
         .field-help {
@@ -203,14 +365,14 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             margin-left: 4px;
-            border: 1px solid #cbd5e1;
+            border: 1px solid hsl(var(--slate-300));
             border-radius: 50%;
-            color: #64748b;
+            color: hsl(var(--slate-500));
             background: #fff;
-            font-size: 11px;
+            font-size: 10px;
             line-height: 1;
             cursor: help;
             vertical-align: middle;
@@ -222,16 +384,16 @@
             left: 50%;
             top: calc(100% + 8px);
             transform: translateX(-50%);
-            width: 310px;
-            padding: 9px 10px;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            background: #0f172a;
-            color: #e5e7eb;
-            box-shadow: 0 12px 28px rgba(15, 23, 42, .18);
-            font-size: 12px;
+            width: 290px;
+            padding: 10px;
+            border: 1px solid hsl(var(--slate-800));
+            border-radius: var(--radius-sm);
+            background: hsl(var(--slate-900));
+            color: hsl(var(--slate-300));
+            box-shadow: var(--shadow-xl);
+            font-size: 11px;
             font-weight: 400;
-            line-height: 1.55;
+            line-height: 1.5;
             text-align: left;
             opacity: 0;
             pointer-events: none;
@@ -253,7 +415,7 @@
             transform: translateX(-50%);
             border-width: 0 6px 6px;
             border-style: solid;
-            border-color: transparent transparent #0f172a;
+            border-color: transparent transparent hsl(var(--slate-900));
         }
 
         .field-help-popover p {
@@ -264,31 +426,71 @@
             margin-bottom: 0;
         }
 
+        .form-control, .form-select {
+            border: 1px solid hsl(var(--slate-200));
+            border-radius: var(--radius-sm);
+            padding: 4px 8px;
+            font-size: 12px;
+            color: hsl(var(--slate-800));
+            background-color: #fff;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: hsl(var(--primary));
+            box-shadow: 0 0 0 3px hsla(var(--primary), 0.15);
+            background-color: #fff;
+            outline: 0;
+        }
+
         .quick-dir-list {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 8px;
+            gap: 6px;
+            margin-top: 6px;
         }
 
         .quick-dir {
-            border: 1px solid #e0e7ff;
-            background: #eef2ff;
-            color: #3730a3;
+            border: 1px solid hsla(var(--primary), 0.15);
+            background: hsl(var(--primary-light));
+            color: hsl(var(--primary));
             border-radius: 999px;
-            padding: 4px 10px;
-            font-size: 12px;
+            padding: 2px 10px;
+            font-size: 11px;
+            font-weight: 600;
             cursor: pointer;
+            transition: all 0.2s;
         }
 
         .quick-dir:hover {
-            background: #e0e7ff;
+            background: hsl(var(--primary));
+            color: #fff;
+            border-color: hsl(var(--primary));
+            transform: translateY(-1px);
         }
 
         .command-editor {
-            font-family: Consolas, Monaco, monospace;
-            min-height: 110px;
-            resize: vertical;
+            font-family: var(--font-mono);
+            height: 110px; /* 固定紧凑高度，腾出更多空间给结果区域 */
+            resize: none; /* 禁用拉伸以维持上下平分排版稳定 */
+            background: hsl(var(--slate-900));
+            color: hsl(var(--slate-100));
+            border-color: hsl(var(--slate-800));
+            padding: 10px;
+            line-height: 1.5;
+            border-radius: var(--radius-sm);
+            margin-top: 12px;
+        }
+
+        .command-editor:focus {
+            background: hsl(var(--slate-900));
+            color: #fff;
+            border-color: hsl(var(--primary));
+            box-shadow: 0 0 0 3px hsla(var(--primary), 0.2);
+        }
+
+        .command-editor::placeholder {
+            color: hsl(var(--slate-500));
         }
 
         .variable-grid {
@@ -299,7 +501,7 @@
 
         .command-helper-bar {
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             justify-content: space-between;
             gap: 10px;
             flex-wrap: wrap;
@@ -316,16 +518,21 @@
 
         .common-command-item {
             width: 100%;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border-color);
             background: #fff;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             padding: 10px 12px;
             text-align: left;
-            color: #334155;
+            color: hsl(var(--slate-700));
+            transition: all 0.2s;
+            cursor: pointer;
         }
 
         .common-command-item:hover {
-            background: #f1f5f9;
+            border-color: hsla(var(--primary), 0.25);
+            background: hsl(var(--primary-light));
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
         }
 
         .common-command-item-title {
@@ -333,84 +540,98 @@
             align-items: center;
             justify-content: space-between;
             gap: 8px;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 700;
+            color: hsl(var(--slate-800));
         }
 
         .common-command-item-code {
-            margin-top: 3px;
-            color: #64748b;
-            font-size: 12px;
-            font-family: Consolas, Monaco, monospace;
+            margin-top: 4px;
+            color: hsl(var(--slate-500));
+            font-size: 11px;
+            font-family: var(--font-mono);
             white-space: pre-wrap;
             overflow: hidden;
             word-break: break-all;
             display: -webkit-box;
-            -webkit-line-clamp: 3;
+            -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
         }
 
         .variable-chip {
-            border: 1px solid #e5e7eb;
-            background: #f8fafc;
-            border-radius: 6px;
-            padding: 3px 7px;
-            font-family: Consolas, Monaco, monospace;
-            font-size: 12px;
-            color: #475569;
+            border: 1px solid var(--border-color);
+            background: hsl(var(--slate-50));
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 500;
+            color: hsl(var(--slate-600));
             cursor: pointer;
+            transition: all 0.2s;
         }
 
+        .variable-chip:hover {
+            border-color: hsla(var(--primary), 0.3);
+            background: hsl(var(--primary-light));
+            color: hsl(var(--primary));
+            transform: translateY(-1px) scale(1.05);
+        }
+
+        /* 执行结果卡片最大化拉伸 */
         .result-row {
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            margin-bottom: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            margin-bottom: 6px;
             overflow: hidden;
             background: #fff;
-            transition: all 0.2s ease;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .result-row:hover {
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            border-color: #cbd5e1;
+            box-shadow: var(--shadow-sm);
+            border-color: hsla(var(--primary), 0.2);
         }
 
+        /* 状态背景染色 */
         .result-row.status-success {
-            border-left: 4px solid #10b981;
+            border-left: 4px solid hsl(var(--success));
+            background: linear-gradient(90deg, hsla(var(--success-rgb), 0.02) 0%, #fff 100%);
         }
 
         .result-row.status-error {
-            border-left: 4px solid #ef4444;
+            border-left: 4px solid hsl(var(--danger));
+            background: linear-gradient(90deg, hsla(var(--danger-rgb), 0.02) 0%, #fff 100%);
         }
 
         .result-row.status-running {
-            border-left: 4px solid #3b82f6;
-            background: #eff6ff;
+            border-left: 4px solid hsl(var(--primary));
+            background: linear-gradient(90deg, hsla(var(--primary-rgb), 0.03) 0%, #fff 100%);
         }
 
         .result-row.status-pending {
-            border-left: 4px solid #94a3b8;
-            background: #f8fafc;
+            border-left: 4px solid hsl(var(--slate-400));
+            background: linear-gradient(90deg, hsl(var(--slate-50)) 0%, #fff 100%);
         }
 
         .result-row.status-skipped {
-            border-left: 4px solid #f59e0b;
-            background: #fffbeb;
+            border-left: 4px solid hsl(var(--warning));
+            background: linear-gradient(90deg, hsla(var(--warning-rgb), 0.02) 0%, #fff 100%);
         }
 
         .result-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 10px;
-            padding: 10px 14px;
-            background: #fff;
+            gap: 12px;
+            padding: 8px 12px;
+            background: transparent;
             cursor: pointer;
             user-select: none;
         }
 
         .result-head:hover {
-            background: #f8fafc;
+            background: hsla(var(--slate-100), 0.3);
         }
 
         .result-summary {
@@ -418,57 +639,77 @@
             align-items: center;
             gap: 10px;
             min-width: 0;
-            font-size: 13.5px;
-            color: #334155;
+            font-size: 13px;
+            color: hsl(var(--slate-800));
         }
 
         .result-summary .toggle-arrow {
             transition: transform 0.2s ease;
-            color: #94a3b8;
+            color: hsl(var(--slate-400));
+            font-size: 11px;
         }
 
         .result-row.is-expanded .toggle-arrow {
             transform: rotate(90deg);
         }
 
+        /* Badge 精细化质感 */
         .badge-success-light {
-            background-color: #ecfdf5;
-            color: #065f46;
-            border: 1px solid #a7f3d0;
+            background-color: hsl(var(--success-light));
+            color: hsl(var(--success-hover));
+            border: 1px solid hsla(var(--success-rgb), 0.2);
             font-weight: 600;
         }
 
         .badge-danger-light {
-            background-color: #fef2f2;
-            color: #991b1b;
-            border: 1px solid #fca5a5;
+            background-color: hsl(var(--danger-light));
+            color: hsl(var(--danger-hover));
+            border: 1px solid hsla(var(--danger-rgb), 0.2);
             font-weight: 600;
         }
 
         .badge-running-light {
-            background-color: #eff6ff;
-            color: #1d4ed8;
-            border: 1px solid #bfdbfe;
+            background-color: hsl(var(--primary-light));
+            color: hsl(var(--primary-hover));
+            border: 1px solid hsla(var(--primary-rgb), 0.2);
             font-weight: 600;
+            position: relative;
+        }
+
+        .badge-running-light::before {
+            content: "";
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: hsl(var(--primary));
+            border-radius: 50%;
+            margin-right: 6px;
+            animation: pulse-dot 1.2s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0% { transform: scale(0.85); opacity: 0.5; }
+            50% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(0.85); opacity: 0.5; }
         }
 
         .badge-pending-light {
-            background-color: #f8fafc;
-            color: #475569;
-            border: 1px solid #cbd5e1;
+            background-color: hsl(var(--slate-50));
+            color: hsl(var(--slate-600));
+            border: 1px solid hsl(var(--slate-200));
             font-weight: 600;
         }
 
         .badge-skipped-light {
-            background-color: #fffbeb;
-            color: #92400e;
-            border: 1px solid #fcd34d;
+            background-color: hsl(var(--warning-light));
+            color: hsl(var(--warning));
+            border: 1px solid hsla(var(--warning-rgb), 0.2);
             font-weight: 600;
         }
 
         .result-log-wrapper {
-            background: #0f172a;
-            border-top: 1px solid #1e293b;
+            background: hsl(var(--slate-900));
+            border-top: 1px solid hsl(var(--slate-800));
         }
 
         .terminal-header {
@@ -476,11 +717,13 @@
             align-items: center;
             justify-content: space-between;
             padding: 6px 12px;
-            background: #1e293b;
-            font-size: 11px;
-            color: #94a3b8;
-            font-family: Consolas, Monaco, monospace;
-            border-bottom: 1px solid #0f172a;
+            background: hsl(var(--slate-950));
+            font-size: 10px;
+            color: hsl(var(--slate-500));
+            font-family: var(--font-mono);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            font-weight: 600;
+            letter-spacing: 0.05em;
         }
 
         .terminal-dots {
@@ -489,52 +732,54 @@
         }
 
         .terminal-dot {
-            width: 9px;
-            height: 9px;
+            width: 7px;
+            height: 7px;
             border-radius: 50%;
         }
 
-        .terminal-dot.red {
-            background-color: #ef4444;
-        }
-
-        .terminal-dot.yellow {
-            background-color: #f59e0b;
-        }
-
-        .terminal-dot.green {
-            background-color: #10b981;
-        }
+        .terminal-dot.red { background-color: #f43f5e; }
+        .terminal-dot.yellow { background-color: #f59e0b; }
+        .terminal-dot.green { background-color: #10b981; }
 
         .result-log {
             margin: 0;
-            padding: 12px 14px;
-            background: #0f172a;
-            color: #cbd5e1;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 12px;
-            line-height: 1.6;
-            max-height: 240px;
+            padding: 12px;
+            background: hsl(var(--slate-900));
+            color: hsl(var(--slate-300));
+            font-family: var(--font-mono);
+            font-size: 11.5px;
+            line-height: 1.5;
+            max-height: 450px; /* 调大折叠日志的最大展示高度 */
             overflow-y: auto;
             white-space: pre-wrap;
+            position: relative;
+        }
+
+        .result-log::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(rgba(18, 24, 38, 0) 50%, rgba(0, 0, 0, 0.15) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
         }
 
         .result-log::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
         }
 
         .result-log::-webkit-scrollbar-track {
-            background: #0f172a;
+            background: hsl(var(--slate-950));
         }
 
         .result-log::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 4px;
+            background: hsl(var(--slate-700));
+            border-radius: 99px;
         }
 
         .result-log::-webkit-scrollbar-thumb:hover {
-            background: #475569;
+            background: hsl(var(--slate-500));
         }
 
         .result-empty-state {
@@ -542,25 +787,30 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 40px 20px;
-            color: #94a3b8;
+            padding: 30px 16px;
+            color: hsl(var(--slate-400));
             text-align: center;
         }
 
         .result-empty-state i {
-            font-size: 32px;
-            color: #cbd5e1;
-            margin-bottom: 12px;
+            font-size: 28px;
+            color: hsl(var(--slate-300));
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, hsl(var(--slate-100)) 0%, hsl(var(--slate-200)) 100%);
+            padding: 12px;
+            border-radius: 50%;
+            box-shadow: var(--shadow-sm);
         }
 
         .result-empty-state p {
             margin: 0;
             font-size: 13px;
+            font-weight: 500;
         }
 
         .run-inline-action {
             height: 100%;
-            min-height: 58px;
+            min-height: 48px;
             display: flex;
             flex-direction: column;
             align-items: flex-end;
@@ -570,9 +820,10 @@
 
         .run-inline-summary {
             max-width: 100%;
-            color: #64748b;
-            font-size: 12px;
+            color: hsl(var(--slate-500));
+            font-size: 11px;
             white-space: nowrap;
+            font-weight: 500;
         }
 
         @media (max-width: 992px) {
@@ -585,9 +836,10 @@
             }
         }
 
+        /* 终端面板高度占满容器，独立滚动 */
         .result-card {
             flex: 1;
-            min-height: 210px;
+            min-height: 0;
             display: flex;
             flex-direction: column;
         }
@@ -609,40 +861,44 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
+            height: 100%;
         }
 
-        .command-config-card {
-            padding: 8px 10px;
-        }
-
-        .command-config-card .row {
-            --bs-gutter-y: .35rem;
-        }
-
-        .command-config-card .command-editor {
-            min-height: 90px;
-        }
-
+        /* 模态框重构 */
         .deploy-modal-mask {
             position: fixed;
             inset: 0;
             z-index: 1050;
-            background: rgba(15, 23, 42, .45);
+            background: rgba(15, 23, 42, 0.4);
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 16px;
+            backdrop-filter: blur(8px);
+            animation: fade-in 0.2s ease-out;
+        }
+
+        @keyframes fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
         .deploy-modal {
-            width: min(560px, 100%);
+            width: min(580px, 100%);
             max-height: 92vh;
             overflow: hidden;
             display: flex;
             flex-direction: column;
             background: #fff;
-            border-radius: 10px;
-            box-shadow: 0 24px 60px rgba(15, 23, 42, .22);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            border: 1px solid var(--border-color);
+            animation: modal-up 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes modal-up {
+            from { transform: translateY(16px) scale(0.97); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
         }
 
         .deploy-modal-header,
@@ -651,11 +907,11 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
+            gap: 16px;
         }
 
         .deploy-modal-header {
-            border-bottom: 1px solid #eef2f7;
+            border-bottom: 1px solid var(--border-color);
         }
 
         .deploy-modal-body {
@@ -664,8 +920,8 @@
         }
 
         .deploy-modal-footer {
-            border-top: 1px solid #eef2f7;
-            background: #f8fafc;
+            border-top: 1px solid var(--border-color);
+            background: hsl(var(--slate-50));
             justify-content: flex-end;
         }
 
@@ -673,7 +929,7 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
-            max-height: 58vh;
+            max-height: 56vh;
             overflow-y: auto;
         }
 
@@ -693,33 +949,39 @@
         }
 
         .server-pick-stat {
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--border-color);
             border-radius: 999px;
             padding: 3px 8px;
-            font-size: 12px;
-            color: #475569;
-            background: #f8fafc;
+            font-size: 11px;
+            font-weight: 600;
+            color: hsl(var(--slate-600));
+            background: hsl(var(--slate-50));
         }
 
         .server-pick-group {
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
             overflow: hidden;
             background: #fff;
         }
 
         .server-pick-group-title {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 800;
-            color: #64748b;
-            padding: 8px 10px;
+            color: hsl(var(--slate-600));
+            padding: 8px 12px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 6px;
-            background: #f8fafc;
+            gap: 8px;
+            background: hsl(var(--slate-50));
             cursor: pointer;
             user-select: none;
+            transition: background 0.2s;
+        }
+
+        .server-pick-group-title:hover {
+            background: hsl(var(--slate-100));
         }
 
         .server-pick-group-name {
@@ -735,37 +997,100 @@
         }
 
         .server-pick-item {
-            border-top: 1px solid #eef2f7;
-            padding: 6px 10px;
+            border-top: 1px solid var(--border-color);
+            padding: 8px 12px;
             display: grid;
-            grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr) auto;
+            grid-template-columns: minmax(120px, 1fr) minmax(150px, 1fr) auto;
             gap: 10px;
             align-items: center;
             background: #fff;
+            transition: background 0.2s;
         }
 
         .server-pick-item.is-added {
-            background: #f8fafc;
-            color: #94a3b8;
+            background: hsl(var(--slate-50));
+            color: hsl(var(--slate-400));
         }
 
         .server-pick-name {
-            font-size: 13px;
-            font-weight: 800;
-            color: #111827;
+            font-size: 12px;
+            font-weight: 700;
+            color: hsl(var(--slate-800));
+        }
+
+        .server-pick-item.is-added .server-pick-name {
+            color: hsl(var(--slate-400));
         }
 
         .server-pick-meta {
-            font-family: Consolas, Monaco, monospace;
+            font-family: var(--font-mono);
             font-size: 11px;
-            color: #64748b;
+            color: hsl(var(--slate-500));
             margin-top: 1px;
         }
 
         .server-pick-added {
             font-size: 12px;
-            color: #64748b;
+            color: hsl(var(--slate-400));
             white-space: nowrap;
+        }
+
+        /* 拖拽上传区域压缩 */
+        .upload-drag-area {
+            border: 2px dashed hsl(var(--slate-200));
+            border-radius: var(--radius-sm);
+            padding: 10px 12px;
+            text-align: center;
+            background: hsl(var(--slate-50));
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+        }
+
+        .upload-drag-area:hover {
+            border-color: hsl(var(--primary));
+            background: hsl(var(--primary-light));
+            color: hsl(var(--primary));
+        }
+
+        .upload-drag-area i {
+            font-size: 20px;
+            color: hsl(var(--slate-400));
+            transition: color 0.2s;
+        }
+
+        .upload-drag-area:hover i {
+            color: hsl(var(--primary));
+        }
+
+        .file-info-box {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 4px;
+            background: #fff;
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .file-info-detail {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .file-info-detail span {
+            font-size: 11px;
+            font-weight: 600;
+            color: hsl(var(--slate-700));
         }
 
         @media (max-width: 720px) {
@@ -797,12 +1122,12 @@
 <body>
     <div id="app" class="deploy-shell">
         <header class="deploy-header">
-            <div>
+            <div class="d-flex align-items-center flex-wrap">
                 <h1 class="deploy-title">批量任务中心</h1>
                 <p class="deploy-subtitle">将文件分发与批量执行拆为专项任务，按目标节点统一编排与追踪结果。</p>
             </div>
-            <button class="btn btn-outline-secondary btn-sm" @click="backHome">
-                <i class="fas fa-arrow-left me-1"></i>返回服务器列表
+            <button class="btn-back-home" @click="backHome">
+                <i class="fas fa-arrow-left"></i>返回
             </button>
         </header>
 
@@ -811,53 +1136,53 @@
                 <div class="panel-header">
                     <h2 class="panel-title">
                         <i class="fas fa-server text-primary"></i>目标节点
-                        <span class="badge bg-primary">{{ servers.length }}</span>
+                        <span class="badge bg-primary rounded-pill">{{ servers.length }}</span>
                     </h2>
-                    <button class="btn btn-outline-primary btn-sm node-add-btn" title="从已有服务器添加目标主机"
+                    <button class="btn node-add-btn" title="从已有服务器添加目标主机"
                         @click="openServerPicker">
                         <i class="fas fa-plus"></i>
                     </button>
                 </div>
                 <div class="node-search">
-                    <input class="form-control form-control-sm" v-model="nodeSearch" placeholder="搜索节点/IP/用户">
+                    <input class="form-control" v-model="nodeSearch" placeholder="搜索节点/IP/用户">
                 </div>
                 <div class="node-list" v-if="filteredServers.length > 0">
                     <div class="node-item" v-for="server in filteredServers" :key="server.id || server.host">
                         <div>
-                            <div class="node-name text-truncate" :title="server.name || server.host">{{ server.name ||
-                                server.host }}</div>
+                            <div class="node-name text-truncate" :title="server.name || server.host">
+                                {{ server.name || server.host }}
+                            </div>
                             <div class="node-meta">{{ server.username }}@{{ server.host }}:{{ server.port || 22 }}</div>
                         </div>
-                        <button class="btn btn-link btn-sm text-danger p-0" @click="removeServer(server)">移除</button>
+                        <button class="btn-node-remove" @click="removeServer(server)" title="移除该服务器">移除</button>
                     </div>
                 </div>
                 <div class="p-4 text-center text-muted" v-else>
-                    <i class="fas fa-inbox fa-2x mb-2"></i>
-                    <div>{{ servers.length === 0 ? '还没有选择服务器' : '没有匹配的节点' }}</div>
+                    <i class="fas fa-inbox fa-2x mb-2 text-black-50"></i>
+                    <div class="small fw-semibold">{{ servers.length === 0 ? '还没有选择服务器' : '没有匹配的节点' }}</div>
                 </div>
             </aside>
 
             <section class="panel main-panel">
                 <div class="panel-header">
-                    <h2 class="panel-title">
-                        操作配置
-                    </h2>
+                    <h2 class="panel-title">操作配置</h2>
                     <div class="task-type-tabs" aria-label="任务类型">
                         <button class="task-type-tab" :class="{ active: form.taskType === 'command' }"
                             @click="form.taskType = 'command'">
-                            <i class="fas fa-terminal me-1"></i>批量执行
+                            <i class="fas fa-terminal"></i>批量执行
                         </button>
                         <button class="task-type-tab" :class="{ active: form.taskType === 'upload' }"
                             @click="form.taskType = 'upload'">
-                            <i class="fas fa-file-arrow-up me-1"></i>文件分发
+                            <i class="fas fa-file-arrow-up"></i>文件分发
                         </button>
                     </div>
                 </div>
 
                 <div class="main-scroll">
+                    <!-- 批量执行面板 -->
                     <div class="command-workbench" v-if="form.taskType === 'command'">
                         <div class="section-card command-config-card">
-                            <div class="row g-3 mb-3 align-items-end">
+                            <div class="row g-3 mb-2.5 align-items-end">
                                 <div class="col-lg-3 col-md-6">
                                     <label class="form-label compact-label fw-bold text-muted">执行策略</label>
                                     <select class="form-select form-select-sm" v-model="form.executionStrategy">
@@ -885,14 +1210,14 @@
                                     <div class="form-check mb-2">
                                         <input class="form-check-input" type="checkbox" v-model="form.stopOnError"
                                             id="stopOnError">
-                                        <label class="form-check-label" for="stopOnError">任一节点失败后停止</label>
+                                        <label class="form-check-label small fw-semibold text-muted" for="stopOnError">任一节点失败后停止</label>
                                     </div>
                                 </div>
                                 <div class="col-lg-3 col-md-6 d-flex align-items-end">
                                     <div class="form-check mb-2">
                                         <input class="form-check-input" type="checkbox"
                                             v-model="form.privilegedExecution" id="privilegedExecution">
-                                        <label class="form-check-label" for="privilegedExecution">切换特权账号执行</label>
+                                        <label class="form-check-label small fw-semibold text-muted" for="privilegedExecution">切换特权账号执行</label>
                                     </div>
                                 </div>
                                 <div class="col-lg-3 col-md-6">
@@ -906,31 +1231,34 @@
                                     </div>
                                 </div>
                             </div>
-                            <textarea class="form-control form-control-sm command-editor" v-model="form.commands"
+                            <textarea class="form-control command-editor" v-model="form.commands"
                                 placeholder="输入将在每台服务器执行的 Linux 命令，例如：
 mkdir -p {targetDir}
 ls -lh {targetDir}
 echo uploaded: {targetFile}"></textarea>
-                            <div class="mt-1 command-helper-bar">
+                            <div class="mt-2 command-helper-bar">
                                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                                    <div class="small text-muted text-nowrap">&#21464;&#37327;&#65306;</div>
+                                    <div class="small text-muted text-nowrap fw-bold">变量插入：</div>
                                     <div class="variable-grid">
                                         <span class="variable-chip" v-for="v in variables" :key="v"
                                             @click="insertVariable(v)">{{ v }}</span>
                                     </div>
                                 </div>
                                 <div>
-                                    <button class="btn btn-outline-primary btn-sm" type="button"
+                                    <button class="btn btn-outline-primary btn-sm px-3" type="button"
                                         @click="openCommonCommandDialog">
-                                        <i class="fas fa-wand-magic-sparkles me-1"></i>&#24120;&#29992;&#21629;&#20196;
+                                        <i class="fas fa-wand-magic-sparkles me-1"></i>常用命令库
                                     </button>
                                 </div>
                             </div>
                         </div>
 
+                        <!-- 执行结果区 (纵向撑满，带独立滚动) -->
                         <div class="section-card result-card">
                             <div class="section-head">
-                                <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
+                                <div class="section-title">
+                                    <i class="fas fa-list-check text-warning me-1"></i>执行结果
+                                </div>
                                 <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0 || running"
                                     @click="clearResults">
                                     <i class="fas fa-trash-can me-1"></i>清空结果
@@ -939,7 +1267,7 @@ echo uploaded: {targetFile}"></textarea>
                             <div class="result-list">
                                 <div v-if="results.length === 0" class="result-empty-state">
                                     <i class="fas fa-terminal"></i>
-                                    <p>执行任务后，每台服务器的实时命令状态和日志将会在此处呈现。</p>
+                                    <p>执行任务后，每台服务器的实时命令状态和终端日志将会呈现于此。</p>
                                 </div>
                                 <div v-for="(result, index) in results" :key="resultKey(result, index)"
                                     class="result-row"
@@ -947,16 +1275,15 @@ echo uploaded: {targetFile}"></textarea>
                                     <div class="result-head" @click="toggleResult(result, index)">
                                         <div class="result-summary">
                                             <i class="fas fa-chevron-right toggle-arrow"></i>
-                                            <i class="fas"
-                                                :class="resultIconClass(result)"></i>
+                                            <i class="fas" :class="resultIconClass(result)"></i>
                                             <strong>{{ result.host || result.name }}</strong>
                                         </div>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <span class="badge rounded-pill px-2 py-1"
+                                        <div class="d-flex align-items-center gap-3">
+                                            <span class="badge rounded-pill px-2.5 py-1"
                                                 :class="resultBadgeClass(result)">
                                                 {{ resultStatusText(result) }}
                                             </span>
-                                            <span class="text-muted small d-flex align-items-center gap-1">
+                                            <span class="text-muted small d-flex align-items-center gap-1 font-monospace">
                                                 <i class="far fa-clock"></i>{{ result.durationMs || 0 }}ms
                                             </span>
                                         </div>
@@ -968,7 +1295,7 @@ echo uploaded: {targetFile}"></textarea>
                                                 <span class="terminal-dot yellow"></span>
                                                 <span class="terminal-dot green"></span>
                                             </div>
-                                            <span>EXECUTION LOG</span>
+                                            <span>EXECUTION TERMINAL LOG</span>
                                         </div>
                                         <pre class="result-log">{{ (result.logs || []).join('\n\n') }}</pre>
                                     </div>
@@ -977,21 +1304,35 @@ echo uploaded: {targetFile}"></textarea>
                         </div>
                     </div>
 
+                    <!-- 文件分发面板 -->
                     <div class="command-workbench" v-if="form.taskType === 'upload'">
                         <div class="section-card">
-                            <div class="section-head">
-                                <div class="section-title"><i class="fas fa-paperclip text-primary"></i>批量上传配置</div>
+                            <div class="section-head mb-2.5">
+                                <div class="section-title">
+                                    <i class="fas fa-paperclip text-primary me-1"></i>批量上传配置
+                                </div>
                             </div>
                             <div class="row g-3 align-items-end">
                                 <div class="col-xl-4 col-lg-6">
-                                    <label class="form-label compact-label fw-bold text-muted">上传附件（不限类型）</label>
-                                    <input class="form-control form-control-sm" type="file" @change="onFileChange">
-                                    <div class="form-text" v-if="selectedFile">{{ selectedFile.name }}，{{
-                                        formatSize(selectedFile.size) }}</div>
+                                    <label class="form-label compact-label fw-bold text-muted">分发附件（不限类型）</label>
+                                    <!-- 拖拽/点击上传卡片 -->
+                                    <div class="upload-drag-area" @click="$refs.fileInput.click()">
+                                        <i class="fas fa-cloud-arrow-up"></i>
+                                        <span class="fw-semibold">点击选择文件，或拖拽文件至此</span>
+                                        <input type="file" ref="fileInput" class="d-none" @change="onFileChange">
+                                        
+                                        <div class="file-info-box" v-if="selectedFile" @click.stop>
+                                            <div class="file-info-detail text-truncate">
+                                                <i class="far fa-file-lines text-primary"></i>
+                                                <span class="text-truncate" :title="selectedFile.name">{{ selectedFile.name }}</span>
+                                            </div>
+                                            <span class="badge bg-light text-secondary font-monospace">{{ formatSize(selectedFile.size) }}</span>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="col-xl-3 col-lg-6">
-                                    <label class="form-label compact-label fw-bold text-muted">目标目录</label>
-                                    <input class="form-control form-control-sm" v-model.trim="form.targetDir"
+                                    <label class="form-label compact-label fw-bold text-muted">目标分发路径</label>
+                                    <input class="form-control" v-model.trim="form.targetDir"
                                         placeholder="/home/{username}/">
                                     <div class="quick-dir-list">
                                         <span class="quick-dir" v-for="dir in quickDirs" :key="dir"
@@ -1001,17 +1342,17 @@ echo uploaded: {targetFile}"></textarea>
                                     </div>
                                 </div>
                                 <div class="col-xl-3 col-lg-6">
-                                    <label class="form-label compact-label fw-bold text-muted">同名文件策略</label>
-                                    <select class="form-select form-select-sm" v-model="form.existsPolicy">
-                                        <option value="backup">自动备份后覆盖</option>
-                                        <option value="overwrite">直接覆盖</option>
-                                        <option value="skip">跳过</option>
-                                        <option value="rename">重命名上传</option>
+                                    <label class="form-label compact-label fw-bold text-muted">覆盖策略</label>
+                                    <select class="form-select" v-model="form.existsPolicy">
+                                        <option value="backup">自动备份旧文件并覆盖</option>
+                                        <option value="overwrite">直接强制覆盖</option>
+                                        <option value="skip">跳过不传输</option>
+                                        <option value="rename">重命名另存上传</option>
                                     </select>
                                     <div class="form-check mt-2">
                                         <input class="form-check-input" type="checkbox" v-model="form.chmodExecutable"
                                             id="chmodExecutable">
-                                        <label class="form-check-label" for="chmodExecutable">上传后 chmod +x</label>
+                                        <label class="form-check-label small fw-semibold text-muted" for="chmodExecutable">上传后赋予执行权限 (chmod +x)</label>
                                     </div>
                                 </div>
                                 <div class="col-xl-2 col-lg-6">
@@ -1026,9 +1367,13 @@ echo uploaded: {targetFile}"></textarea>
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- 文件分发结果区 -->
                         <div class="section-card result-card">
                             <div class="section-head">
-                                <div class="section-title"><i class="fas fa-list-check text-warning"></i>执行结果</div>
+                                <div class="section-title">
+                                    <i class="fas fa-list-check text-warning me-1"></i>执行结果
+                                </div>
                                 <button class="btn btn-outline-secondary btn-sm" :disabled="results.length === 0 || running"
                                     @click="clearResults">
                                     <i class="fas fa-trash-can me-1"></i>清空结果
@@ -1037,7 +1382,7 @@ echo uploaded: {targetFile}"></textarea>
                             <div class="result-list">
                                 <div v-if="results.length === 0" class="result-empty-state">
                                     <i class="fas fa-cloud-arrow-up"></i>
-                                    <p>分发文件后，每台服务器的传输进度和执行结果将会在此处呈现。</p>
+                                    <p>分发文件后，每台服务器的传输进度和执行日志将会在此呈现。</p>
                                 </div>
                                 <div v-for="(result, index) in results" :key="resultKey(result, index)"
                                     class="result-row"
@@ -1045,16 +1390,15 @@ echo uploaded: {targetFile}"></textarea>
                                     <div class="result-head" @click="toggleResult(result, index)">
                                         <div class="result-summary">
                                             <i class="fas fa-chevron-right toggle-arrow"></i>
-                                            <i class="fas"
-                                                :class="resultIconClass(result)"></i>
+                                            <i class="fas" :class="resultIconClass(result)"></i>
                                             <strong>{{ result.host || result.name }}</strong>
                                         </div>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <span class="badge rounded-pill px-2 py-1"
+                                        <div class="d-flex align-items-center gap-3">
+                                            <span class="badge rounded-pill px-2.5 py-1"
                                                 :class="resultBadgeClass(result)">
                                                 {{ resultStatusText(result) }}
                                             </span>
-                                            <span class="text-muted small d-flex align-items-center gap-1">
+                                            <span class="text-muted small d-flex align-items-center gap-1 font-monospace">
                                                 <i class="far fa-clock"></i>{{ result.durationMs || 0 }}ms
                                             </span>
                                         </div>
@@ -1066,7 +1410,7 @@ echo uploaded: {targetFile}"></textarea>
                                                 <span class="terminal-dot yellow"></span>
                                                 <span class="terminal-dot green"></span>
                                             </div>
-                                            <span>DEPLOY LOG</span>
+                                            <span>FILE TRANSFER DEPLOY LOG</span>
                                         </div>
                                         <pre class="result-log">{{ (result.logs || []).join('\n\n') }}</pre>
                                     </div>
@@ -1075,10 +1419,10 @@ echo uploaded: {targetFile}"></textarea>
                         </div>
                     </div>
                 </div>
-
             </section>
         </main>
 
+        <!-- 添加已有目标主机模态框 -->
         <div class="deploy-modal-mask" v-if="showServerPicker" @click.self="closeServerPicker">
             <div class="deploy-modal">
                 <div class="deploy-modal-header">
@@ -1087,14 +1431,14 @@ echo uploaded: {targetFile}"></textarea>
                 </div>
                 <div class="deploy-modal-body">
                     <div class="server-pick-toolbar">
-                        <input class="form-control form-control-sm" v-model.trim="serverPoolSearch"
+                        <input class="form-control" v-model.trim="serverPoolSearch"
                             placeholder="搜索服务器名称/IP/用户/分组">
                         <div class="form-check form-switch m-0 text-nowrap">
                             <input class="form-check-input" type="checkbox" v-model="serverPoolOnlyAvailable"
                                 id="serverPoolOnlyAvailable">
-                            <label class="form-check-label small" for="serverPoolOnlyAvailable">只看未添加</label>
+                            <label class="form-check-label small fw-semibold text-muted" for="serverPoolOnlyAvailable">只看未添加</label>
                         </div>
-                        <button class="btn btn-outline-primary btn-sm text-nowrap"
+                        <button class="btn btn-outline-primary btn-sm text-nowrap px-3"
                             :disabled="availableFilteredServers.length === 0" @click="addFilteredServers">
                             加入当前筛选
                         </button>
@@ -1105,10 +1449,10 @@ echo uploaded: {targetFile}"></textarea>
                         <span class="server-pick-stat">当前可加入 {{ availableFilteredServers.length }}</span>
                     </div>
                     <div v-if="loadingServerPool" class="text-center text-muted py-4">
-                        <span class="spinner-border spinner-border-sm me-1"></span>正在加载服务器列表...
+                        <span class="spinner-border spinner-border-sm me-1 text-primary"></span>正在加载服务器列表...
                     </div>
                     <div v-else-if="filteredServerPoolGroups.length === 0" class="text-center text-muted py-4">
-                        <i class="fas fa-inbox fa-2x mb-2"></i>
+                        <i class="fas fa-inbox fa-2x mb-2 text-black-50"></i>
                         <div>{{ serverPoolSearch ? '没有匹配的服务器' : '暂无可添加服务器' }}</div>
                     </div>
                     <div v-else class="server-pick-list">
@@ -1118,12 +1462,12 @@ echo uploaded: {targetFile}"></textarea>
                                 <div class="server-pick-group-name">
                                     <i class="fas"
                                         :class="isServerPoolGroupCollapsed(group.name) ? 'fa-chevron-right' : 'fa-chevron-down'"></i>
-                                    <i class="fas fa-layer-group"></i>
-                                    <span class="text-truncate">{{ group.name || '默认分组' }}</span>
+                                    <i class="fas fa-layer-group text-primary"></i>
+                                    <span class="text-truncate fw-bold">{{ group.name || '默认分组' }}</span>
                                 </div>
                                 <div class="d-flex align-items-center gap-2">
-                                    <span class="badge bg-secondary">{{ group.servers.length }}</span>
-                                    <button class="btn btn-outline-primary btn-sm py-0"
+                                    <span class="badge bg-secondary rounded-pill">{{ group.servers.length }}</span>
+                                    <button class="btn btn-outline-primary btn-sm py-0.5 px-2"
                                         @click.stop="addServers(group.servers)"
                                         :disabled="availableServers(group.servers).length === 0">
                                         加入本组
@@ -1135,14 +1479,15 @@ echo uploaded: {targetFile}"></textarea>
                                     :key="server.id || server.host" :class="{ 'is-added': isTargetServer(server) }">
                                     <div>
                                         <div class="server-pick-name text-truncate" :title="server.name || server.host">
-                                            {{ server.name || server.host }}</div>
+                                            {{ server.name || server.host }}
+                                        </div>
                                     </div>
                                     <div class="server-pick-meta text-truncate"
                                         :title="server.username + '@' + server.host + ':' + (server.port || 22)">
                                         {{ server.username }}@{{ server.host }}:{{ server.port || 22 }}
                                     </div>
                                     <button class="btn btn-sm"
-                                        :class="isTargetServer(server) ? 'btn-light' : 'btn-outline-primary'"
+                                        :class="isTargetServer(server) ? 'btn-light text-muted' : 'btn-outline-primary'"
                                         :disabled="isTargetServer(server)" @click="addExistingServer(server)">
                                         {{ isTargetServer(server) ? '已添加' : '加入' }}
                                     </button>
@@ -1152,15 +1497,16 @@ echo uploaded: {targetFile}"></textarea>
                     </div>
                 </div>
                 <div class="deploy-modal-footer">
-                    <button class="btn btn-light btn-sm" @click="closeServerPicker">关闭</button>
+                    <button class="btn btn-light btn-sm px-3" @click="closeServerPicker">关闭</button>
                 </div>
             </div>
         </div>
 
+        <!-- 常用命令库弹窗 -->
         <div class="deploy-modal-mask" v-if="showCommonCommandDialog" @click.self="closeCommonCommandDialog">
             <div class="deploy-modal">
                 <div class="deploy-modal-header">
-                    <h5 class="m-0 fw-bold">&#36873;&#25321;&#24120;&#29992;&#21629;&#20196;</h5>
+                    <h5 class="m-0 fw-bold">选择常用命令</h5>
                     <button type="button" class="btn-close" @click="closeCommonCommandDialog"></button>
                 </div>
                 <div class="deploy-modal-body">
@@ -1170,14 +1516,14 @@ echo uploaded: {targetFile}"></textarea>
                             @click="insertCommonCommand(cmd)">
                             <div class="common-command-item-title">
                                 <span>{{ cmd.name }}</span>
-                                <span class="badge bg-light text-secondary">{{ cmd.category }}</span>
+                                <span class="badge bg-light text-secondary border">{{ cmd.category }}</span>
                             </div>
                             <div class="common-command-item-code">{{ cmd.command }}</div>
                         </button>
                     </div>
                 </div>
                 <div class="deploy-modal-footer">
-                    <button class="btn btn-light btn-sm" @click="closeCommonCommandDialog">&#20851;&#38381;</button>
+                    <button class="btn btn-light btn-sm px-3" @click="closeCommonCommandDialog">关闭</button>
                 </div>
             </div>
         </div>
@@ -1210,21 +1556,21 @@ echo uploaded: {targetFile}"></textarea>
                     ],
                     variables: ['{host}', '{username}', '{targetDir}', '{targetFile}', '{fileName}', '{fileBaseName}', '{date}', '{timestamp}'],
                     commonCommands: [
-                        { category: '\u6027\u80fd', name: '\u8ffd\u8e2a CPU \u6700\u9ad8\u8fdb\u7a0b', command: 'echo "=== load ==="\nuptime\necho "=== top cpu processes ==="\nps -eo pid,ppid,user,stat,%cpu,%mem,etime,cmd --sort=-%cpu | head -n 15' },
-                        { category: '\u6027\u80fd', name: '\u81ea\u52a8\u5b9a\u4f4d CPU \u6700\u9ad8\u8fdb\u7a0b\u7ebf\u7a0b', command: 'PID=$(ps -eo pid --sort=-%cpu | awk "NR==2{print \\$1}")\necho "=== target process: $PID ==="\nps -p "$PID" -o pid,ppid,user,stat,%cpu,%mem,etime,cmd\necho "=== top threads ==="\nps -Lp "$PID" -o pid,tid,psr,pcpu,pmem,stat,comm --sort=-pcpu | head -n 20' },
-                        { category: '\u5185\u5b58', name: '\u8ffd\u8e2a\u5185\u5b58 RSS \u6700\u9ad8\u8fdb\u7a0b', command: 'echo "=== top rss processes ==="\nps -eo pid,ppid,user,rss,vsz,%mem,etime,cmd --sort=-rss | awk "NR==1{print;next}{printf \\"%s %s %s %.1fG %.1fG %s %s %s\\\\n\\",\\$1,\\$2,\\$3,\\$4/1024/1024,\\$5/1024/1024,\\$6,\\$7,substr(\\$0,index(\\$0,\\$8))}" | head -n 15' },
-                        { category: '\u5185\u5b58', name: '\u5185\u5b58\u6700\u9ad8\u8fdb\u7a0b\u660e\u7ec6', command: 'PID=$(ps -eo pid --sort=-rss | awk "NR==2{print \\$1}")\necho "=== target process: $PID ==="\nps -p "$PID" -o pid,ppid,user,rss,vsz,%mem,etime,cmd\ncat /proc/$PID/status 2>/dev/null | egrep "Name|State|Threads|VmRSS|VmSize|VmSwap"\npmap -x "$PID" 2>/dev/null | tail -n 20' },
-                        { category: 'Java', name: 'Java \u8fdb\u7a0b\u7ebf\u7a0b CPU \u5b9a\u4f4d', command: 'PID=$(jps -l 2>/dev/null | head -n 1 | awk "{print \\$1}")\n[ -z "$PID" ] && PID=$(pgrep -f java | head -n 1)\necho "=== java pid: $PID ==="\nps -p "$PID" -o pid,ppid,user,%cpu,%mem,etime,cmd\necho "=== top java threads ==="\ntop -b -H -n 1 -p "$PID" | head -n 30\necho "=== jstack preview ==="\njstack "$PID" 2>/dev/null | head -n 120 || echo "jstack not available"' },
-                        { category: '\u8fdb\u7a0b', name: '\u6307\u5b9a PID \u7ebf\u7a0b\u8d44\u6e90\u660e\u7ec6', command: 'PID=1\nps -p "$PID" -o pid,ppid,user,stat,%cpu,%mem,etime,cmd\nps -Lp "$PID" -o pid,tid,psr,pcpu,pmem,stat,comm --sort=-pcpu | head -n 30\nls /proc/$PID/task 2>/dev/null | wc -l | awk "{print \\"threads=\\",$1}"' },
-                        { category: '\u8fdb\u7a0b', name: '\u50f5\u5c38\u8fdb\u7a0b\u4e0e\u7236\u8fdb\u7a0b', command: 'echo "=== zombie processes ==="\nps -eo stat,pid,ppid,user,etime,cmd | awk "\\$1 ~ /Z/ || NR==1"\necho "=== parent detail ==="\nfor ppid in $(ps -eo stat,ppid | awk "\\$1 ~ /Z/ {print \\$2}" | sort -u); do ps -p "$ppid" -o pid,ppid,user,stat,etime,cmd; done' },
-                        { category: '\u8fdb\u7a0b', name: '\u6587\u4ef6\u53e5\u67c4\u6700\u591a\u8fdb\u7a0b', command: 'for pid in /proc/[0-9]*; do n=$(ls "$pid/fd" 2>/dev/null | wc -l); cmd=$(tr "\\0" " " < "$pid/cmdline" 2>/dev/null); echo "$n ${pid#/proc/} $cmd"; done | sort -nr | head -n 15' },
-                        { category: '\u7f51\u7edc', name: '\u7aef\u53e3\u5bf9\u5e94\u8fdb\u7a0b\u8ffd\u8e2a', command: 'PORT=8080\necho "=== listening process for port $PORT ==="\nss -lntup 2>/dev/null | grep ":$PORT\\\\b" || netstat -lntup 2>/dev/null | grep ":$PORT\\\\b"\necho "=== connections ==="\nss -tanp 2>/dev/null | grep ":$PORT\\\\b" | head -n 30' },
-                        { category: '\u7f51\u7edc', name: '\u8fde\u63a5\u6570\u6700\u591a IP/Port', command: 'echo "=== remote ip count ==="\nss -tan 2>/dev/null | awk "NR>1{print \\$5}" | sed "s/::ffff://;s/:.*//" | sort | uniq -c | sort -nr | head -n 20\necho "=== local port count ==="\nss -tan 2>/dev/null | awk "NR>1{print \\$4}" | sed "s/.*://g" | sort | uniq -c | sort -nr | head -n 20' },
-                        { category: 'IO', name: '\u8ffd\u8e2a\u78c1\u76d8 IO \u9ad8\u7684\u8fdb\u7a0b', command: 'if command -v pidstat >/dev/null 2>&1; then pidstat -d 1 3; elif command -v iotop >/dev/null 2>&1; then iotop -b -n 3 -o; else echo "pidstat/iotop not found, show D state processes"; ps -eo state,pid,ppid,user,cmd | awk "\\$1 ~ /D/ || NR==1"; fi' },
-                        { category: '\u65e5\u5fd7', name: 'OOM / Kill \u8bb0\u5f55\u6392\u67e5', command: 'echo "=== dmesg oom ==="\ndmesg -T 2>/dev/null | egrep -i "killed process|out of memory|oom" | tail -n 80\necho "=== journal kernel oom in 24h ==="\njournalctl -k --since "24 hours ago" --no-pager 2>/dev/null | egrep -i "killed process|out of memory|oom" | tail -n 80' },
-                        { category: '\u670d\u52a1', name: '\u670d\u52a1\u5931\u8d25\u539f\u56e0\u8ffd\u8e2a', command: 'SERVICE=sshd\necho "=== service status ==="\nsystemctl status "$SERVICE" --no-pager -l\necho "=== recent service logs ==="\njournalctl -u "$SERVICE" -n 120 --no-pager' },
-                        { category: '\u6587\u4ef6', name: '\u76ee\u6807\u76ee\u5f55\u5927\u6587\u4ef6\u8ffd\u8e2a', command: 'DIR={targetDir}\n[ -d "$DIR" ] || DIR=.\necho "=== large files in $DIR ==="\nfind "$DIR" -xdev -type f -size +100M -printf "%s %p\\\\n" 2>/dev/null | sort -nr | head -n 30 | awk "{printf \\"%.2fG %s\\\\n\\",\\$1/1024/1024/1024,substr(\\$0,index(\\$0,\\$2))}"' },
-                        { category: '\u7cfb\u7edf', name: '\u4e00\u952e\u7efc\u5408\u5de1\u68c0\u6458\u8981', command: 'echo "=== host ==="; hostname; date\necho "=== load ==="; uptime\necho "=== top cpu ==="; ps -eo pid,user,%cpu,%mem,etime,cmd --sort=-%cpu | head -n 8\necho "=== top memory ==="; ps -eo pid,user,rss,%mem,etime,cmd --sort=-rss | head -n 8\necho "=== disk pressure ==="; df -hT | awk "NR==1 || \\$6+0>=80"\necho "=== recent errors ==="; journalctl -p err -n 50 --no-pager 2>/dev/null' }
+                        { category: '性能', name: '追踪 CPU 最高进程', command: 'echo "=== load ==="\nuptime\necho "=== top cpu processes ==="\nps -eo pid,ppid,user,stat,%cpu,%mem,etime,cmd --sort=-%cpu | head -n 15' },
+                        { category: '性能', name: '自动定位 CPU 最高进程线程', command: 'PID=$(ps -eo pid --sort=-%cpu | awk "NR==2{print \\$1}")\necho "=== target process: $PID ==="\nps -p "$PID" -o pid,ppid,user,stat,%cpu,%mem,etime,cmd\necho "=== top threads ==="\nps -Lp "$PID" -o pid,tid,psr,pcpu,pmem,stat,comm --sort=-pcpu | head -n 20' },
+                        { category: '内存', name: '追踪内存 RSS 最高进程', command: 'echo "=== top rss processes ==="\nps -eo pid,ppid,user,rss,vsz,%mem,etime,cmd --sort=-rss | awk "NR==1{print;next}{printf \\"%s %s %s %.1fG %.1fG %s %s %s\\\\n\\",\\$1,\\$2,\\$3,\\$4/1024/1024,\\$5/1024/1024,\\$6,\\$7,substr(\\$0,index(\\$0,\\$8))}" | head -n 15' },
+                        { category: '内存', name: '内存最高进程明细', command: 'PID=$(ps -eo pid --sort=-rss | awk "NR==2{print \\$1}")\necho "=== target process: $PID ==="\nps -p "$PID" -o pid,ppid,user,rss,vsz,%mem,etime,cmd\ncat /proc/$PID/status 2>/dev/null | egrep "Name|State|Threads|VmRSS|VmSize|VmSwap"\npmap -x "$PID" 2>/dev/null | tail -n 20' },
+                        { category: 'Java', name: 'Java 进程线程 CPU 定位', command: 'PID=$(jps -l 2>/dev/null | head -n 1 | awk "{print \\$1}")\n[ -z "$PID" ] && PID=$(pgrep -f java | head -n 1)\necho "=== java pid: $PID ==="\nps -p "$PID" -o pid,ppid,user,%cpu,%mem,etime,cmd\necho "=== top java threads ==="\ntop -b -H -n 1 -p "$PID" | head -n 30\necho "=== jstack preview ==="\njstack "$PID" 2>/dev/null | head -n 120 || echo "jstack not available"' },
+                        { category: '进程', name: '指定 PID 线程资源明细', command: 'PID=1\nps -p "$PID" -o pid,ppid,user,stat,%cpu,%mem,etime,cmd\nps -Lp "$PID" -o pid,tid,psr,pcpu,pmem,stat,comm --sort=-pcpu | head -n 30\nls /proc/$PID/task 2>/dev/null | wc -l | awk "{print \\"threads=\\",$1}"' },
+                        { category: '进程', name: '僵尸进程与父进程', command: 'echo "=== zombie processes ==="\nps -eo stat,pid,ppid,user,etime,cmd | awk "\\$1 ~ /Z/ || NR==1"\necho "=== parent detail ==="\nfor ppid in $(ps -eo stat,ppid | awk "\\$1 ~ /Z/ {print \\$2}" | sort -u); do ps -p "$ppid" -o pid,ppid,user,stat,etime,cmd; done' },
+                        { category: '进程', name: '文件句柄最多进程', command: 'for pid in /proc/[0-9]*; do n=$(ls "$pid/fd" 2>/dev/null | wc -l); cmd=$(tr "\\0" " " < "$pid/cmdline" 2>/dev/null); echo "$n ${pid#/proc/} $cmd"; done | sort -nr | head -n 15' },
+                        { category: '网络', name: '端口对应进程追踪', command: 'PORT=8080\necho "=== listening process for port $PORT ==="\nss -lntup 2>/dev/null | grep ":$PORT\\\\b" || netstat -lntup 2>/dev/null | grep ":$PORT\\\\b"\necho "=== connections ==="\nss -tanp 2>/dev/null | grep ":$PORT\\\\b" | head -n 30' },
+                        { category: '网络', name: '连接数最多 IP/Port', command: 'echo "=== remote ip count ==="\nss -tan 2>/dev/null | awk "NR>1{print \\$5}" | sed "s/::ffff://;s/:.*//" | sort | uniq -c | sort -nr | head -n 20\necho "=== local port count ==="\nss -tan 2>/dev/null | awk "NR>1{print \\$4}" | sed "s/.*://g" | sort | uniq -c | sort -nr | head -n 20' },
+                        { category: 'IO', name: '追踪磁盘 IO 高的进程', command: 'if command -v pidstat >/dev/null 2>&1; then pidstat -d 1 3; elif command -v iotop >/dev/null 2>&1; then iotop -b -n 3 -o; else echo "pidstat/iotop not found, show D state processes"; ps -eo state,pid,ppid,user,cmd | awk "\\$1 ~ /D/ || NR==1"; fi' },
+                        { category: '日志', name: 'OOM / Kill 记录排查', command: 'echo "=== dmesg oom ==="\ndmesg -T 2>/dev/null | egrep -i "killed process|out of memory|oom" | tail -n 80\necho "=== journal kernel oom in 24h ==="\njournalctl -k --since "24 hours ago" --no-pager 2>/dev/null | egrep -i "killed process|out of memory|oom" | tail -n 80' },
+                        { category: '服务', name: '服务失败原因追踪', command: 'SERVICE=sshd\necho "=== service status ==="\nsystemctl status "$SERVICE" --no-pager -l\necho "=== recent service logs ==="\njournalctl -u "$SERVICE" -n 120 --no-pager' },
+                        { category: '文件', name: '目标目录大文件追踪', command: 'DIR={targetDir}\n[ -d "$DIR" ] || DIR=.\necho "=== large files in $DIR ==="\nfind "$DIR" -xdev -type f -size +100M -printf "%s %p\\\\n" 2>/dev/null | sort -nr | head -n 30 | awk "{printf \\"%.2fG %s\\\\n\\",\\$1/1024/1024/1024,substr(\\$0,index(\\$0,\\$2))}"' },
+                        { category: '系统', name: '一键综合巡检摘要', command: 'echo "=== host ==="; hostname; date\necho "=== load ==="; uptime\necho "=== top cpu ==="; ps -eo pid,user,%cpu,%mem,etime,cmd --sort=-%cpu | head -n 8\necho "=== top memory ==="; ps -eo pid,user,rss,%mem,etime,cmd --sort=-rss | head -n 8\necho "=== disk pressure ==="; df -hT | awk "NR==1 || \\$6+0>=80"\necho "=== recent errors ==="; journalctl -p err -n 50 --no-pager 2>/dev/null' }
                     ],
                     form: {
                         taskType: 'command',

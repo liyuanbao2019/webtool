@@ -52,6 +52,12 @@ public class OracleConfig {
         private String url;
 
         /**
+         * Whether this MySQL datasource is a PXC/Galera cluster.
+         * Defaults to true for backward compatibility with existing production MySQL configs.
+         */
+        private boolean pxc = true;
+
+        /**
          * 用户名
          */
         private String username;

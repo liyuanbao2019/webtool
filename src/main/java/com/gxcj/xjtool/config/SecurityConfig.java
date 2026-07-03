@@ -83,6 +83,34 @@ public class SecurityConfig {
          * 管理员用户白名单（可执行危险SQL）
          */
         private List<String> adminUsers = new ArrayList<>();
+
+        /**
+         * MySQL/PXC DDL protection.
+         */
+        private MysqlPxcDdlConfig mysqlPxcDdl = new MysqlPxcDdlConfig();
+    }
+
+    @Data
+    public static class MysqlPxcDdlConfig {
+        /**
+         * Enable special protection for high-risk DDL on MySQL PXC/Galera datasources.
+         */
+        private boolean enabled = true;
+
+        /**
+         * Protect every MySQL datasource, not only those matched as PXC/Galera.
+         */
+        private boolean protectAllMysql = false;
+
+        /**
+         * Tables with estimated rows greater than or equal to this value are blocked.
+         */
+        private long largeTableRows = 1000000L;
+
+        /**
+         * Block DDL when table size cannot be determined.
+         */
+        private boolean blockWhenTableSizeUnknown = true;
     }
 
     @Data

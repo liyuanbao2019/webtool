@@ -3,6 +3,8 @@ package com.gxcj.xjtool.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gxcj.xjtool.config.ServerConfig;
 import com.gxcj.xjtool.model.ServerInfo;
+import com.gxcj.xjtool.service.SshService;
+import com.gxcj.xjtool.websocket.WebSshWebSocketHandler;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.sshd.client.SshClient;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.web.socket.WebSocketSession;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
@@ -60,6 +63,9 @@ public class SftpController {
     @Autowired
     private ServerConfig serverConfig;
 
+    @Autowired
+    private SshService sshService;
+
     @Data
     private static class PooledSession {
         private final ClientSession session;
@@ -72,9 +78,16 @@ public class SftpController {
     }
 
     @Data
+    private static class TerminalSftpAttempt<T> {
+        private final boolean attempted;
+        private final T result;
+    }
+
+    @Data
     @lombok.EqualsAndHashCode(callSuper = false)
     public static class SftpRequest extends ServerInfo {
         private String path;
+        private String webSocketSessionId;
     }
 
     @Data
@@ -196,6 +209,37 @@ public class SftpController {
         }
     }
 
+    private String getRequestWebSocketSessionId(ServerInfo info) {
+        if (info instanceof SftpRequest) {
+            return ((SftpRequest) info).getWebSocketSessionId();
+        }
+        return null;
+    }
+
+    private SftpRequest buildRequest(ServerInfo info, String path, String webSocketSessionId) {
+        SftpRequest request = new SftpRequest();
+        request.setHost(info.getHost());
+        request.setPort(info.getPort());
+        request.setUsername(info.getUsername());
+        request.setPassword(info.getPassword());
+        request.setPath(path);
+        request.setWebSocketSessionId(webSocketSessionId);
+        return request;
+    }
+
+    private <T> TerminalSftpAttempt<T> tryExecuteWithTerminalSession(ServerInfo info, SftpAction<T> action) throws Exception {
+        String webSocketSessionId = getRequestWebSocketSessionId(info);
+        if (webSocketSessionId == null || webSocketSessionId.trim().isEmpty()) {
+            return new TerminalSftpAttempt<>(false, null);
+        }
+        WebSocketSession webSocketSession = WebSshWebSocketHandler.findSession(webSocketSessionId.trim());
+        if (webSocketSession == null || !webSocketSession.isOpen()) {
+            return new TerminalSftpAttempt<>(false, null);
+        }
+        T result = sshService.executeSftpOnExistingSession(webSocketSession, info.getUsername(), action::apply);
+        return new TerminalSftpAttempt<>(true, result);
+    }
+
     private void assertSftpAllowed() {
         if (serverConfig != null
                 && serverConfig.getAgent() != null
@@ -207,6 +251,14 @@ public class SftpController {
 
     private <T> T executeWithSftp(ServerInfo info, SftpAction<T> action) throws Exception {
         assertSftpAllowed();
+        try {
+            TerminalSftpAttempt<T> terminalAttempt = tryExecuteWithTerminalSession(info, action);
+            if (terminalAttempt.isAttempted()) {
+                return terminalAttempt.getResult();
+            }
+        } catch (IllegalStateException e) {
+            log.debug("Skip terminal SSH session for SFTP: {}", e.getMessage());
+        }
         Exception lastException = null;
         for (int attempt = 0; attempt < 2; attempt++) {
             ClientSession session = getOrCreateSession(info);
@@ -307,21 +359,25 @@ public class SftpController {
             @RequestParam("port") Integer port,
             @RequestParam("username") String username,
             @RequestParam("password") String password,
-            @RequestParam("path") String path) throws IOException {
+            @RequestParam("path") String path,
+            @RequestParam(value = "webSocketSessionId", required = false) String webSocketSessionId) throws IOException {
         SftpRequest request = new SftpRequest();
         request.setHost(host);
         request.setPort(port);
         request.setUsername(username);
         request.setPassword(password);
         request.setPath(path);
+        request.setWebSocketSessionId(webSocketSessionId);
         return download(request);
     }
 
     @PostMapping("/upload")
     public String upload(ServerInfo serverInfo, @RequestParam("path") String path,
-            @RequestParam("file") MultipartFile file) throws IOException {
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "webSocketSessionId", required = false) String webSocketSessionId) throws IOException {
+        SftpRequest request = buildRequest(serverInfo, path, webSocketSessionId);
         try {
-            executeWithSftp(serverInfo, sftp -> {
+            executeWithSftp(request, sftp -> {
                 String targetPath = path + "/" + file.getOriginalFilename();
                 try (OutputStream os = sftp.write(targetPath);
                         InputStream is = file.getInputStream()) {
@@ -452,13 +508,15 @@ public class SftpController {
             @RequestParam("port") Integer port,
             @RequestParam("username") String username,
             @RequestParam("password") String password,
-            @RequestParam("path") String path) {
+            @RequestParam("path") String path,
+            @RequestParam(value = "webSocketSessionId", required = false) String webSocketSessionId) {
         SftpRequest request = new SftpRequest();
         request.setHost(host);
         request.setPort(port);
         request.setUsername(username);
         request.setPassword(password);
         request.setPath(path);
+        request.setWebSocketSessionId(webSocketSessionId);
         return downloadFolder(request);
     }
 
@@ -518,10 +576,12 @@ public class SftpController {
             ServerInfo serverInfo,
             @RequestParam("path") String path,
             @RequestParam("relativePath") String relativePath,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "webSocketSessionId", required = false) String webSocketSessionId) {
+        SftpRequest request = buildRequest(serverInfo, path, webSocketSessionId);
 
         try {
-            executeWithSftp(serverInfo, sftp -> {
+            executeWithSftp(request, sftp -> {
                 // 构建完整的目标路径
                 String targetPath = path.endsWith("/") ? path + relativePath : path + "/" + relativePath;
 
@@ -676,7 +736,7 @@ public class SftpController {
      * 获取用户的家目录路径
      */
     @PostMapping("/home")
-    public ResponseEntity<?> getHomeDirectory(@RequestBody ServerInfo serverInfo) {
+    public ResponseEntity<?> getHomeDirectory(@RequestBody SftpRequest serverInfo) {
         try {
             return executeWithSftp(serverInfo, sftp -> {
                 String homeDir = sftp.canonicalPath(".");

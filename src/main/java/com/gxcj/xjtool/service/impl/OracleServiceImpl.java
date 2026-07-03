@@ -1,6 +1,7 @@
 package com.gxcj.xjtool.service.impl;
 
 import com.gxcj.xjtool.config.OracleConfig;
+import com.gxcj.xjtool.config.SecurityConfig;
 import com.gxcj.xjtool.dto.ExecuteSqlRequest;
 import com.gxcj.xjtool.dto.OracleDataSourceDto;
 import com.gxcj.xjtool.dto.ResultEditCommitRequest;
@@ -40,6 +41,7 @@ public class OracleServiceImpl implements OracleService {
     private final SqlAuditService sqlAuditService;
     private final SqlSecurityService sqlSecurityService;
     private final DangerousCommandTokenService tokenService;
+    private final SecurityConfig securityConfig;
 
     // 缓存连接池，key为数据源索引
     private final Map<Integer, HikariDataSource> dataSourcePools = new ConcurrentHashMap<>();
@@ -68,6 +70,24 @@ public class OracleServiceImpl implements OracleService {
     private static final String RESULT_EDIT_SCOPES_SESSION_KEY = "RESULT_EDIT_SCOPES";
     private static final long RESULT_EDIT_SCOPE_TTL_MS = 15 * 60 * 1000L;
     private static final int MAX_RESULT_EDIT_CELLS_PER_COMMIT = 200;
+    private static final String MYSQL_TABLE_REF_REGEX =
+            "`[^`]+`|\"[^\"]+\"|\\[[^\\]]+\\]|[A-Za-z0-9_$]+";
+    private static final String MYSQL_QUALIFIED_TABLE_REF_REGEX =
+            "(?:" + MYSQL_TABLE_REF_REGEX + ")(?:\\s*\\.\\s*(?:" + MYSQL_TABLE_REF_REGEX + "))?";
+    private static final Pattern MYSQL_CREATE_INDEX_PATTERN = Pattern.compile(
+            "(?is)^\\s*CREATE\\s+(?:UNIQUE\\s+|FULLTEXT\\s+|SPATIAL\\s+)?INDEX\\s+(?:" + MYSQL_TABLE_REF_REGEX + ")\\s+ON\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b");
+    private static final Pattern MYSQL_DROP_INDEX_PATTERN = Pattern.compile(
+            "(?is)^\\s*DROP\\s+INDEX\\s+(?:" + MYSQL_TABLE_REF_REGEX + ")\\s+ON\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b");
+    private static final Pattern MYSQL_ALTER_TABLE_PATTERN = Pattern.compile(
+            "(?is)^\\s*ALTER\\s+TABLE\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
+    private static final Pattern MYSQL_SINGLE_TABLE_DDL_PATTERN = Pattern.compile(
+            "(?is)^\\s*(TRUNCATE|OPTIMIZE|REPAIR)\\s+(?:TABLE\\s+)?(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
+    private static final Pattern MYSQL_DROP_TABLE_PATTERN = Pattern.compile(
+            "(?is)^\\s*DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
+    private static final Pattern MYSQL_RENAME_TABLE_PATTERN = Pattern.compile(
+            "(?is)^\\s*RENAME\\s+TABLE\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\s+TO\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
+    private static final Pattern MYSQL_DATABASE_DDL_PATTERN = Pattern.compile(
+            "(?is)^\\s*(CREATE|ALTER|DROP)\\s+(?:DATABASE|SCHEMA)\\b.*$");
 
     private static final String LOCK_QUERY_SQL =
         "SELECT " +
@@ -200,6 +220,13 @@ public class OracleServiceImpl implements OracleService {
         }
 
         String sqlInput = request.getSql().trim();
+        String dbType = dsConfig.getType() != null ? dsConfig.getType().toUpperCase() : getDatasourceType(request.getDatasourceIndex());
+        List<String> validSqls = splitSqlStatements(sqlInput, dbType);
+
+        SqlResultResponse pxcDdlCheck = checkMysqlPxcDdl(sqlInput, validSqls, request, dsConfig, dbType);
+        if (pxcDdlCheck != null) {
+            return pxcDdlCheck;
+        }
 
         // SQL安全检查
         SqlSecurityService.SqlCheckResult securityCheck = sqlSecurityService.checkSql(sqlInput, request.getUsername());
@@ -232,9 +259,6 @@ public class OracleServiceImpl implements OracleService {
         }
 
         // 智能分割SQL语句（支持PL/SQL块，使用Druid）
-        String dbType = getDatasourceType(request.getDatasourceIndex());
-        List<String> validSqls = splitSqlStatements(sqlInput, dbType);
-
         SqlResultResponse response;
 
         // 获取分页参数（pageSize <= 0 表示不分页）
@@ -697,6 +721,170 @@ public class OracleServiceImpl implements OracleService {
      * 解决方案：预处理阶段将此类注释行替换为空行，保留原行位置，
      * 让 Druid 在干净的文本上做 AST 解析。
      */
+    private SqlResultResponse checkMysqlPxcDdl(String originalSql, List<String> sqlList, ExecuteSqlRequest request,
+            OracleConfig.OracleDataSource dsConfig, String dbType) {
+        SecurityConfig.MysqlPxcDdlConfig config = securityConfig.getSqlCheck().getMysqlPxcDdl();
+        if (config == null || !config.isEnabled() || !"MYSQL".equalsIgnoreCase(dbType)) {
+            return null;
+        }
+        List<MysqlPxcDdlTarget> targets = sqlList.stream()
+                .map(this::parseMysqlPxcDdlTarget)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (targets.isEmpty()) {
+            return null;
+        }
+
+        String defaultDatabase = DatabaseDialect.extractDatabaseFromUrl(dsConfig.getUrl());
+        try (Connection conn = getConnectionByIndex(request.getDatasourceIndex())) {
+            if (!config.isProtectAllMysql() && !dsConfig.isPxc()) {
+                return null;
+            }
+            if (defaultDatabase == null || defaultDatabase.trim().isEmpty()) {
+                defaultDatabase = conn.getCatalog();
+            }
+            for (MysqlPxcDdlTarget target : targets) {
+                if (target.blockAlways) {
+                    String message = "MySQL PXC 高风险DDL已阻断：" + target.operation
+                            + " 可能触发集群级同步等待或造成不可逆影响，请走项目经理授权的DBA维护窗口/OSC方案。";
+                    log.warn("{} user={}, datasource={}", message, request.getUsername(), dsConfig.getName());
+                    return SqlResultResponse.error(message);
+                }
+                String schemaName = target.schemaName != null ? target.schemaName : defaultDatabase;
+                long tableRows = queryMysqlTableRows(conn, schemaName, target.tableName);
+                String tableLabel = schemaName == null || schemaName.trim().isEmpty()
+                        ? target.tableName
+                        : schemaName + "." + target.tableName;
+                if (tableRows < 0 && config.isBlockWhenTableSizeUnknown()) {
+                    String message = "MySQL PXC 高风险DDL已阻断：无法确认表 " + tableLabel
+                            + " 的行数，禁止直接通过SQL工具执行 " + target.operation + "，请走DBA维护窗口/OSC方案。";
+                    log.warn("{} user={}, datasource={}", message, request.getUsername(), dsConfig.getName());
+                    return SqlResultResponse.error(message);
+                }
+                if (tableRows >= config.getLargeTableRows()) {
+                    String message = "MySQL PXC 大表DDL已阻断：表 " + tableLabel + " 估算行数 "
+                            + tableRows + "，达到阈值 " + config.getLargeTableRows()
+                            + "。禁止直接执行 " + target.operation
+                            + "，请走项目经理授权的DBA维护窗口，并使用 pt-online-schema-change/gh-ost 等在线DDL方案。";
+                    log.warn("{} user={}, datasource={}", message, request.getUsername(), dsConfig.getName());
+                    return SqlResultResponse.error(message);
+                }
+            }
+        } catch (SQLException e) {
+            String message = "MySQL PXC 高风险DDL已阻断：检查表规模失败，禁止直接执行DDL。原因: " + e.getMessage();
+            log.warn("{} user={}, datasource={}", message, request.getUsername(), dsConfig.getName(), e);
+            return SqlResultResponse.error(message);
+        }
+
+        boolean isAdmin = securityConfig.getSqlCheck().getAdminUsers().contains(request.getUsername());
+        if (!isAdmin) {
+            return SqlResultResponse.error("非授权用户禁止在 MySQL PXC 集群执行高风险DDL，请联系项目经理或DBA授权。");
+        }
+
+        String token = request.getDangerousCommandToken();
+        if (token == null || token.isEmpty()) {
+            return SqlResultResponse.confirmationNeeded(
+                    "检测到 MySQL PXC 高风险DDL，可能导致集群 wsrep 同步等待。请确认已获得项目经理/DBA授权，并确认目标表不是大表。",
+                    "sql.dangerReason_mysqlPxcDdl",
+                    "sql.dangerSugg_mysqlPxcDdl",
+                    null);
+        }
+        if (!tokenService.validateAndConsumeToken(request.getSessionId(), originalSql, token)) {
+            return SqlResultResponse.error("危险命令Token验证失败或已过期，请重新确认执行");
+        }
+        return null;
+    }
+
+    private MysqlPxcDdlTarget parseMysqlPxcDdlTarget(String sql) {
+        if (MYSQL_DATABASE_DDL_PATTERN.matcher(sql).find()) {
+            return MysqlPxcDdlTarget.blockAlways("DATABASE/SCHEMA DDL");
+        }
+        Matcher createMatcher = MYSQL_CREATE_INDEX_PATTERN.matcher(sql);
+        if (createMatcher.find()) {
+            return parseMysqlTableReference(createMatcher.group(1), "CREATE INDEX");
+        }
+        Matcher dropIndexMatcher = MYSQL_DROP_INDEX_PATTERN.matcher(sql);
+        if (dropIndexMatcher.find()) {
+            return parseMysqlTableReference(dropIndexMatcher.group(1), "DROP INDEX");
+        }
+        Matcher alterMatcher = MYSQL_ALTER_TABLE_PATTERN.matcher(sql);
+        if (alterMatcher.find()) {
+            return parseMysqlTableReference(alterMatcher.group(1), "ALTER TABLE");
+        }
+        Matcher singleTableMatcher = MYSQL_SINGLE_TABLE_DDL_PATTERN.matcher(sql);
+        if (singleTableMatcher.find()) {
+            return parseMysqlTableReference(singleTableMatcher.group(2),
+                    singleTableMatcher.group(1).toUpperCase(Locale.ROOT) + " TABLE");
+        }
+        Matcher dropTableMatcher = MYSQL_DROP_TABLE_PATTERN.matcher(sql);
+        if (dropTableMatcher.find()) {
+            return MysqlPxcDdlTarget.blockAlways("DROP TABLE");
+        }
+        Matcher renameMatcher = MYSQL_RENAME_TABLE_PATTERN.matcher(sql);
+        if (renameMatcher.find()) {
+            return parseMysqlTableReference(renameMatcher.group(1), "RENAME TABLE");
+        }
+        return null;
+    }
+
+    private MysqlPxcDdlTarget parseMysqlTableReference(String tableReference, String operation) {
+        if (tableReference == null) {
+            return null;
+        }
+        String[] parts = tableReference.replaceAll("\\s+", "").split("\\.", 2);
+        if (parts.length == 2) {
+            return new MysqlPxcDdlTarget(cleanMysqlIdentifier(parts[0]), cleanMysqlIdentifier(parts[1]), operation, false);
+        }
+        return new MysqlPxcDdlTarget(null, cleanMysqlIdentifier(parts[0]), operation, false);
+    }
+
+    private String cleanMysqlIdentifier(String identifier) {
+        String value = identifier == null ? "" : identifier.trim();
+        while ((value.startsWith("`") && value.endsWith("`"))
+                || (value.startsWith("\"") && value.endsWith("\""))
+                || (value.startsWith("[") && value.endsWith("]"))) {
+            value = value.substring(1, value.length() - 1).trim();
+        }
+        return value;
+    }
+
+    private long queryMysqlTableRows(Connection conn, String schemaName, String tableName) throws SQLException {
+        if (schemaName == null || schemaName.trim().isEmpty() || tableName == null || tableName.trim().isEmpty()) {
+            return -1L;
+        }
+        String sql = "SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setQueryTimeout(10);
+            stmt.setString(1, schemaName);
+            stmt.setString(2, tableName);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    return -1L;
+                }
+                long rows = rs.getLong(1);
+                return rs.wasNull() ? -1L : rows;
+            }
+        }
+    }
+
+    private static class MysqlPxcDdlTarget {
+        private final String schemaName;
+        private final String tableName;
+        private final String operation;
+        private final boolean blockAlways;
+
+        private MysqlPxcDdlTarget(String schemaName, String tableName, String operation, boolean blockAlways) {
+            this.schemaName = schemaName;
+            this.tableName = tableName;
+            this.operation = operation;
+            this.blockAlways = blockAlways;
+        }
+
+        private static MysqlPxcDdlTarget blockAlways(String operation) {
+            return new MysqlPxcDdlTarget(null, null, operation, true);
+        }
+    }
+
     private List<String> splitSqlStatements(String sqlInput, String dbTypeStr) {
         List<String> validSqls = new ArrayList<>();
         // 必须先预处理（Druid 失败时降级路径也要用同一份文本，否则会仍带 --- 交给 MySQL）
