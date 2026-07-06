@@ -177,6 +177,17 @@ public interface OracleService {
     Map<String, Object> getMysqlTransactionDiagnostics(int datasourceIndex, String databaseName, int minSeconds);
 
     /**
+     * Build a guarded online DDL plan for MySQL/PXC.
+     *
+     * @param datasourceIndex datasource index
+     * @param databaseName    database name
+     * @param ddl             requested DDL
+     * @param username        current login user for audit/context
+     * @return precheck result and generated online DDL command
+     */
+    Map<String, Object> buildMysqlOnlineDdlPlan(int datasourceIndex, String databaseName, String ddl, String username);
+
+    /**
      * Kill MySQL processes after re-validating each selected process still matches
      * the wsrep query filter.
      *

@@ -1,6 +1,12 @@
 server:
   port: 18080
 
+logging:
+  file:
+    name: ./logs/webtool-agent.log
+  level:
+    com.gxcj.xjtool.agent: INFO
+
 agent:
   id: local-agent
   token: change-me

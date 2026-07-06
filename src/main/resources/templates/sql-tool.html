@@ -2003,6 +2003,114 @@
             </div>
         </div>
 
+        <div class="modal fade" id="mysqlOnlineDdlModal" tabindex="-1" ref="mysqlOnlineDdlModal">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content mysql-process-modal">
+                    <div class="modal-header mysql-process-header">
+                        <div class="mysql-process-title">
+                            <span class="mysql-process-title-icon"><i class="fas fa-tools"></i></span>
+                            <div>
+                                <div class="mysql-process-title-text">{{ t('sql.mysqlOnlineDdl') }}</div>
+                                <div class="mysql-process-title-sub">{{ t('sql.mysqlOnlineDdlDesc') }}</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body mysql-process-body">
+                        <div class="row g-2 align-items-end mb-3 mysql-process-filterbar">
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold mb-1">{{ t('sql.database') }}</label>
+                                <select class="form-select form-select-sm" v-model="mysqlOnlineDdlData.database">
+                                    <option v-for="db in mysqlProcessDatabases" :key="db" :value="db">{{ db }}</option>
+                                </select>
+                            </div>
+                            <div class="col-md-9">
+                                <label class="form-label small fw-bold mb-1">{{ t('sql.mysqlOnlineDdlInput') }}</label>
+                                <textarea class="form-control font-monospace" rows="4"
+                                    v-model="mysqlOnlineDdlData.ddl"
+                                    placeholder="ALTER TABLE your_table ADD INDEX idx_col(col)"></textarea>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 mb-3 flex-wrap">
+                            <button class="btn btn-primary btn-sm" @click="buildMysqlOnlineDdlPlan"
+                                :disabled="mysqlOnlineDdlData.loading || !mysqlOnlineDdlData.ddl.trim()">
+                                <span v-if="mysqlOnlineDdlData.loading" class="spinner-border spinner-border-sm me-1"></span>
+                                <i v-else class="fas fa-magic me-1"></i>{{ t('sql.generatePlan') }}
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" @click="mysqlOnlineDdlData.ddl = sql">
+                                <i class="fas fa-arrow-down me-1"></i>{{ t('sql.useEditorSql') }}
+                            </button>
+                        </div>
+
+                        <div v-if="mysqlOnlineDdlData.error" class="alert alert-danger py-2">
+                            <i class="fas fa-exclamation-triangle me-2"></i>{{ mysqlOnlineDdlData.error }}
+                        </div>
+
+                        <div v-if="mysqlOnlineDdlData.plan">
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-3">
+                                    <div class="border rounded p-2 bg-light">
+                                        <div class="small text-muted">{{ t('sql.riskLevel') }}</div>
+                                        <div class="fw-bold">{{ mysqlOnlineDdlData.plan.riskLevel || '-' }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border rounded p-2 bg-light">
+                                        <div class="small text-muted">{{ t('sql.targetTable') }}</div>
+                                        <div class="fw-bold">{{ mysqlOnlineDdlData.plan.database }}.{{ mysqlOnlineDdlData.plan.table }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border rounded p-2 bg-light">
+                                        <div class="small text-muted">{{ t('sql.estimatedRows') }}</div>
+                                        <div class="fw-bold">{{ mysqlOnlineDdlData.plan.tableStats?.tableRows ?? '-' }}</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border rounded p-2 bg-light">
+                                        <div class="small text-muted">{{ t('sql.tableSizeMb') }}</div>
+                                        <div class="fw-bold">{{ mysqlOnlineDdlData.plan.tableStats?.totalSizeMb ?? '-' }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-if="mysqlOnlineDdlData.plan.blockers && mysqlOnlineDdlData.plan.blockers.length"
+                                class="alert alert-danger py-2">
+                                <div class="fw-bold mb-1">{{ t('sql.blockers') }}</div>
+                                <div v-for="item in mysqlOnlineDdlData.plan.blockers" :key="item">{{ item }}</div>
+                            </div>
+                            <div v-if="mysqlOnlineDdlData.plan.warnings && mysqlOnlineDdlData.plan.warnings.length"
+                                class="alert alert-warning py-2">
+                                <div class="fw-bold mb-1">{{ t('sql.warnings') }}</div>
+                                <div v-for="item in mysqlOnlineDdlData.plan.warnings" :key="item">{{ item }}</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label small fw-bold mb-0">{{ t('sql.dryRunCommand') }}</label>
+                                    <button class="btn btn-outline-secondary btn-sm"
+                                        @click="copyText(mysqlOnlineDdlData.plan.dryRunCommand)">
+                                        <i class="fas fa-copy me-1"></i>{{ t('sql.copy') }}
+                                    </button>
+                                </div>
+                                <pre class="bg-dark text-light rounded p-3 small mb-0"><code>{{ mysqlOnlineDdlData.plan.dryRunCommand }}</code></pre>
+                            </div>
+                            <div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label small fw-bold mb-0">{{ t('sql.executeCommand') }}</label>
+                                    <button class="btn btn-outline-secondary btn-sm"
+                                        @click="copyText(mysqlOnlineDdlData.plan.command)">
+                                        <i class="fas fa-copy me-1"></i>{{ t('sql.copy') }}
+                                    </button>
+                                </div>
+                                <pre class="bg-dark text-light rounded p-3 small mb-0"><code>{{ mysqlOnlineDdlData.plan.command }}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="modal fade" id="tableStructureModal" tabindex="-1" ref="tableStructureModal">
             <div class="modal-dialog modal-xl modal-dialog-scrollable">
                 <div class="modal-content">
@@ -2374,6 +2482,20 @@
             'sql.killFailed': 'Kill Failed',
             'sql.mysqlDiagnostics': 'Diagnostics',
             'sql.mysqlDiagnosticsDesc': 'Query current slow SQL, long transactions, and lock waits',
+            'sql.mysqlOnlineDdl': 'Online DDL',
+            'sql.mysqlOnlineDdlDesc': 'Generate pt-online-schema-change plan with MySQL/PXC prechecks',
+            'sql.mysqlOnlineDdlInput': 'DDL to convert',
+            'sql.generatePlan': 'Generate Plan',
+            'sql.useEditorSql': 'Use Editor SQL',
+            'sql.riskLevel': 'Risk',
+            'sql.targetTable': 'Target Table',
+            'sql.estimatedRows': 'Estimated Rows',
+            'sql.tableSizeMb': 'Table Size MB',
+            'sql.blockers': 'Blockers',
+            'sql.warnings': 'Warnings',
+            'sql.dryRunCommand': 'Dry-run Command',
+            'sql.executeCommand': 'Execute Command',
+            'sql.onlyMysqlOnlineDdl': 'Online DDL only supports MySQL datasources',
             'sql.slowSqlThreshold': 'Slow SQL >= seconds',
             'sql.longTrxThreshold': 'Long trx >= seconds',
             'sql.currentSlowSql': 'Current Slow SQL',
@@ -2621,6 +2743,20 @@
             'sql.killFailed': '查杀失败',
             'sql.mysqlDiagnostics': '诊断',
             'sql.mysqlDiagnosticsDesc': '查询当前慢 SQL、长事务和锁等待',
+            'sql.mysqlOnlineDdl': '在线 DDL',
+            'sql.mysqlOnlineDdlDesc': '生成 pt-online-schema-change 方案并执行 MySQL/PXC 前置检查',
+            'sql.mysqlOnlineDdlInput': '待转换 DDL',
+            'sql.generatePlan': '生成方案',
+            'sql.useEditorSql': '使用编辑器 SQL',
+            'sql.riskLevel': '风险',
+            'sql.targetTable': '目标表',
+            'sql.estimatedRows': '估算行数',
+            'sql.tableSizeMb': '表大小 MB',
+            'sql.blockers': '阻断项',
+            'sql.warnings': '风险提示',
+            'sql.dryRunCommand': '预演命令',
+            'sql.executeCommand': '执行命令',
+            'sql.onlyMysqlOnlineDdl': '在线 DDL 仅支持 MySQL 数据源',
             'sql.slowSqlThreshold': '慢 SQL 秒数',
             'sql.longTrxThreshold': '长事务秒数',
             'sql.currentSlowSql': '当前慢 SQL',
@@ -2825,6 +2961,13 @@
                         icon: 'fas fa-stethoscope',
                         requireMysql: true
                     },
+                    mysqlOnlineDdlTool: {
+                        id: 'mysql_online_ddl',
+                        labelKey: 'sql.mysqlOnlineDdl',
+                        descKey: 'sql.mysqlOnlineDdlDesc',
+                        icon: 'fas fa-tools',
+                        requireMysql: true
+                    },
                     mysqlDiagnosticData: {
                         loading: false,
                         error: null,
@@ -2836,6 +2979,13 @@
                         longTransactions: [],
                         lockWaits: [],
                         lockWaitMessage: null
+                    },
+                    mysqlOnlineDdlData: {
+                        loading: false,
+                        error: null,
+                        database: 'tm_xj',
+                        ddl: '',
+                        plan: null
                     },
                     // 左侧「常用工具」配置（仅前端入口，后续接后端）
                     commonTools: [
@@ -2975,7 +3125,7 @@
                     return (this.currentDbType || '').toUpperCase() === 'MYSQL';
                 },
                 visibleCommonTools() {
-                    return this.isMysqlDb ? [this.mysqlProcessTool, this.mysqlDiagnosticsTool] : this.commonTools;
+                    return this.isMysqlDb ? [this.mysqlOnlineDdlTool, this.mysqlProcessTool, this.mysqlDiagnosticsTool] : this.commonTools;
                 },
                 allMysqlProcessesSelected() {
                     const pageIds = this.paginatedMysqlProcessRows.map(row => Number(row.ID)).filter(id => Number.isFinite(id));
@@ -3790,6 +3940,8 @@
                         this.openMysqlProcessKillModal();
                     } else if (tool.id === 'mysql_diagnostics') {
                         this.openMysqlDiagnosticsModal();
+                    } else if (tool.id === 'mysql_online_ddl') {
+                        this.openMysqlOnlineDdlModal();
                     } else {
                         this.showToast(this.t('sql.pendingFeature'), this.t('sql.featureInDevelopment', this.t(tool.labelKey), this.currentDatabaseName), 'success');
                     }
@@ -3846,6 +3998,52 @@
                         this.showToast(this.t('sql.unlockFailed'), e.response?.data?.message || e.message, 'error');
                     } finally {
                         this.lockData.unlocking = null;
+                    }
+                },
+                openMysqlOnlineDdlModal() {
+                    this.mysqlOnlineDdlData.loading = false;
+                    this.mysqlOnlineDdlData.error = null;
+                    this.mysqlOnlineDdlData.plan = null;
+                    if (!this.mysqlProcessDatabases.includes(this.mysqlOnlineDdlData.database)) {
+                        this.mysqlOnlineDdlData.database = 'tm_xj';
+                    }
+                    if (!this.mysqlOnlineDdlData.ddl && this.sql && /^(\s*)(alter\s+table|create\s+.*index|drop\s+index)/i.test(this.sql)) {
+                        this.mysqlOnlineDdlData.ddl = this.sql;
+                    }
+                    const modal = new bootstrap.Modal(document.getElementById('mysqlOnlineDdlModal'));
+                    modal.show();
+                },
+                async buildMysqlOnlineDdlPlan() {
+                    if (!this.isMysqlDb) {
+                        this.mysqlOnlineDdlData.error = this.t('sql.onlyMysqlOnlineDdl');
+                        return;
+                    }
+                    this.mysqlOnlineDdlData.loading = true;
+                    this.mysqlOnlineDdlData.error = null;
+                    this.mysqlOnlineDdlData.plan = null;
+                    try {
+                        const res = await axios.post('/api/database/lock/mysql-online-ddl/plan', {
+                            datasourceIndex: this.selectedDataSourceIdx,
+                            database: this.mysqlOnlineDdlData.database,
+                            ddl: this.mysqlOnlineDdlData.ddl
+                        });
+                        if (res.data.success) {
+                            this.mysqlOnlineDdlData.plan = res.data;
+                        } else {
+                            this.mysqlOnlineDdlData.error = res.data.message || this.t('sql.loadingFailed');
+                        }
+                    } catch (e) {
+                        this.mysqlOnlineDdlData.error = e.response?.data?.message || e.message;
+                    } finally {
+                        this.mysqlOnlineDdlData.loading = false;
+                    }
+                },
+                async copyText(text) {
+                    try {
+                        await navigator.clipboard.writeText(text || '');
+                        this.showToast(this.t('sql.copySuccess'), this.t('sql.copiedToClipboard'), 'success');
+                    } catch (e) {
+                        this.showToast(this.t('sql.copyFailed'), this.t('sql.cannotWriteClipboard'), 'error');
                     }
                 },
                 /** MySQL 进程查杀弹窗 */

@@ -88,6 +88,14 @@ public class OracleServiceImpl implements OracleService {
             "(?is)^\\s*RENAME\\s+TABLE\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\s+TO\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
     private static final Pattern MYSQL_DATABASE_DDL_PATTERN = Pattern.compile(
             "(?is)^\\s*(CREATE|ALTER|DROP)\\s+(?:DATABASE|SCHEMA)\\b.*$");
+    private static final Pattern MYSQL_ALTER_TABLE_CAPTURE_PATTERN = Pattern.compile(
+            "(?is)^\\s*ALTER\\s+TABLE\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\s+(.*)$");
+    private static final Pattern MYSQL_CREATE_INDEX_CAPTURE_PATTERN = Pattern.compile(
+            "(?is)^\\s*CREATE\\s+(UNIQUE\\s+|FULLTEXT\\s+|SPATIAL\\s+)?INDEX\\s+(" + MYSQL_TABLE_REF_REGEX + ")\\s+ON\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\s*(\\(.*)$");
+    private static final Pattern MYSQL_DROP_INDEX_CAPTURE_PATTERN = Pattern.compile(
+            "(?is)^\\s*DROP\\s+INDEX\\s+(" + MYSQL_TABLE_REF_REGEX + ")\\s+ON\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
+    private static final Pattern MYSQL_JDBC_URL_PATTERN = Pattern.compile(
+            "^jdbc:mysql://([^:/?]+)(?::(\\d+))?/([^?]+).*", Pattern.CASE_INSENSITIVE);
 
     private static final String LOCK_QUERY_SQL =
         "SELECT " +
@@ -3232,6 +3240,269 @@ public class OracleServiceImpl implements OracleService {
         } catch (SQLException e) {
             log.error("MySQL transaction diagnostics failed datasource={}, database={}", datasourceIndex, databaseName, e);
             throw new IllegalStateException(e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public Map<String, Object> buildMysqlOnlineDdlPlan(int datasourceIndex, String databaseName, String ddl, String username) {
+        validateMysqlProcessDatasource(datasourceIndex, databaseName);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", false);
+
+        if (ddl == null || ddl.trim().isEmpty()) {
+            result.put("message", "DDL cannot be empty");
+            return result;
+        }
+
+        OracleConfig.OracleDataSource ds = getDataSourceConfig(datasourceIndex);
+        if (ds == null || !"MYSQL".equalsIgnoreCase(ds.getType())) {
+            result.put("message", "Only MySQL datasource supports online DDL plan");
+            return result;
+        }
+
+        String normalizedDdl = formatSqlForJdbcExecution(ddl.trim());
+        OnlineDdlAlter alter = buildOnlineAlter(normalizedDdl);
+        MysqlPxcDdlTarget target = parseMysqlPxcDdlTarget(normalizedDdl);
+        if (target == null) {
+            result.put("message", "Only ALTER TABLE, CREATE INDEX, and DROP INDEX can be converted to online DDL");
+            result.put("supported", false);
+            return result;
+        }
+        if (target.blockAlways || alter == null) {
+            result.put("message", target.operation + " is not supported by the online DDL assistant");
+            result.put("supported", false);
+            result.put("operation", target.operation);
+            return result;
+        }
+
+        String targetSchema = target.schemaName != null ? target.schemaName : databaseName;
+        String targetTable = target.tableName;
+        if (!databaseName.equalsIgnoreCase(targetSchema)) {
+            result.put("message", "DDL target database must match selected database: " + databaseName);
+            result.put("supported", false);
+            return result;
+        }
+
+        List<String> warnings = new ArrayList<>();
+        List<String> blockers = new ArrayList<>();
+        Map<String, Object> tableStats = new LinkedHashMap<>();
+        int wsrepWaitCount = 0;
+        int longTransactionCount = 0;
+        int lockWaitCount = 0;
+
+        try (Connection conn = getConnectionByIndex(datasourceIndex)) {
+            tableStats = queryMysqlTableStats(conn, targetSchema, targetTable);
+            long tableRows = toLong(tableStats.get("tableRows"), -1L);
+            long totalBytes = toLong(tableStats.get("totalBytes"), -1L);
+
+            if (tableRows < 0) {
+                blockers.add("Cannot determine table size from information_schema.TABLES");
+            } else if (tableRows >= securityConfig.getSqlCheck().getMysqlPxcDdl().getLargeTableRows()) {
+                warnings.add("Large table detected: estimated rows=" + tableRows);
+            }
+            if (totalBytes >= 0) {
+                tableStats.put("totalSizeMb", totalBytes / 1024 / 1024);
+            }
+
+            wsrepWaitCount = countMysqlWsrepWaits(conn, targetSchema);
+            if (wsrepWaitCount > 0) {
+                blockers.add("Current wsrep cluster wait processes: " + wsrepWaitCount);
+            }
+
+            List<Map<String, Object>> longTransactions = queryMysqlLongTransactions(conn, targetSchema, 30);
+            longTransactionCount = longTransactions.size();
+            if (longTransactionCount > 0) {
+                blockers.add("Long transactions running >=30s: " + longTransactionCount);
+            }
+
+            try {
+                List<Map<String, Object>> lockWaits = queryMysqlLockWaits(conn, targetSchema);
+                lockWaitCount = lockWaits.size();
+            } catch (SQLException e) {
+                try {
+                    List<Map<String, Object>> lockWaits = queryMysqlLockWaitsFromPerformanceSchema(conn, targetSchema);
+                    lockWaitCount = lockWaits.size();
+                } catch (SQLException ignored) {
+                    warnings.add("Lock wait detail unavailable: " + e.getMessage());
+                }
+            }
+            if (lockWaitCount > 0) {
+                blockers.add("Current lock waits: " + lockWaitCount);
+            }
+        } catch (SQLException e) {
+            result.put("message", "Precheck failed: " + e.getMessage());
+            result.put("supported", true);
+            return result;
+        }
+
+        String command = buildPtOnlineSchemaChangeCommand(ds, targetSchema, targetTable, alter.alterClause, true);
+        String dryRunCommand = buildPtOnlineSchemaChangeCommand(ds, targetSchema, targetTable, alter.alterClause, false);
+        boolean canExecute = blockers.isEmpty();
+
+        result.put("success", true);
+        result.put("supported", true);
+        result.put("canExecute", canExecute);
+        result.put("riskLevel", canExecute ? (warnings.isEmpty() ? "LOW" : "MEDIUM") : "HIGH");
+        result.put("operation", alter.operation);
+        result.put("database", targetSchema);
+        result.put("table", targetTable);
+        result.put("alterClause", alter.alterClause);
+        result.put("command", command);
+        result.put("dryRunCommand", dryRunCommand);
+        result.put("tableStats", tableStats);
+        result.put("wsrepWaitCount", wsrepWaitCount);
+        result.put("longTransactionCount", longTransactionCount);
+        result.put("lockWaitCount", lockWaitCount);
+        result.put("warnings", warnings);
+        result.put("blockers", blockers);
+        result.put("message", canExecute
+                ? "Online DDL plan generated. Execute only in an approved maintenance window."
+                : "Online DDL plan generated but blockers must be cleared before execution.");
+
+        try {
+            sqlAuditService.logSqlExecution(
+                    username,
+                    "MYSQL ONLINE DDL PLAN: " + normalizedDdl,
+                    true,
+                    canExecute ? null : blockers.toString(),
+                    0,
+                    0,
+                    ds.getName());
+        } catch (Exception e) {
+            log.warn("Record MySQL online DDL plan audit failed", e);
+        }
+
+        return result;
+    }
+
+    private OnlineDdlAlter buildOnlineAlter(String ddl) {
+        Matcher alterMatcher = MYSQL_ALTER_TABLE_CAPTURE_PATTERN.matcher(ddl);
+        if (alterMatcher.find()) {
+            return new OnlineDdlAlter("ALTER TABLE", alterMatcher.group(2).trim());
+        }
+
+        Matcher createIndexMatcher = MYSQL_CREATE_INDEX_CAPTURE_PATTERN.matcher(ddl);
+        if (createIndexMatcher.find()) {
+            String indexKind = createIndexMatcher.group(1) == null ? "" : createIndexMatcher.group(1).trim() + " ";
+            String indexName = cleanMysqlIdentifier(createIndexMatcher.group(2));
+            String definition = createIndexMatcher.group(4).trim();
+            return new OnlineDdlAlter("CREATE INDEX", "ADD " + indexKind + "INDEX `" + indexName + "` " + definition);
+        }
+
+        Matcher dropIndexMatcher = MYSQL_DROP_INDEX_CAPTURE_PATTERN.matcher(ddl);
+        if (dropIndexMatcher.find()) {
+            String indexName = cleanMysqlIdentifier(dropIndexMatcher.group(1));
+            return new OnlineDdlAlter("DROP INDEX", "DROP INDEX `" + indexName + "`");
+        }
+
+        return null;
+    }
+
+    private Map<String, Object> queryMysqlTableStats(Connection conn, String schemaName, String tableName) throws SQLException {
+        String sql = "SELECT TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, ENGINE, TABLE_COLLATION " +
+                "FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setQueryTimeout(10);
+            stmt.setString(1, schemaName);
+            stmt.setString(2, tableName);
+            try (ResultSet rs = stmt.executeQuery()) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                if (!rs.next()) {
+                    row.put("tableRows", -1L);
+                    row.put("dataLength", -1L);
+                    row.put("indexLength", -1L);
+                    row.put("totalBytes", -1L);
+                    return row;
+                }
+                long dataLength = rs.getLong("DATA_LENGTH");
+                long indexLength = rs.getLong("INDEX_LENGTH");
+                row.put("tableRows", rs.getLong("TABLE_ROWS"));
+                row.put("dataLength", dataLength);
+                row.put("indexLength", indexLength);
+                row.put("totalBytes", dataLength + indexLength);
+                row.put("engine", rs.getString("ENGINE"));
+                row.put("tableCollation", rs.getString("TABLE_COLLATION"));
+                return row;
+            }
+        }
+    }
+
+    private int countMysqlWsrepWaits(Connection conn, String databaseName) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB = ? AND STATE LIKE ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setQueryTimeout(10);
+            stmt.setString(1, databaseName);
+            stmt.setString(2, "%wsrep:%");
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
+    }
+
+    private String buildPtOnlineSchemaChangeCommand(OracleConfig.OracleDataSource ds, String databaseName,
+            String tableName, String alterClause, boolean execute) {
+        MysqlJdbcEndpoint endpoint = parseMysqlJdbcEndpoint(ds.getUrl());
+        List<String> parts = new ArrayList<>();
+        parts.add("pt-online-schema-change");
+        parts.add("--alter " + shellQuote(alterClause));
+        parts.add("--host=" + shellQuote(endpoint.host));
+        parts.add("--port=" + endpoint.port);
+        parts.add("--user=" + shellQuote(ds.getUsername()));
+        parts.add("--ask-pass");
+        parts.add("--max-load=Threads_running=50");
+        parts.add("--critical-load=Threads_running=100");
+        parts.add("--chunk-time=0.5");
+        parts.add("--set-vars=lock_wait_timeout=3");
+        parts.add("--check-interval=2");
+        parts.add("--recursion-method=none");
+        parts.add(execute ? "--execute" : "--dry-run");
+        parts.add("D=" + databaseName + ",t=" + tableName);
+        return String.join(" \\\n  ", parts);
+    }
+
+    private MysqlJdbcEndpoint parseMysqlJdbcEndpoint(String url) {
+        Matcher matcher = MYSQL_JDBC_URL_PATTERN.matcher(url == null ? "" : url);
+        if (matcher.find()) {
+            String port = matcher.group(2) == null ? "3306" : matcher.group(2);
+            return new MysqlJdbcEndpoint(matcher.group(1), port);
+        }
+        return new MysqlJdbcEndpoint("127.0.0.1", "3306");
+    }
+
+    private String shellQuote(String value) {
+        String safe = value == null ? "" : value.replace("'", "'\"'\"'");
+        return "'" + safe + "'";
+    }
+
+    private long toLong(Object value, long defaultValue) {
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return value == null ? defaultValue : Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private static class OnlineDdlAlter {
+        private final String operation;
+        private final String alterClause;
+
+        private OnlineDdlAlter(String operation, String alterClause) {
+            this.operation = operation;
+            this.alterClause = alterClause;
+        }
+    }
+
+    private static class MysqlJdbcEndpoint {
+        private final String host;
+        private final String port;
+
+        private MysqlJdbcEndpoint(String host, String port) {
+            this.host = host;
+            this.port = port;
         }
     }
 

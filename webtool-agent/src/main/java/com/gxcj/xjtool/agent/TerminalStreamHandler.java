@@ -19,6 +19,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -44,23 +45,40 @@ public class TerminalStreamHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession ws, TextMessage message) throws Exception {
-        Map<String, Object> msg = OBJECT_MAPPER.readValue(message.getPayload(), MAP_TYPE);
-        String type = asString(msg.get("type"));
-        String sessionId = asString(msg.get("sessionId"));
-        if (sessionId == null || sessionId.isEmpty()) {
-            sessionId = ws.getId();
-        }
+        String sessionId = ws.getId();
+        try {
+            Map<String, Object> msg = OBJECT_MAPPER.readValue(message.getPayload(), MAP_TYPE);
+            String type = asString(msg.get("type"));
+            String requestedSessionId = asString(msg.get("sessionId"));
+            if (requestedSessionId != null && !requestedSessionId.isEmpty()) {
+                sessionId = requestedSessionId;
+            }
 
-        if ("connect".equals(type)) {
-            openShell(ws, sessionId, msg);
-        } else if ("stdin".equals(type)) {
-            writeInput(sessionId, asString(msg.get("data")));
-        } else if ("ping".equals(type)) {
-            sendJson(ws, "pong", sessionId, null, null);
-        } else if ("close".equals(type)) {
-            closeRuntimeSession(sessionId);
-        } else if ("resize".equals(type)) {
-            resize(sessionId, asInteger(msg.get("cols")), asInteger(msg.get("rows")));
+            if ("connect".equals(type)) {
+                openShell(ws, sessionId, msg);
+            } else if ("stdin".equals(type)) {
+                writeInput(sessionId, asString(msg.get("data")));
+            } else if ("ping".equals(type)) {
+                sendJson(ws, "pong", sessionId, null, null);
+            } else if ("close".equals(type)) {
+                closeRuntimeSession(sessionId);
+            } else if ("resize".equals(type)) {
+                resize(sessionId, asInteger(msg.get("cols")), asInteger(msg.get("rows")));
+            } else {
+                log.warn("Unknown terminal message type: sessionId={}, type={}", sessionId, type);
+            }
+        } catch (Exception e) {
+            String reason = rootMessage(e);
+            log.error("Failed to handle terminal message: sessionId={}", sessionId, e);
+            try {
+                sendJson(ws, "error", sessionId, null, "agent internal error: " + reason);
+                if (ws != null && ws.isOpen()) {
+                    ws.close(CloseStatus.SERVER_ERROR.withReason(shortCloseReason(reason)));
+                }
+            } catch (Exception sendError) {
+                log.debug("Failed to send agent error message: sessionId={}, error={}",
+                        sessionId, sendError.getMessage());
+            }
         }
     }
 
@@ -96,20 +114,29 @@ public class TerminalStreamHandler extends TextWebSocketHandler {
         closeRuntimeSession(sessionId);
         int cols = positiveOrDefault(asInteger(msg.get("cols")), 120);
         int rows = positiveOrDefault(asInteger(msg.get("rows")), 40);
-        PtyProcessBuilder builder = new PtyProcessBuilder(defaultShell())
+        String[] command = defaultShell();
+        PtyProcessBuilder builder = new PtyProcessBuilder(command)
                 .setEnvironment(System.getenv())
                 .setRedirectErrorStream(true)
                 .setConsole(false)
                 .setInitialColumns(cols)
                 .setInitialRows(rows);
-        PtyProcess process = builder.start();
+        PtyProcess process;
+        try {
+            process = builder.start();
+        } catch (Exception e) {
+            String reason = "failed to start shell: " + rootMessage(e);
+            log.error("Failed to start PTY shell: sessionId={}, command={}, size={}x{}",
+                    sessionId, Arrays.toString(command), cols, rows, e);
+            throw new IllegalStateException(reason, e);
+        }
         RuntimeSession runtimeSession = new RuntimeSession(ws, process);
         sessions.put(sessionId, runtimeSession);
         sendJson(ws, "connected", sessionId, sessionId, null);
         ioExecutor.execute(() -> pump(process.getInputStream(), ws, sessionId, "stdout"));
         ioExecutor.execute(() -> waitForExit(process, ws, sessionId));
-        log.info("PTY shell started: sessionId={}, command={}x{}, size={}x{}",
-                sessionId, defaultShell(), cols, rows);
+        log.info("PTY shell started: sessionId={}, command={}, size={}x{}",
+                sessionId, Arrays.toString(command), cols, rows);
     }
 
     private boolean authorized(WebSocketSession ws, Map<String, Object> msg) {
@@ -264,6 +291,24 @@ public class TerminalStreamHandler extends TextWebSocketHandler {
 
     private int positiveOrDefault(Integer value, int defaultValue) {
         return value == null || value <= 0 ? defaultValue : value;
+    }
+
+    private String rootMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        return message == null || message.trim().isEmpty()
+                ? current.getClass().getSimpleName()
+                : message;
+    }
+
+    private String shortCloseReason(String reason) {
+        if (reason == null || reason.trim().isEmpty()) {
+            return "agent internal error";
+        }
+        return reason.length() <= 120 ? reason : reason.substring(0, 120);
     }
 
     private static class RuntimeSession {

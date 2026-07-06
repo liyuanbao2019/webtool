@@ -34,6 +34,7 @@ public class AgentTerminalClient {
         String localSessionId = AgentTerminalSession.newLocalSessionId();
         URI uri = URI.create(toWebSocketUrl(baseUrl));
         AgentWebSocketHandler handler = new AgentWebSocketHandler(localSessionId, request, callback);
+        log.info("Opening agent terminal websocket: localSessionId={}, uri={}", localSessionId, maskUri(uri));
         ListenableFuture<WebSocketSession> future = new StandardWebSocketClient()
                 .doHandshake(handler, (WebSocketHttpHeaders) null, uri);
         WebSocketSession ws = future.get(10, TimeUnit.SECONDS);
@@ -41,6 +42,14 @@ public class AgentTerminalClient {
         handler.setAgentSession(agentSession);
         handler.sendConnect(browserSessionId);
         return agentSession;
+    }
+
+    private static String maskUri(URI uri) {
+        if (uri == null) {
+            return "";
+        }
+        String value = uri.toString();
+        return value.replaceAll("(?i)(ws|wss|http|https)://[^\\s/]+", "$1://***");
     }
 
     private String toWebSocketUrl(String baseUrl) {
@@ -103,6 +112,8 @@ public class AgentTerminalClient {
         @Override
         public void afterConnectionEstablished(WebSocketSession session) {
             this.rawSession = session;
+            log.info("Agent websocket established: localSessionId={}, wsSessionId={}",
+                    localSessionId, session.getId());
         }
 
         @Override
@@ -116,6 +127,8 @@ public class AgentTerminalClient {
                 if (agentSession != null) {
                     agentSession.setRemoteSessionId(asString(msg.get("remoteSessionId")));
                 }
+                log.info("Agent terminal session ready: localSessionId={}, remoteSessionId={}",
+                        localSessionId, asString(msg.get("remoteSessionId")));
                 return;
             }
             if ("stdout".equals(type) || "stderr".equals(type) || "output".equals(type)) {
@@ -123,21 +136,31 @@ public class AgentTerminalClient {
                 return;
             }
             if ("error".equals(type)) {
-                callback.onError(asString(msg.get("message")));
+                String errorMessage = asString(msg.get("message"));
+                log.warn("Agent terminal error: localSessionId={}, remoteSessionId={}, message={}",
+                        localSessionId, remoteSessionId(), errorMessage);
+                callback.onError(errorMessage);
                 return;
             }
             if ("exit".equals(type) || "closed".equals(type)) {
-                callback.onClosed(asString(msg.get("message")));
+                String closeMessage = asString(msg.get("message"));
+                log.info("Agent terminal remote closed: localSessionId={}, remoteSessionId={}, type={}, message={}",
+                        localSessionId, remoteSessionId(), type, closeMessage);
+                callback.onClosed(closeMessage);
             }
         }
 
         @Override
         public void handleTransportError(WebSocketSession session, Throwable exception) {
+            log.warn("Agent websocket transport error: localSessionId={}, remoteSessionId={}, wsSessionId={}",
+                    localSessionId, remoteSessionId(), session == null ? null : session.getId(), exception);
             callback.onError(exception.getMessage());
         }
 
         @Override
         public void afterConnectionClosed(WebSocketSession session, CloseStatus closeStatus) {
+            log.info("Agent websocket closed: localSessionId={}, remoteSessionId={}, wsSessionId={}, status={}",
+                    localSessionId, remoteSessionId(), session == null ? null : session.getId(), closeStatus);
             callback.onClosed(closeStatus.toString());
         }
 
@@ -160,6 +183,10 @@ public class AgentTerminalClient {
 
         private String asString(Object value) {
             return value == null ? null : String.valueOf(value);
+        }
+
+        private String remoteSessionId() {
+            return agentSession == null ? null : agentSession.getRemoteSessionId();
         }
     }
 }

@@ -155,6 +155,30 @@ public class DatabaseLockController {
                 username);
     }
 
+    @PostMapping("/mysql-online-ddl/plan")
+    public Map<String, Object> buildMysqlOnlineDdlPlan(@RequestBody MysqlOnlineDdlPlanRequest request, HttpSession session) {
+        String username = (String) session.getAttribute("LOGIN_USER");
+        if (username == null || username.trim().isEmpty()) {
+            username = "unknown";
+        }
+        log.info("MySQL online DDL plan request datasource={}, database={}, user={}",
+                request.getDatasourceIndex(), request.getDatabase(), username);
+        try {
+            return oracleService.buildMysqlOnlineDdlPlan(
+                    request.getDatasourceIndex(),
+                    request.getDatabase(),
+                    request.getDdl(),
+                    username);
+        } catch (Exception e) {
+            log.error("Build MySQL online DDL plan failed datasource={}, database={}",
+                    request.getDatasourceIndex(), request.getDatabase(), e);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", false);
+            result.put("message", "Build MySQL online DDL plan failed: " + e.getMessage());
+            return result;
+        }
+    }
+
     public static class MysqlProcessKillRequest {
         private int datasourceIndex;
         private String database;
@@ -200,6 +224,36 @@ public class DatabaseLockController {
 
         public void setIds(List<Long> ids) {
             this.ids = ids;
+        }
+    }
+
+    public static class MysqlOnlineDdlPlanRequest {
+        private int datasourceIndex;
+        private String database;
+        private String ddl;
+
+        public int getDatasourceIndex() {
+            return datasourceIndex;
+        }
+
+        public void setDatasourceIndex(int datasourceIndex) {
+            this.datasourceIndex = datasourceIndex;
+        }
+
+        public String getDatabase() {
+            return database;
+        }
+
+        public void setDatabase(String database) {
+            this.database = database;
+        }
+
+        public String getDdl() {
+            return ddl;
+        }
+
+        public void setDdl(String ddl) {
+            this.ddl = ddl;
         }
     }
 }
