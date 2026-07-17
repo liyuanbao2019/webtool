@@ -66,9 +66,28 @@
                         @click="copyToClipboard(serverInfo.host)" :title="t('terminal.copyIpTip') + ' ' + serverInfo.host">
                         <i class="fas fa-network-wired me-1"></i>{{ serverInfo.host }}
                     </span>
+                    <span class="badge ms-2"
+                        :class="connectionStatusClass">
+                        <i class="fas fa-circle me-1" style="font-size:.55rem"></i>{{ t('terminal.status.' + connectionStatus) }}
+                    </span>
                 </div>
             </div>
             <div class="d-flex align-items-center">
+                <div class="input-group input-group-sm me-2" style="width: 260px;">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input class="form-control" v-model="terminalSearchQuery" @keyup.enter="findNextTerminalMatch"
+                        :placeholder="t('terminal.searchTerminal')">
+                    <button class="btn btn-outline-secondary" @click="findPreviousTerminalMatch" :disabled="!terminalSearchQuery">
+                        <i class="fas fa-chevron-up"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary" @click="findNextTerminalMatch" :disabled="!terminalSearchQuery">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                </div>
+                <button v-if="!connected" class="btn btn-outline-warning btn-sm me-2"
+                    @click="manualReconnect" :title="t('terminal.reconnect')">
+                    <i class="fas fa-plug me-1"></i>{{ t('terminal.reconnect') }}
+                </button>
                 <div class="lang-switcher" style="margin-right: 8px;">
                     <button class="lang-btn" :class="{active: locale === 'en'}" @click="setLanguage('en')">EN</button>
                     <button class="lang-btn" :class="{active: locale === 'zh_CN'}" @click="setLanguage('zh_CN')">中文</button>
@@ -99,8 +118,8 @@
         <div class="terminal-layout">
             <!-- File Manager Sidebar -->
             <div v-if="!isAgentMode" class="file-sidebar" :class="{ 'collapsed': isSidebarCollapsed }">
-                <div class="file-header d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center flex-grow-1 overflow-hidden me-2">
+                <div class="file-header">
+                    <div class="file-header-title-row">
                         <button class="toggle-sidebar-btn" @click="toggleSidebar"
                             :title="isSidebarCollapsed ? t('terminal.expandSidebar') : t('terminal.collapseSidebar')">
                             <i class="fas" :class="isSidebarCollapsed ? 'fa-chevron-right' : 'fa-chevron-left'"></i>
@@ -116,7 +135,23 @@
                             {{ t('terminal.switching') }}
                         </span>
                     </div>
-                    <div class="d-flex flex-shrink-0" v-show="!isSidebarCollapsed">
+                    <div class="file-header-actions" v-show="!isSidebarCollapsed">
+                        <button class="btn btn-sm btn-link text-secondary p-0 me-2"
+                            @click="createSftpDirectory" :title="t('terminal.createDirectory')">
+                            <i class="fas fa-folder-plus"></i>
+                        </button>
+                        <button class="btn btn-sm btn-link text-secondary p-0 me-2"
+                            @click="renameSelectedSftpItem" :disabled="!selectedFile" :title="t('terminal.rename')">
+                            <i class="fas fa-i-cursor"></i>
+                        </button>
+                        <button class="btn btn-sm btn-link text-secondary p-0 me-2"
+                            @click="chmodSelectedSftpItem" :disabled="!selectedFile" :title="t('terminal.changePermissions')">
+                            <i class="fas fa-key"></i>
+                        </button>
+                        <button class="btn btn-sm btn-link text-danger p-0 me-2"
+                            @click="deleteSelectedSftpItem" :disabled="!selectedFile" :title="t('terminal.delete')">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
                         <button class="btn btn-sm btn-link text-secondary p-0 me-2" @click="showSwitchUserModal"
                             :title="serverInfo && currentSftpUser !== serverInfo.username ? t('terminal.switchedUser') + ' ' + currentSftpUser : t('terminal.switchSftpUser')">
                             <i class="fas fa-user-cog"></i>
@@ -652,6 +687,29 @@
             'terminal.opType_pipe': 'Pipe',
             'terminal.opType_archive': 'Archive',
             'terminal.opType_network': 'Network',
+            'terminal.searchTerminal': 'Search terminal...',
+            'terminal.reconnect': 'Reconnect',
+            'terminal.status.connecting': 'Connecting',
+            'terminal.status.connected': 'Connected',
+            'terminal.status.reconnecting': 'Reconnecting',
+            'terminal.status.disconnected': 'Disconnected',
+            'terminal.status.error': 'Connection error',
+            'terminal.createDirectory': 'New directory',
+            'terminal.enterDirectoryName': 'Directory name',
+            'terminal.invalidFileName': 'Name cannot contain /, . or ..',
+            'terminal.rename': 'Rename',
+            'terminal.enterNewName': 'New name',
+            'terminal.changePermissions': 'Change permissions',
+            'terminal.enterPermissions': 'Permissions (for example 755)',
+            'terminal.invalidPermissions': 'Permissions must be 3 or 4 octal digits',
+            'terminal.permissionsChanged': 'Permissions updated',
+            'terminal.delete': 'Delete',
+            'terminal.confirmDeleteDirectory': 'Delete this directory and all contents?',
+            'terminal.confirmDeleteFile': 'Delete this file?',
+            'terminal.createDirectoryFailed': 'Failed to create directory',
+            'terminal.renameFailed': 'Rename failed',
+            'terminal.chmodFailed': 'Failed to change permissions',
+            'terminal.deleteFailed': 'Delete failed',
             'terminal.themeDark': 'Black on White',
             'terminal.themeGreenOnBlack': 'Green on Black',
             'terminal.themeLight': 'White on Black',
@@ -777,6 +835,29 @@
             'terminal.opType_pipe': '管道',
             'terminal.opType_archive': '压缩包',
             'terminal.opType_network': '网络',
+            'terminal.searchTerminal': '搜索终端内容...',
+            'terminal.reconnect': '重新连接',
+            'terminal.status.connecting': '连接中',
+            'terminal.status.connected': '已连接',
+            'terminal.status.reconnecting': '重连中',
+            'terminal.status.disconnected': '已断开',
+            'terminal.status.error': '连接异常',
+            'terminal.createDirectory': '新建目录',
+            'terminal.enterDirectoryName': '请输入目录名',
+            'terminal.invalidFileName': '名称不能包含 /，也不能是 . 或 ..',
+            'terminal.rename': '重命名',
+            'terminal.enterNewName': '请输入新名称',
+            'terminal.changePermissions': '修改权限',
+            'terminal.enterPermissions': '请输入权限，例如 755',
+            'terminal.invalidPermissions': '权限必须是 3 或 4 位八进制数字',
+            'terminal.permissionsChanged': '权限修改成功',
+            'terminal.delete': '删除',
+            'terminal.confirmDeleteDirectory': '确定递归删除目录及其全部内容吗？',
+            'terminal.confirmDeleteFile': '确定删除文件吗？',
+            'terminal.createDirectoryFailed': '创建目录失败',
+            'terminal.renameFailed': '重命名失败',
+            'terminal.chmodFailed': '修改权限失败',
+            'terminal.deleteFailed': '删除失败',
             'terminal.themeDark': '黑底白字',
             'terminal.themeGreenOnBlack': '黑底绿字',
             'terminal.themeLight': '白底黑字',
@@ -815,6 +896,13 @@
                     fileSearchQuery: '', // 文件搜索关键字
                     files: [],
                     connected: false,
+                    connectionStatus: 'connecting',
+                    reconnectTimer: null,
+                    userInitiatedClose: false,
+                    terminalSearchQuery: '',
+                    terminalSearchMatches: [],
+                    terminalSearchIndex: -1,
+                    terminalSearchLastQuery: '',
                     heartbeatTimer: null,  // 心跳定时器
                     selectedFile: null,  // 当前选中的文件或目录
                     // SFTP用户切换相关
@@ -963,6 +1051,16 @@
                     return this.serverInfo
                         && String(this.serverInfo.connectionMode || '').toLowerCase() === 'agent';
                 },
+                connectionStatusClass() {
+                    const classes = {
+                        connected: 'bg-success',
+                        connecting: 'bg-info text-dark',
+                        reconnecting: 'bg-warning text-dark',
+                        disconnected: 'bg-secondary',
+                        error: 'bg-danger'
+                    };
+                    return classes[this.connectionStatus] || 'bg-secondary';
+                },
                 filteredFiles() {
                     if (!this.fileSearchQuery) return this.files;
                     const query = this.fileSearchQuery.toLowerCase();
@@ -1053,6 +1151,7 @@
                 }
             },
             beforeUnmount() {
+                this.userInitiatedClose = true;
                 // 清除心跳定时器
                 if (this.heartbeatTimer) {
                     clearInterval(this.heartbeatTimer);
@@ -1060,6 +1159,9 @@
                 // 关闭WebSocket连接
                 if (this.socket) {
                     this.socket.close();
+                }
+                if (this.reconnectTimer) {
+                    clearTimeout(this.reconnectTimer);
                 }
             },
             async mounted() {
@@ -1673,6 +1775,102 @@
                     // 更好的方式是交给 listFiles 处理，如果报错 NO_SUCH_FILE 或不是目录，我们再尝试提示
                     this.listFiles(inputPath);
                 },
+                collectTerminalBuffer(maxLines = 500) {
+                    if (!this.term || !this.term.buffer || !this.term.buffer.active) return '';
+                    const buffer = this.term.buffer.active;
+                    const start = Math.max(0, buffer.length - maxLines);
+                    const lines = [];
+                    for (let i = start; i < buffer.length; i++) {
+                        const line = buffer.getLine(i);
+                        if (line) lines.push(line.translateToString(true));
+                    }
+                    return lines.join('\n');
+                },
+                preserveTerminalBufferForReconnect() {
+                    try {
+                        sessionStorage.setItem('xjtool_terminal_reconnect_buffer', this.collectTerminalBuffer());
+                    } catch (e) {
+                        console.debug('Unable to preserve terminal buffer', e);
+                    }
+                },
+                restoreTerminalBufferAfterReconnect() {
+                    if (!this.term) return;
+                    try {
+                        const content = sessionStorage.getItem('xjtool_terminal_reconnect_buffer');
+                        if (content) {
+                            this.term.write('\r\n\x1b[33m--- reconnected; previous scrollback restored below ---\x1b[0m\r\n');
+                            this.term.write(content.replace(/\n/g, '\r\n'));
+                            this.term.write('\r\n\x1b[33m--- new session ---\x1b[0m\r\n');
+                            sessionStorage.removeItem('xjtool_terminal_reconnect_buffer');
+                        }
+                    } catch (e) {
+                        console.debug('Unable to restore terminal buffer', e);
+                    }
+                },
+                scheduleReconnect() {
+                    if (this.userInitiatedClose || this.reconnectTimer) return;
+                    const key = 'xjtool_terminal_reconnect_attempts';
+                    const attempts = Number(sessionStorage.getItem(key) || 0) + 1;
+                    if (attempts > 5) {
+                        this.connectionStatus = 'disconnected';
+                        return;
+                    }
+                    sessionStorage.setItem(key, String(attempts));
+                    this.connectionStatus = 'reconnecting';
+                    this.preserveTerminalBufferForReconnect();
+                    const delay = Math.min(10000, 1500 * attempts);
+                    this.reconnectTimer = setTimeout(() => window.location.reload(), delay);
+                },
+                manualReconnect() {
+                    sessionStorage.setItem('xjtool_terminal_reconnect_attempts', '0');
+                    this.preserveTerminalBufferForReconnect();
+                    window.location.reload();
+                },
+                rebuildTerminalSearchMatches() {
+                    this.terminalSearchMatches = [];
+                    this.terminalSearchIndex = -1;
+                    this.terminalSearchLastQuery = this.terminalSearchQuery;
+                    if (!this.term || !this.terminalSearchQuery) return;
+                    const query = this.terminalSearchQuery.toLowerCase();
+                    const buffer = this.term.buffer.active;
+                    for (let row = 0; row < buffer.length; row++) {
+                        const line = buffer.getLine(row);
+                        if (!line) continue;
+                        const text = line.translateToString(true).toLowerCase();
+                        let from = 0;
+                        while (from <= text.length) {
+                            const col = text.indexOf(query, from);
+                            if (col < 0) break;
+                            this.terminalSearchMatches.push({ row, col, length: query.length });
+                            from = col + Math.max(1, query.length);
+                        }
+                    }
+                },
+                selectTerminalSearchMatch(index) {
+                    const matches = this.terminalSearchMatches;
+                    if (!matches.length || !this.term) return;
+                    this.terminalSearchIndex = (index + matches.length) % matches.length;
+                    const match = matches[this.terminalSearchIndex];
+                    this.term.select(match.col, match.row, match.length);
+                    this.term.scrollToLine(match.row);
+                    this.term.focus();
+                },
+                findNextTerminalMatch() {
+                    if (!this.terminalSearchQuery) return;
+                    if (this.terminalSearchLastQuery !== this.terminalSearchQuery || !this.terminalSearchMatches.length) {
+                        this.rebuildTerminalSearchMatches();
+                    }
+                    this.selectTerminalSearchMatch(this.terminalSearchIndex + 1);
+                },
+                findPreviousTerminalMatch() {
+                    if (!this.terminalSearchQuery) return;
+                    if (this.terminalSearchLastQuery !== this.terminalSearchQuery || !this.terminalSearchMatches.length) {
+                        this.rebuildTerminalSearchMatches();
+                    }
+                    this.selectTerminalSearchMatch(this.terminalSearchIndex < 0
+                        ? this.terminalSearchMatches.length - 1
+                        : this.terminalSearchIndex - 1);
+                },
                 initTerminal() {
                     const term = new Terminal({
                         cursorBlink: true,
@@ -1690,6 +1888,7 @@
                     term.open(document.getElementById('terminal'));
 
                     this.term = term;
+                    this.restoreTerminalBufferAfterReconnect();
 
                     // 防抖处理函数，避免频繁调整尺寸
                     let resizeTimeout = null;
@@ -1764,6 +1963,8 @@
                     this.socket.onopen = () => {
                         connectionEstablished = true;
                         this.connected = true;
+                        this.connectionStatus = 'connected';
+                        sessionStorage.removeItem('xjtool_terminal_reconnect_attempts');
 
                         // 【关键】立即保存 WebSocket Session ID，用于后续 API 调用（如脚本安全扫描）
                         // Socket.io 的 id 在连接建立时就确定，无需等待后端发送
@@ -1888,15 +2089,18 @@
 
                     this.socket.onclose = (event) => {
                         this.connected = false;
+                        this.connectionStatus = 'disconnected';
                         this.remoteVimModeActive = false;
 
                         // 如果连接从未成功建立过（握手失败），说明是连接被拒绝
                         // 由于首页已经做了连接数检查，正常情况下不应该走到这里
                         // 但如果存在竞态条件导致握手失败，仍然在终端显示错误
                         if (!connectionEstablished) {
+                            this.connectionStatus = 'error';
                             term.write('\r\n\x1b[31m连接失败：当前服务器连接数已达上限\x1b[0m\r\n');
                             term.write('\r\n\x1b[33m请关闭部分连接后重试\x1b[0m\r\n');
                             console.error('WebSocket connection rejected during handshake');
+                            this.scheduleReconnect();
                             return;
                         }
 
@@ -1907,10 +2111,12 @@
                             clearInterval(this.heartbeatTimer);
                             this.heartbeatTimer = null;
                         }
+                        this.scheduleReconnect();
                     };
 
                     this.socket.onerror = (error) => {
                         this.connected = false;
+                        this.connectionStatus = 'error';
                         console.error('WebSocket error:', error);
 
                         // 如果连接从未成功建立过，这是握手失败
@@ -2192,6 +2398,75 @@
                 },
                 buildPathByName(name) {
                     return this.currentPath.endsWith('/') ? this.currentPath + name : this.currentPath + '/' + name;
+                },
+                async createSftpDirectory() {
+                    const name = prompt(this.t('terminal.enterDirectoryName'));
+                    if (!name || !name.trim()) return;
+                    if (name.includes('/') || name === '.' || name === '..') {
+                        alert(this.t('terminal.invalidFileName'));
+                        return;
+                    }
+                    const path = this.buildPathByName(name.trim());
+                    try {
+                        await axios.post('/api/sftp/mkdir', this.buildSftpPayload({ path }));
+                        await this.listFiles(this.currentPath);
+                    } catch (e) {
+                        alert(await this.formatSftpError(e, this.t('terminal.createDirectoryFailed')));
+                    }
+                },
+                async renameSelectedSftpItem() {
+                    if (!this.selectedFile) return;
+                    const newName = prompt(this.t('terminal.enterNewName'), this.selectedFile.name);
+                    if (!newName || newName === this.selectedFile.name) return;
+                    if (newName.includes('/') || newName === '.' || newName === '..') {
+                        alert(this.t('terminal.invalidFileName'));
+                        return;
+                    }
+                    const path = this.buildPathByName(this.selectedFile.name);
+                    const targetPath = this.buildPathByName(newName.trim());
+                    try {
+                        await axios.post('/api/sftp/rename', this.buildSftpPayload({ path, targetPath }));
+                        await this.listFiles(this.currentPath);
+                    } catch (e) {
+                        alert(await this.formatSftpError(e, this.t('terminal.renameFailed')));
+                    }
+                },
+                async chmodSelectedSftpItem() {
+                    if (!this.selectedFile) return;
+                    const permissions = prompt(this.t('terminal.enterPermissions'), this.selectedFile.dir ? '755' : '644');
+                    if (!permissions) return;
+                    if (!/^[0-7]{3,4}$/.test(permissions.trim())) {
+                        alert(this.t('terminal.invalidPermissions'));
+                        return;
+                    }
+                    const path = this.buildPathByName(this.selectedFile.name);
+                    try {
+                        await axios.post('/api/sftp/chmod', this.buildSftpPayload({
+                            path,
+                            permissions: permissions.trim()
+                        }));
+                        alert(this.t('terminal.permissionsChanged'));
+                    } catch (e) {
+                        alert(await this.formatSftpError(e, this.t('terminal.chmodFailed')));
+                    }
+                },
+                async deleteSelectedSftpItem() {
+                    if (!this.selectedFile) return;
+                    const file = this.selectedFile;
+                    const message = file.dir
+                        ? this.t('terminal.confirmDeleteDirectory') + ' ' + file.name
+                        : this.t('terminal.confirmDeleteFile') + ' ' + file.name;
+                    if (!confirm(message)) return;
+                    const path = this.buildPathByName(file.name);
+                    try {
+                        await axios.post('/api/sftp/delete', this.buildSftpPayload({
+                            path,
+                            recursive: !!file.dir
+                        }));
+                        await this.listFiles(this.currentPath);
+                    } catch (e) {
+                        alert(await this.formatSftpError(e, this.t('terminal.deleteFailed')));
+                    }
                 },
                 isEditableFileName(fileName) {
                     const lower = (fileName || '').toLowerCase().trim();
@@ -2719,6 +2994,7 @@
                     }
                 },
                 closeWindow() {
+                    this.userInitiatedClose = true;
                     if (this.socket) {
                         this.socket.close();
                     }

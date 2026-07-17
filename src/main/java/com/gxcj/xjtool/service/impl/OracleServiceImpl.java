@@ -30,6 +30,8 @@ import java.io.IOException;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -71,6 +73,9 @@ public class OracleServiceImpl implements OracleService {
 
     // 用于并行查询的线程池
     private final ExecutorService lockQueryExecutor = Executors.newCachedThreadPool();
+
+    // Running query registry used by active query cancellation.
+    private final Map<String, RunningQuery> runningQueries = new ConcurrentHashMap<>();
 
     // slave 连接池最大生命周期（毫秒），防止长时间闲置导致 ORA-3113
     private static final long SLAVE_POOL_MAX_LIFE_MS = 5 * 60 * 1000; // 5 分钟
@@ -303,15 +308,22 @@ public class OracleServiceImpl implements OracleService {
         boolean exportAll = Boolean.TRUE.equals(request.getExportAll());
         int maxRows = exportAll ? -1 : (request.getMaxRows() != null ? request.getMaxRows() : 0);
 
-        // 如果只有一条SQL，按原流程执行
-        if (validSqls.size() == 1) {
-            response = executeSingleSql(validSqls.get(0), request.getDatasourceIndex(), maxRows, page, pageSize);
-        }
-        // 如果有多条SQL，批量执行（每条 SELECT 也应用分页，避免全量拉取大表）
-        else if (validSqls.size() > 1) {
-            response = executeBatchSql(validSqls, request.getDatasourceIndex(), maxRows, page, pageSize);
-        } else {
-            response = SqlResultResponse.error("SQL 语句不能为空");
+        RunningQuery runningQuery = registerRunningQuery(request);
+        try {
+            // 如果只有一条SQL，按原流程执行
+            if (validSqls.size() == 1) {
+                response = executeSingleSql(validSqls.get(0), request.getDatasourceIndex(), maxRows, page, pageSize,
+                        runningQuery);
+            }
+            // 如果有多条SQL，批量执行（每条 SELECT 也应用分页，避免全量拉取大表）
+            else if (validSqls.size() > 1) {
+                response = executeBatchSql(validSqls, request.getDatasourceIndex(), maxRows, page, pageSize,
+                        runningQuery);
+            } else {
+                response = SqlResultResponse.error("SQL 语句不能为空");
+            }
+        } finally {
+            unregisterRunningQuery(request.getQueryId(), runningQuery);
         }
 
         // 记录审计日志
@@ -329,6 +341,37 @@ public class OracleServiceImpl implements OracleService {
         }
 
         return response;
+    }
+
+    @Override
+    public boolean cancelQuery(String queryId, String sessionId) {
+        if (isBlank(queryId) || isBlank(sessionId)) {
+            return false;
+        }
+        RunningQuery runningQuery = runningQueries.get(queryId);
+        if (runningQuery == null || !sessionId.equals(runningQuery.sessionId)) {
+            return false;
+        }
+        return runningQuery.cancel();
+    }
+
+    private RunningQuery registerRunningQuery(ExecuteSqlRequest request) {
+        if (request == null || isBlank(request.getQueryId())) {
+            return null;
+        }
+        String queryId = request.getQueryId().trim();
+        if (!queryId.matches("[A-Za-z0-9_-]{8,80}")) {
+            return null;
+        }
+        RunningQuery runningQuery = new RunningQuery(request.getSessionId());
+        RunningQuery previous = runningQueries.putIfAbsent(queryId, runningQuery);
+        return previous == null ? runningQuery : null;
+    }
+
+    private void unregisterRunningQuery(String queryId, RunningQuery runningQuery) {
+        if (runningQuery != null && queryId != null) {
+            runningQueries.remove(queryId.trim(), runningQuery);
+        }
     }
 
     @Override
@@ -1017,7 +1060,8 @@ public class OracleServiceImpl implements OracleService {
      * @param page     当前页码（从1开始，<=0表示不分页）
      * @param pageSize 每页行数（<=0表示不分页）
      */
-    private SqlResultResponse executeSingleSql(String sql, int datasourceIndex, int maxRows, int page, int pageSize) {
+    private SqlResultResponse executeSingleSql(String sql, int datasourceIndex, int maxRows, int page, int pageSize,
+            RunningQuery runningQuery) {
         String sqlType = getSqlType(sql);
         log.info("执行 SQL [{}]: {}", sqlType, sql.length() > 100 ? sql.substring(0, 100) + "..." : sql);
 
@@ -1025,11 +1069,11 @@ public class OracleServiceImpl implements OracleService {
 
         try (Connection conn = getConnectionByIndex(datasourceIndex)) {
             if (isResultSetSqlType(sqlType)) {
-                SqlResultResponse response = executeQuery(conn, sql, maxRows, page, pageSize, startTime);
+                SqlResultResponse response = executeQuery(conn, sql, maxRows, page, pageSize, startTime, runningQuery);
                 attachEditableMetadata(conn, sql, response);
                 return response;
             } else {
-                return executeUpdate(conn, sql, sqlType, startTime);
+                return executeUpdate(conn, sql, sqlType, startTime, runningQuery);
             }
         } catch (SQLException e) {
             log.error("SQL 执行失败", e);
@@ -1040,7 +1084,8 @@ public class OracleServiceImpl implements OracleService {
     /**
      * 批量执行多条SQL语句（支持对每条 SELECT 进行服务端分页）
      */
-    private SqlResultResponse executeBatchSql(List<String> sqlList, int datasourceIndex, int maxRows, int page, int pageSize) {
+    private SqlResultResponse executeBatchSql(List<String> sqlList, int datasourceIndex, int maxRows, int page,
+            int pageSize, RunningQuery runningQuery) {
         long startTime = System.currentTimeMillis();
         int totalAffectedRows = 0;
         List<SqlResultResponse> multiResults = new ArrayList<>();
@@ -1061,10 +1106,10 @@ public class OracleServiceImpl implements OracleService {
                 try {
                     SqlResultResponse res;
                     if (isResultSetSqlType(sqlType)) {
-                        res = executeQuery(conn, sql, maxRows, page, pageSize, stmtStartTime);
+                        res = executeQuery(conn, sql, maxRows, page, pageSize, stmtStartTime, runningQuery);
                         attachEditableMetadata(conn, sql, res);
                     } else {
-                        res = executeUpdate(conn, sql, sqlType, stmtStartTime);
+                        res = executeUpdate(conn, sql, sqlType, stmtStartTime, runningQuery);
                         totalAffectedRows += res.getAffectedRows();
                     }
                     res.setSql(sql);
@@ -1117,7 +1162,8 @@ public class OracleServiceImpl implements OracleService {
      * @param page     当前页码（从1开始，<=0表示不分页）
      * @param pageSize 每页行数（<=0表示不分页）
      */
-    private SqlResultResponse executeQuery(Connection conn, String sql, int maxRows, int page, int pageSize, long startTime)
+    private SqlResultResponse executeQuery(Connection conn, String sql, int maxRows, int page, int pageSize,
+            long startTime, RunningQuery runningQuery)
             throws SQLException {
         OracleConfig.QueryConfig queryConfig = oracleConfig.getQuery();
         String dbType = getDatasourceTypeByConn(conn);
@@ -1146,6 +1192,7 @@ public class OracleServiceImpl implements OracleService {
             // 1. 查询总数（失败则降级为全量）
             long totalCount = -1;
             try (Statement cntStmt = conn.createStatement()) {
+                activateStatement(runningQuery, cntStmt);
                 cntStmt.setQueryTimeout(queryConfig.getMaxQueryTimeout());
                 String countSql = "SELECT COUNT(*) FROM (" + safeSql + ") CNT_WRAP";
                 try (ResultSet cntRs = cntStmt.executeQuery(countSql)) {
@@ -1154,8 +1201,13 @@ public class OracleServiceImpl implements OracleService {
                     }
                 }
             } catch (SQLException e) {
+                if (isCancelled(runningQuery)) {
+                    throw new SQLException("查询已取消", e);
+                }
                 log.warn("COUNT 查询失败，降级为全量查询: {}", e.getMessage());
                 doPaging = false;
+            } finally {
+                clearActiveStatement(runningQuery);
             }
 
             if (doPaging && totalCount >= 0) {
@@ -1180,6 +1232,7 @@ public class OracleServiceImpl implements OracleService {
 
                 // 3. 执行分页查询
                 try (Statement stmt = conn.createStatement()) {
+                    activateStatement(runningQuery, stmt);
                     stmt.setQueryTimeout(queryConfig.getMaxQueryTimeout());
                     stmt.setFetchSize(queryConfig.getFetchSize());
                     try (ResultSet rs = stmt.executeQuery(pagedSql)) {
@@ -1216,12 +1269,15 @@ public class OracleServiceImpl implements OracleService {
                         response.setPageSize(pageSize);
                         return response;
                     }
+                } finally {
+                    clearActiveStatement(runningQuery);
                 }
             }
         }
 
         // ========== 非分页（全量/降级）逻辑 ==========
         try (Statement stmt = conn.createStatement()) {
+            activateStatement(runningQuery, stmt);
             int effectiveMaxRows = maxRows < 0 ? 0 : (maxRows > 0 ? maxRows : queryConfig.getDefaultMaxRows());
             stmt.setMaxRows(effectiveMaxRows);
             stmt.setQueryTimeout(queryConfig.getMaxQueryTimeout());
@@ -1250,6 +1306,8 @@ public class OracleServiceImpl implements OracleService {
                 log.info("查询完成，返回 {} 行{}, 耗时 {}ms", rows.size(), limitMsg, executionTime);
                 return SqlResultResponse.success(columns, rows, executionTime);
             }
+        } finally {
+            clearActiveStatement(runningQuery);
         }
     }
 
@@ -1273,9 +1331,11 @@ public class OracleServiceImpl implements OracleService {
     /**
      * 执行更新语句（INSERT/UPDATE/DELETE）
      */
-    private SqlResultResponse executeUpdate(Connection conn, String sql, String sqlType, long startTime)
+    private SqlResultResponse executeUpdate(Connection conn, String sql, String sqlType, long startTime,
+            RunningQuery runningQuery)
             throws SQLException {
         try (Statement stmt = conn.createStatement()) {
+            activateStatement(runningQuery, stmt);
             // 设置超时
             stmt.setQueryTimeout(oracleConfig.getQuery().getMaxQueryTimeout());
 
@@ -1285,6 +1345,62 @@ public class OracleServiceImpl implements OracleService {
             log.info("{} 执行完成，影响 {} 行，耗时 {}ms", sqlType, affectedRows, executionTime);
 
             return SqlResultResponse.successUpdate(affectedRows, sqlType, executionTime);
+        } finally {
+            clearActiveStatement(runningQuery);
+        }
+    }
+
+    private void activateStatement(RunningQuery runningQuery, Statement statement) throws SQLException {
+        if (runningQuery != null) {
+            runningQuery.activate(statement);
+        }
+    }
+
+    private void clearActiveStatement(RunningQuery runningQuery) {
+        if (runningQuery != null) {
+            runningQuery.clear();
+        }
+    }
+
+    private boolean isCancelled(RunningQuery runningQuery) {
+        return runningQuery != null && runningQuery.cancelled.get();
+    }
+
+    private static class RunningQuery {
+        private final String sessionId;
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
+        private final AtomicReference<Statement> statement = new AtomicReference<>();
+
+        private RunningQuery(String sessionId) {
+            this.sessionId = sessionId;
+        }
+
+        private void activate(Statement activeStatement) throws SQLException {
+            statement.set(activeStatement);
+            if (cancelled.get()) {
+                activeStatement.cancel();
+                throw new SQLException("查询已取消");
+            }
+        }
+
+        private void clear() {
+            statement.set(null);
+        }
+
+        private boolean cancel() {
+            if (!cancelled.compareAndSet(false, true)) {
+                return true;
+            }
+            Statement activeStatement = statement.get();
+            if (activeStatement != null) {
+                try {
+                    activeStatement.cancel();
+                } catch (SQLException e) {
+                    log.warn("取消 SQL 执行失败: {}", e.getMessage());
+                    return false;
+                }
+            }
+            return true;
         }
     }
 

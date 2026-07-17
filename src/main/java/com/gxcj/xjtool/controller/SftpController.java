@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -94,6 +95,14 @@ public class SftpController {
     @lombok.EqualsAndHashCode(callSuper = false)
     public static class SftpTextRequest extends SftpRequest {
         private String content;
+    }
+
+    @Data
+    @lombok.EqualsAndHashCode(callSuper = false)
+    public static class SftpFileOperationRequest extends SftpRequest {
+        private String targetPath;
+        private String permissions;
+        private boolean recursive;
     }
 
     @Data
@@ -837,6 +846,114 @@ public class SftpController {
         return ResponseEntity.status(error.getStatusCode())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body);
+    }
+
+    @PostMapping("/mkdir")
+    public ResponseEntity<?> createDirectory(@RequestBody SftpFileOperationRequest request) {
+        String path = normalizeRemotePath(request.getPath());
+        if ("/".equals(path) || ".".equals(path)) {
+            return ResponseEntity.badRequest().body("目录路径无效");
+        }
+        try {
+            return executeWithSftp(request, sftp -> {
+                sftp.mkdir(path);
+                return ResponseEntity.ok(operationResult("mkdir", path));
+            });
+        } catch (Exception e) {
+            return buildSftpErrorResponse(e, path, "创建目录失败");
+        }
+    }
+
+    @PostMapping("/rename")
+    public ResponseEntity<?> renamePath(@RequestBody SftpFileOperationRequest request) {
+        String sourcePath = normalizeRemotePath(request.getPath());
+        String targetPath = normalizeRemotePath(request.getTargetPath());
+        if ("/".equals(sourcePath) || ".".equals(sourcePath)
+                || "/".equals(targetPath) || ".".equals(targetPath)) {
+            return ResponseEntity.badRequest().body("源路径或目标路径无效");
+        }
+        try {
+            return executeWithSftp(request, sftp -> {
+                sftp.rename(sourcePath, targetPath);
+                Map<String, Object> result = operationResult("rename", sourcePath);
+                result.put("targetPath", targetPath);
+                return ResponseEntity.ok(result);
+            });
+        } catch (Exception e) {
+            return buildSftpErrorResponse(e, sourcePath, "重命名失败");
+        }
+    }
+
+    @PostMapping("/delete")
+    public ResponseEntity<?> deletePath(@RequestBody SftpFileOperationRequest request) {
+        String path = normalizeRemotePath(request.getPath());
+        if ("/".equals(path) || ".".equals(path) || path.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body("禁止删除根目录");
+        }
+        try {
+            return executeWithSftp(request, sftp -> {
+                SftpClient.Attributes attributes = sftp.stat(path);
+                if (attributes.isDirectory()) {
+                    if (request.isRecursive()) {
+                        deleteDirectoryRecursively(sftp, path);
+                    } else {
+                        sftp.rmdir(path);
+                    }
+                } else {
+                    sftp.remove(path);
+                }
+                return ResponseEntity.ok(operationResult("delete", path));
+            });
+        } catch (Exception e) {
+            return buildSftpErrorResponse(e, path, "删除失败");
+        }
+    }
+
+    @PostMapping("/chmod")
+    public ResponseEntity<?> changePermissions(@RequestBody SftpFileOperationRequest request) {
+        String path = normalizeRemotePath(request.getPath());
+        if ("/".equals(path) || ".".equals(path)) {
+            return ResponseEntity.badRequest().body("禁止修改根目录权限");
+        }
+        String permissions = request.getPermissions() == null ? "" : request.getPermissions().trim();
+        if (!permissions.matches("[0-7]{3,4}")) {
+            return ResponseEntity.badRequest().body("权限格式应为 755 或 0755");
+        }
+        int permissionBits = Integer.parseInt(permissions, 8);
+        try {
+            return executeWithSftp(request, sftp -> {
+                SftpClient.Attributes attributes = sftp.stat(path);
+                attributes.setPermissions(permissionBits);
+                sftp.setStat(path, attributes);
+                Map<String, Object> result = operationResult("chmod", path);
+                result.put("permissions", permissions);
+                return ResponseEntity.ok(result);
+            });
+        } catch (Exception e) {
+            return buildSftpErrorResponse(e, path, "修改权限失败");
+        }
+    }
+
+    private Map<String, Object> operationResult(String operation, String path) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("operation", operation);
+        result.put("path", path);
+        return result;
+    }
+
+    private void deleteDirectoryRecursively(SftpClient sftp, String path) throws IOException {
+        for (SftpClient.DirEntry entry : sftp.readDir(path)) {
+            String name = entry.getFilename();
+            if (".".equals(name) || "..".equals(name)) continue;
+            String childPath = path.endsWith("/") ? path + name : path + "/" + name;
+            if (entry.getAttributes().isDirectory()) {
+                deleteDirectoryRecursively(sftp, childPath);
+            } else {
+                sftp.remove(childPath);
+            }
+        }
+        sftp.rmdir(path);
     }
 
     @PostMapping("/stat")

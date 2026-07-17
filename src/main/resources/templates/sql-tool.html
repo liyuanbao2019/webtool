@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
 
 <head>
     <meta charset="UTF-8">
@@ -660,6 +660,28 @@
             overflow: visible;
         }
 
+        .result-table th.result-sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .result-table .result-filter-row th {
+            top: 32px;
+            padding: 3px 5px;
+            background: #fff;
+        }
+
+        .result-table .result-filter-row input {
+            min-width: 90px;
+            height: 24px;
+            font-size: calc(var(--base-font-size) - 1px);
+        }
+
+        .result-table td.selected-result-cell {
+            background: #dbeafe !important;
+            box-shadow: inset 0 0 0 1px #60a5fa;
+        }
+
         .result-cell-editor {
             width: 100%;
             min-width: 160px;
@@ -1142,6 +1164,14 @@
                                 <span v-else class="spinner-border spinner-border-sm me-1"></span>
                                 {{ t('sql.execute') }}
                             </button>
+                            <button v-if="loading && activeQueryId"
+                                class="btn btn-outline-danger btn-sm px-3" @click="cancelRunningQuery"
+                                :disabled="cancellingQuery" :title="t('sql.cancelRunningQuery')">
+                                <span v-if="cancellingQuery" class="spinner-border spinner-border-sm me-1"></span>
+                                <i v-else class="fas fa-stop me-1"></i>
+                                {{ t('sql.cancelRunningQuery') }}
+                                <span v-if="queryElapsedSeconds > 0">({{ queryElapsedSeconds }}s)</span>
+                            </button>
                             <button class="btn btn-info btn-sm px-3" @click="explainPlan"
                                 :disabled="!sql.trim() || loading" :title="t('sql.explainPlan')">
                                 <i class="fas fa-project-diagram me-1"></i>
@@ -1215,6 +1245,11 @@
                                     <i class="fas fa-undo me-1"></i>{{ t('sql.rollback') }}
                                 </button>
                             </div>
+                            <button v-if="selectedCellCount > 0"
+                                class="btn btn-outline-primary btn-sm" @click="copySelectedCells"
+                                :title="t('sql.copySelection')">
+                                <i class="fas fa-copy me-1"></i>{{ t('sql.copySelection') }} ({{ selectedCellCount }})
+                            </button>
                         </div>
 
                         <!-- Batch Result Tabs (左侧可滚动) -->
@@ -1309,15 +1344,33 @@
                             <thead>
                                 <tr>
                                     <th style="width: 50px;">#</th>
-                                    <th v-for="col in currentResult.columns" :key="col">{{ col }}</th>
+                                    <th v-for="col in currentResult.columns" :key="col" class="result-sortable"
+                                        @click="toggleResultSort(col)">
+                                        {{ col }}
+                                        <i v-if="resultSort.column === col"
+                                            class="fas ms-1"
+                                            :class="resultSort.direction === 'asc' ? 'fa-sort-up' : 'fa-sort-down'"></i>
+                                    </th>
+                                </tr>
+                                <tr class="result-filter-row">
+                                    <th><button v-if="hasResultFilters || resultSort.column"
+                                            class="btn btn-link btn-sm p-0" @click.stop="clearResultEnhancements"
+                                            :title="t('sql.clearFilters')"><i class="fas fa-times"></i></button></th>
+                                    <th v-for="col in currentResult.columns" :key="'filter_' + col">
+                                        <input class="form-control form-control-sm" v-model="resultFilters[col]"
+                                            @click.stop @input="pagination.currentPage = 1"
+                                            :placeholder="t('sql.filterColumn')">
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="(row, idx) in paginatedRows" :key="idx">
                                     <td class="text-muted">{{ (pagination.currentPage - 1) * pagination.pageSize + idx +
                                         1 }}</td>
-                                    <td v-for="col in currentResult.columns" :key="col" :title="row[col]"
-                                        :class="{ 'editable-cell': canEditResultCell(col), 'edited-cell': isEditedCell(row, col), 'editing-cell': isEditingCell(row, col) }"
+                                    <td v-for="(col, colIdx) in currentResult.columns" :key="col" :title="row[col]"
+                                        :class="[{ 'editable-cell': canEditResultCell(col), 'edited-cell': isEditedCell(row, col), 'editing-cell': isEditingCell(row, col) }, { 'selected-result-cell': isResultCellSelected(idx, colIdx) }]"
+                                        @mousedown="startResultCellSelection($event, idx, colIdx)"
+                                        @mouseenter="extendResultCellSelection(idx, colIdx)"
                                         @dblclick="startCellEdit(row, col)">
                                         <input v-if="isEditingCell(row, col)" class="result-cell-editor"
                                             :ref="'cellEditor_' + editKey(row, col)" v-model="editingCell.value"
@@ -2713,6 +2766,13 @@
             'sql.tokenGenerateFailed': 'Token generation failed',
             'sql.tokenRequestFailed': 'Token request failed: {0}',
             'sql.serverSidePaging': 'Server-side paging',
+            'sql.cancelRunningQuery': 'Cancel query',
+            'sql.cancelRequested': 'Cancellation requested',
+            'sql.cancelFailed': 'Failed to cancel query: {0}',
+            'sql.filterColumn': 'Filter...',
+            'sql.clearFilters': 'Clear filters and sorting',
+            'sql.copySelection': 'Copy selection',
+            'sql.selectionCopied': 'Selected cells copied as tab-separated text',
             'sql.unknownDatabase': 'Unknown database',
             'sql.langZh': '中文'
         };
@@ -2981,6 +3041,13 @@
             'sql.requestErrorNoArgs': '请求异常',
             'sql.executeError': '执行出错: {0}',
             'sql.serverSidePaging': '服务端分页',
+            'sql.cancelRunningQuery': '取消查询',
+            'sql.cancelRequested': '已发送取消请求',
+            'sql.cancelFailed': '取消查询失败: {0}',
+            'sql.filterColumn': '筛选...',
+            'sql.clearFilters': '清除筛选和排序',
+            'sql.copySelection': '复制选区',
+            'sql.selectionCopied': '已按 Tab 分隔格式复制选中单元格',
             'sql.unknownDatabase': '未知数据库',
             'sql.noDatasource': '未知数据库',
             'sql.langZh': '中文',
@@ -3035,6 +3102,11 @@
                     maxTabs: 15,
                     sql: '',
                     loading: false,
+                    activeQueryId: null,
+                    cancellingQuery: false,
+                    queryElapsedSeconds: 0,
+                    queryStartedAt: 0,
+                    queryElapsedTimer: null,
                     result: null,
                     activeResultTabIndex: 0,
                     lastExecutionTime: null,
@@ -3051,6 +3123,10 @@
                         pageSizeOptions: [10, 20, 50, 100]
                     },
                     textViewMode: false,  // 文本视图模式（Tab分隔，便于复制）
+                    resultFilters: {},
+                    resultSort: { column: null, direction: null },
+                    resultCellSelection: { anchor: null, focus: null, active: false },
+                    resultSelectionMouseUpHandler: null,
                     // 服务端分页状态
                     totalCount: -1,      // 总行数（-1 表示无/未知）
                     serverPaging: false, // 是否启用服务端分页模式
@@ -3355,16 +3431,55 @@
                     }
                     return false;
                 },
+                enhancedResultRows() {
+                    if (!this.currentResult || !this.currentResult.rows) return [];
+                    const filters = this.resultFilters || {};
+                    let rows = this.currentResult.rows.filter(row => {
+                        return Object.keys(filters).every(col => {
+                            const keyword = String(filters[col] || '').trim().toLowerCase();
+                            if (!keyword) return true;
+                            const value = row[col];
+                            return String(value === null || value === undefined ? '<null>' : value)
+                                .toLowerCase().includes(keyword);
+                        });
+                    });
+                    const sort = this.resultSort || {};
+                    if (sort.column && sort.direction) {
+                        const direction = sort.direction === 'desc' ? -1 : 1;
+                        rows = rows.map((row, index) => ({ row, index })).sort((a, b) => {
+                            const av = a.row[sort.column];
+                            const bv = b.row[sort.column];
+                            if (av === bv) return a.index - b.index;
+                            if (av === null || av === undefined) return 1;
+                            if (bv === null || bv === undefined) return -1;
+                            const an = typeof av === 'number' ? av : Number(av);
+                            const bn = typeof bv === 'number' ? bv : Number(bv);
+                            if (Number.isFinite(an) && Number.isFinite(bn)) return (an - bn) * direction;
+                            return String(av).localeCompare(String(bv), undefined, { numeric: true }) * direction;
+                        }).map(item => item.row);
+                    }
+                    return rows;
+                },
+                hasResultFilters() {
+                    return Object.values(this.resultFilters || {}).some(value => String(value || '').trim());
+                },
+                selectedCellCount() {
+                    const selection = this.resultCellSelection || {};
+                    if (!selection.anchor || !selection.focus) return 0;
+                    return (Math.abs(selection.anchor.row - selection.focus.row) + 1)
+                        * (Math.abs(selection.anchor.col - selection.focus.col) + 1);
+                },
                 paginatedRows() {
                     if (!this.currentResult || !this.currentResult.rows) return [];
+                    const rows = this.enhancedResultRows;
                     // 服务端分页时，rows 本身就是当前页数据，直接返回
                     if (this.effectiveServerPaging && this.currentResult.pageSize > 0) {
-                        return this.currentResult.rows;
+                        return rows;
                     }
                     // 前端分页（非 SELECT 或批量结果）
                     const start = (this.pagination.currentPage - 1) * this.pagination.pageSize;
                     const end = start + this.pagination.pageSize;
-                    return this.currentResult.rows.slice(start, end);
+                    return rows.slice(start, end);
                 },
                 totalPages() {
                     if (!this.currentResult || !this.currentResult.rows) return 0;
@@ -3372,10 +3487,11 @@
                     if (this.effectiveServerPaging && this.currentResult.totalPages > 0) {
                         return this.currentResult.totalPages;
                     }
-                    return Math.ceil(this.currentResult.rows.length / this.pagination.pageSize);
+                    const pages = Math.ceil(this.enhancedResultRows.length / this.pagination.pageSize);
+                    return Math.max(1, pages);
                 },
                 pageStart() {
-                    if (!this.currentResult || !this.currentResult.rows || this.currentResult.rows.length === 0) return 0;
+                    if (!this.currentResult || !this.currentResult.rows || this.enhancedResultRows.length === 0) return 0;
                     if (this.effectiveServerPaging && this.currentResult.pageSize > 0) {
                         return (this.currentResult.currentPage - 1) * this.currentResult.pageSize + 1;
                     }
@@ -3386,7 +3502,7 @@
                     if (this.effectiveServerPaging && this.currentResult.pageSize > 0) {
                         return (this.currentResult.currentPage - 1) * this.currentResult.pageSize + this.currentResult.rows.length;
                     }
-                    return Math.min(this.pagination.currentPage * this.pagination.pageSize, this.currentResult.rows.length);
+                    return Math.min(this.pagination.currentPage * this.pagination.pageSize, this.enhancedResultRows.length);
                 },
                 // 当前分页的页码（统一入口）
                 currentPageNum() {
@@ -3400,10 +3516,13 @@
                     if (this.effectiveServerPaging && this.currentResult) {
                         const tc = this.currentResult.totalCount;
                         if (tc != null && Number(tc) >= 0) {
+                            if (this.hasResultFilters) {
+                                return this.enhancedResultRows.length + ' / ' + Number(tc);
+                            }
                             return Number(tc);
                         }
                     }
-                    return this.currentResult && this.currentResult.rows ? this.currentResult.rows.length : 0;
+                    return this.currentResult && this.currentResult.rows ? this.enhancedResultRows.length : 0;
                 },
                 // 文本视图内容（Tab分隔，包含表头）
                 textViewContent() {
@@ -3491,7 +3610,12 @@
                 },
                 // 新结果到来时自动切回表格视图
                 result(newVal) {
-                    if (newVal) this.textViewMode = false;
+                    if (newVal) {
+                        this.textViewMode = false;
+                        this.resultFilters = {};
+                        this.resultSort = { column: null, direction: null };
+                        this.clearResultCellSelection();
+                    }
                 },
                 'dbObjects.tables': {
                     handler() { this.updateSqlHints(); },
@@ -3515,6 +3639,7 @@
                 }
             },
             beforeUnmount() {
+                this.stopQueryTracking();
                 this.syncCurrentTabState();
                 this.persistTabsState();
                 if (this.tabsPersistTimer) {
@@ -3528,6 +3653,9 @@
                 }
                 if (this.beforeUnloadHandler) {
                     window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+                }
+                if (this.resultSelectionMouseUpHandler) {
+                    window.removeEventListener('mouseup', this.resultSelectionMouseUpHandler);
                 }
             },
             mounted() {
@@ -3596,6 +3724,10 @@
                     this.persistTabsState();
                 };
                 window.addEventListener('beforeunload', this.beforeUnloadHandler);
+                this.resultSelectionMouseUpHandler = () => {
+                    this.resultCellSelection.active = false;
+                };
+                window.addEventListener('mouseup', this.resultSelectionMouseUpHandler);
 
                 this.tabsPersistTimer = setInterval(() => {
                     this.syncCurrentTabState();
@@ -3683,6 +3815,7 @@
                     this.activeResultTabIndex = idx;
                     this.resultEdits = {};
                     this.editingCell = null;
+                    this.clearResultEnhancements();
                 },
                 initTabs() {
                     const savedTabs = localStorage.getItem('sql_editor_tabs');
@@ -4820,7 +4953,54 @@
                     this.executeSqlInternal(sqlToExecute, this.selectedDataSourceIdx);
                 },
 
+                createQueryId() {
+                    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+                        return window.crypto.randomUUID();
+                    }
+                    return 'query_' + Date.now() + '_' + Math.random().toString(36).slice(2, 12);
+                },
+
+                startQueryTracking(queryId) {
+                    if (!queryId) return;
+                    this.stopQueryTracking();
+                    this.activeQueryId = queryId;
+                    this.cancellingQuery = false;
+                    this.queryElapsedSeconds = 0;
+                    this.queryStartedAt = Date.now();
+                    this.queryElapsedTimer = setInterval(() => {
+                        this.queryElapsedSeconds = Math.floor((Date.now() - this.queryStartedAt) / 1000);
+                    }, 1000);
+                },
+
+                stopQueryTracking(queryId = null) {
+                    if (queryId && this.activeQueryId && queryId !== this.activeQueryId) return;
+                    if (this.queryElapsedTimer) {
+                        clearInterval(this.queryElapsedTimer);
+                        this.queryElapsedTimer = null;
+                    }
+                    this.activeQueryId = null;
+                    this.cancellingQuery = false;
+                    this.queryElapsedSeconds = 0;
+                    this.queryStartedAt = 0;
+                },
+
+                async cancelRunningQuery() {
+                    if (!this.activeQueryId || this.cancellingQuery) return;
+                    const queryId = this.activeQueryId;
+                    this.cancellingQuery = true;
+                    try {
+                        const res = await axios.post(`/api/oracle/queries/${encodeURIComponent(queryId)}/cancel`);
+                        this.showToast(this.t('sql.tip'), res.data.message || this.t('sql.cancelRequested'),
+                            res.data.success ? 'success' : 'error');
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), this.t('sql.cancelFailed', e.response?.data?.message || e.message), 'error');
+                        this.cancellingQuery = false;
+                    }
+                },
+
                 async executeSqlInternal(sql, datasourceIdx, token = null, page = null, pageSize = null) {
+                    const queryId = this.createQueryId();
+                    this.startQueryTracking(queryId);
                     this.loading = true;
                     this.result = null;
                     this.activeResultTabIndex = 0;
@@ -4845,6 +5025,7 @@
                             page: page !== null ? page : this.pagination.currentPage,
                             pageSize: pageSize !== null ? pageSize : this.pagination.pageSize
                         };
+                        if (queryId) payload.queryId = queryId;
 
                         if (token) {
                             payload.dangerousCommandToken = token;
@@ -4895,6 +5076,7 @@
                         this.addToHistory(sql, false);
                     } finally {
                         this.loading = false;
+                        this.stopQueryTracking(queryId);
                         this.syncCurrentTabState();
                         this.persistTabsState();
                     }
@@ -5005,6 +5187,75 @@
                     if (val === null || val === undefined) return '<null>';
                     if (typeof val === 'object') return JSON.stringify(val);
                     return val;
+                },
+                toggleResultSort(column) {
+                    if (this.resultSort.column !== column) {
+                        this.resultSort = { column, direction: 'asc' };
+                    } else if (this.resultSort.direction === 'asc') {
+                        this.resultSort = { column, direction: 'desc' };
+                    } else if (this.resultSort.direction === 'desc') {
+                        this.resultSort = { column: null, direction: null };
+                    } else {
+                        this.resultSort = { column, direction: 'asc' };
+                    }
+                    this.pagination.currentPage = 1;
+                    this.clearResultCellSelection();
+                },
+                clearResultEnhancements() {
+                    this.resultFilters = {};
+                    this.resultSort = { column: null, direction: null };
+                    this.pagination.currentPage = 1;
+                    this.clearResultCellSelection();
+                },
+                clearResultCellSelection() {
+                    this.resultCellSelection = { anchor: null, focus: null, active: false };
+                },
+                startResultCellSelection(event, row, col) {
+                    if (event.button !== 0
+                        || event.target.closest('.result-cell-editor')) return;
+                    this.resultCellSelection = {
+                        anchor: { row, col },
+                        focus: { row, col },
+                        active: true
+                    };
+                    event.preventDefault();
+                },
+                extendResultCellSelection(row, col) {
+                    if (!this.resultCellSelection.active) return;
+                    this.resultCellSelection.focus = { row, col };
+                },
+                isResultCellSelected(row, col) {
+                    const selection = this.resultCellSelection || {};
+                    if (!selection.anchor || !selection.focus) return false;
+                    const minRow = Math.min(selection.anchor.row, selection.focus.row);
+                    const maxRow = Math.max(selection.anchor.row, selection.focus.row);
+                    const minCol = Math.min(selection.anchor.col, selection.focus.col);
+                    const maxCol = Math.max(selection.anchor.col, selection.focus.col);
+                    return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
+                },
+                async copySelectedCells() {
+                    if (this.selectedCellCount === 0 || !this.currentResult) return;
+                    const selection = this.resultCellSelection;
+                    const minRow = Math.min(selection.anchor.row, selection.focus.row);
+                    const maxRow = Math.max(selection.anchor.row, selection.focus.row);
+                    const minCol = Math.min(selection.anchor.col, selection.focus.col);
+                    const maxCol = Math.max(selection.anchor.col, selection.focus.col);
+                    const columns = this.currentResult.columns.slice(minCol, maxCol + 1);
+                    const lines = [];
+                    for (let rowIndex = minRow; rowIndex <= maxRow; rowIndex++) {
+                        const row = this.paginatedRows[rowIndex];
+                        if (!row) continue;
+                        lines.push(columns.map(col => {
+                            const value = this.displayCellValue(row, col);
+                            return value === null || value === undefined ? '' : String(value);
+                        }).join('\t'));
+                    }
+                    try {
+                        await navigator.clipboard.writeText(lines.join('\n'));
+                        this.showToast(this.t('sql.copySuccess'), this.t('sql.selectionCopied'), 'success');
+                    } catch (e) {
+                        this.showToast(this.t('sql.copyFailed'), e.message, 'error');
+                    }
                 },
                 canEditResultCell(col) {
                     const meta = this.resultEditMetadata;

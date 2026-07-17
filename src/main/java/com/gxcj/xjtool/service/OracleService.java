@@ -63,6 +63,11 @@ public interface OracleService {
     SqlResultResponse executeSql(ExecuteSqlRequest request);
 
     /**
+     * Cancel a running SQL execution owned by the current HTTP session.
+     */
+    boolean cancelQuery(String queryId, String sessionId);
+
+    /**
      * Commit pending result-grid cell edits in one transaction.
      */
     SqlResultResponse commitResultEdits(ResultEditCommitRequest request);

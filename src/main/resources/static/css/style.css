@@ -137,6 +137,33 @@ body {
     background: #f8f9fa;
 }
 
+.file-header-title-row {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.file-header-actions {
+    display: grid;
+    grid-template-columns: repeat(9, minmax(20px, 1fr));
+    align-items: center;
+    width: 100%;
+    margin-top: 10px;
+    column-gap: 1px;
+}
+
+.file-header-actions .btn {
+    width: 100%;
+    min-width: 0;
+    height: 26px;
+    margin-right: 0 !important;
+    border-radius: 4px;
+}
+
+.file-header-actions .btn:hover:not(:disabled) {
+    background-color: #e8eef5;
+}
+
 /* 折叠/展开按钮样式 - 醒目设计 */
 .toggle-sidebar-btn {
     background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
@@ -152,6 +179,7 @@ body {
     box-shadow: 0 2px 6px rgba(74, 144, 226, 0.25);
     transition: all 0.3s ease;
     white-space: nowrap;
+    flex: 0 0 auto;
 }
 
 .toggle-sidebar-btn:hover {
@@ -171,9 +199,16 @@ body {
 
 /* 当侧边栏折叠时，按钮样式调整 */
 .file-sidebar.collapsed .toggle-sidebar-btn {
-    padding: 6px 10px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    justify-content: center;
     background: linear-gradient(135deg, #28a745 0%, #1e8038 100%);
     box-shadow: 0 2px 6px rgba(40, 167, 69, 0.25);
+}
+
+.file-sidebar.collapsed .file-header {
+    padding: 9px;
 }
 
 .file-sidebar.collapsed .toggle-sidebar-btn:hover {

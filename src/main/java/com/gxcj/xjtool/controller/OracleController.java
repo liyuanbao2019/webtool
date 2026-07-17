@@ -99,6 +99,17 @@ public class OracleController {
         return oracleService.executeSql(request);
     }
 
+    @PostMapping("/queries/{queryId}/cancel")
+    public Map<String, Object> cancelQuery(@PathVariable("queryId") String queryId,
+            javax.servlet.http.HttpSession session) {
+        boolean cancelled = oracleService.cancelQuery(queryId, session.getId());
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", cancelled);
+        result.put("queryId", queryId);
+        result.put("message", cancelled ? "已发送取消请求" : "查询不存在、已结束或无权取消");
+        return result;
+    }
+
     @PostMapping("/result-edits/commit")
     public SqlResultResponse commitResultEdits(@RequestBody ResultEditCommitRequest request,
             javax.servlet.http.HttpSession session) {

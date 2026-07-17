@@ -245,6 +245,11 @@ src/main/resources/application.yml
 
 生产部署时建议将 `application.yml`、`servers.xlsx` 等配置文件放到 JAR 同级目录或 `config/` 目录中，并通过启动参数显式指定配置。
 
+### SQL/SSH 功能增强
+
+SQL 运行中取消、结果表排序/筛选/区域复制、SSH 状态与断线重连/终端搜索，以及 SFTP
+新建/重命名/删除/chmod 均为内置功能，无需额外配置。
+
 ### 登录用户
 
 ```yaml

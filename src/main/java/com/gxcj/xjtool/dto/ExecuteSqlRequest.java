@@ -51,5 +51,11 @@ public class ExecuteSqlRequest {
      * Export should fetch all rows from the SQL result, without the normal default row cap.
      */
     private Boolean exportAll = false;
+
+    /**
+     * Optional client-generated execution id used by the opt-in query-cancel
+     * feature. Legacy requests leave this value empty and use the original path.
+     */
+    private String queryId;
 }
 
