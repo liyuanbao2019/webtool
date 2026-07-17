@@ -852,6 +852,9 @@
                 <button class="btn btn-outline-secondary" @click="testConnection">
                     <i class="fas fa-plug"></i> {{ t('sql.testConnection') }}
                 </button>
+                <button class="btn btn-outline-secondary" @click="openDataSourceManageModal">
+                    <i class="fas fa-cog"></i> {{ t('sql.manageDatasources') }}
+                </button>
             </div>
         </header>
 
@@ -1044,7 +1047,7 @@
                         </div>
 
                         <!-- Sequences (Only for Oracle and DM) -->
-                        <div class="accordion-item" v-if="currentDbType !== 'MYSQL'">
+                        <div class="accordion-item" v-if="!isMysqlCompatibleDb">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed" type="button"
                                     @click="loadDatabaseObjects('sequences')" data-bs-toggle="collapse"
@@ -1455,6 +1458,112 @@
                             <span v-if="generatingToken" class="spinner-border spinner-border-sm me-1"></span>
                             <i class="fas fa-check me-2" v-else></i>{{ t('sql.confirmExecute') }}
                         </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showDataSourceManageModal" class="modal d-block" style="background: rgba(0,0,0,0.5)"
+            @click.self="closeDataSourceManageModal">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="fas fa-database me-2"></i>{{ t('sql.manageDatasources') }}</h5>
+                        <button type="button" class="btn-close" @click="closeDataSourceManageModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-lg-7">
+                                <div class="table-responsive border rounded">
+                                    <table class="table table-sm table-hover mb-0 align-middle">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>{{ t('sql.datasourceName') }}</th>
+                                                <th>{{ t('sql.datasourceType') }}</th>
+                                                <th>{{ t('sql.datasourceUser') }}</th>
+                                                <th>{{ t('sql.datasourceUrl') }}</th>
+                                                <th style="width: 120px;">{{ t('sql.actions') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="ds in managedDataSources" :key="ds.index">
+                                                <td>{{ ds.name }}</td>
+                                                <td>{{ ds.type }}</td>
+                                                <td>{{ ds.username }}</td>
+                                                <td class="text-truncate" style="max-width: 260px;" :title="ds.url">{{ ds.url }}</td>
+                                                <td>
+                                                    <button class="btn btn-outline-primary btn-sm me-1" @click="editManagedDataSource(ds)" :title="t('sql.edit')">
+                                                        <i class="fas fa-pen"></i>
+                                                    </button>
+                                                    <button class="btn btn-outline-danger btn-sm" @click="deleteManagedDataSource(ds)" :title="t('sql.delete')">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            <tr v-if="managedDataSources.length === 0">
+                                                <td colspan="5" class="text-center text-muted py-3">{{ t('sql.noDatasourceConfigured') }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="col-lg-5">
+                                <div class="border rounded p-3 bg-light">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <strong>{{ editingDataSourceIndex === null ? t('sql.addDatasource') : t('sql.editDatasource') }}</strong>
+                                        <button class="btn btn-outline-secondary btn-sm" @click="resetDataSourceForm">
+                                            <i class="fas fa-plus"></i> {{ t('sql.newDatasource') }}
+                                        </button>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-1">{{ t('sql.datasourceName') }}</label>
+                                        <input class="form-control form-control-sm" v-model.trim="dataSourceForm.name">
+                                    </div>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-6">
+                                            <label class="form-label small mb-1">{{ t('sql.datasourceType') }}</label>
+                                            <select class="form-select form-select-sm" v-model="dataSourceForm.type">
+                                                <option value="ORACLE">ORACLE</option>
+                                                <option value="DM">DM</option>
+                                                <option value="MYSQL">MYSQL</option>
+                                                <option value="STARROCKS">STARROCKS</option>
+                                                <option value="POSTGRESQL">POSTGRESQL</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 d-flex align-items-end">
+                                            <div class="form-check" v-if="dataSourceForm.type === 'MYSQL'">
+                                                <input class="form-check-input" type="checkbox" id="managedDsPxc" v-model="dataSourceForm.pxc">
+                                                <label class="form-check-label small" for="managedDsPxc">PXC</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-1">JDBC URL</label>
+                                        <textarea class="form-control form-control-sm" rows="2" v-model.trim="dataSourceForm.url"></textarea>
+                                    </div>
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-6">
+                                            <label class="form-label small mb-1">{{ t('sql.datasourceUser') }}</label>
+                                            <input class="form-control form-control-sm" v-model.trim="dataSourceForm.username">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small mb-1">{{ t('sql.datasourcePassword') }}</label>
+                                            <input class="form-control form-control-sm" type="password" v-model="dataSourceForm.password">
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small mb-1">{{ t('sql.datasourceSlave') }}</label>
+                                        <input class="form-control form-control-sm" v-model.trim="dataSourceForm.slave">
+                                    </div>
+                                    <button class="btn btn-primary btn-sm w-100" @click="saveManagedDataSource" :disabled="savingDataSource">
+                                        <i class="fas fa-save"></i> {{ savingDataSource ? t('sql.saving') : t('sql.save') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" @click="closeDataSourceManageModal">{{ t('sql.close') }}</button>
                     </div>
                 </div>
             </div>
@@ -2349,6 +2458,25 @@
             'sql.connectionTestSuccess': 'Database connection test successful!',
             'sql.connectionFailed': 'Connection failed',
             'sql.connectionError': 'Connection error',
+            'sql.manageDatasources': 'Manage datasources',
+            'sql.addDatasource': 'Add datasource',
+            'sql.editDatasource': 'Edit datasource',
+            'sql.newDatasource': 'New',
+            'sql.datasourceName': 'Name',
+            'sql.datasourceType': 'Type',
+            'sql.datasourceUser': 'User',
+            'sql.datasourceUrl': 'URL',
+            'sql.datasourcePassword': 'Password',
+            'sql.datasourceSlave': 'Slave nodes',
+            'sql.noDatasourceConfigured': 'No datasource configured',
+            'sql.actions': 'Actions',
+            'sql.edit': 'Edit',
+            'sql.delete': 'Delete',
+            'sql.save': 'Save',
+            'sql.saving': 'Saving...',
+            'sql.deleteDatasourceConfirm': 'Delete datasource {0}?',
+            'sql.saveDatasourceSuccess': 'Datasource saved',
+            'sql.deleteDatasourceSuccess': 'Datasource deleted',
             'sql.formatSuccess': 'Format Success',
             'sql.sqlAutoFormatted': 'SQL has been auto-formatted',
             'sql.formatFailed': 'Format failed',
@@ -2610,6 +2738,25 @@
             'sql.connectionTestSuccess': '数据库连接测试成功！',
             'sql.connectionFailed': '连接失败',
             'sql.connectionError': '连接异常',
+            'sql.manageDatasources': '管理数据源',
+            'sql.addDatasource': '新增数据源',
+            'sql.editDatasource': '编辑数据源',
+            'sql.newDatasource': '新建',
+            'sql.datasourceName': '名称',
+            'sql.datasourceType': '类型',
+            'sql.datasourceUser': '用户',
+            'sql.datasourceUrl': 'URL',
+            'sql.datasourcePassword': '密码',
+            'sql.datasourceSlave': '从节点',
+            'sql.noDatasourceConfigured': '暂无数据源配置',
+            'sql.actions': '操作',
+            'sql.edit': '编辑',
+            'sql.delete': '删除',
+            'sql.save': '保存',
+            'sql.saving': '保存中...',
+            'sql.deleteDatasourceConfirm': '确定删除数据源 {0}？',
+            'sql.saveDatasourceSuccess': '数据源已保存',
+            'sql.deleteDatasourceSuccess': '数据源已删除',
             'sql.formatSuccess': '格式化成功',
             'sql.sqlAutoFormatted': 'SQL 已自动排版',
             'sql.formatFailed': '格式化失败',
@@ -2870,6 +3017,19 @@
                     locale: localStorage.getItem('locale') || 'en',
                     dataSources: [],
                     selectedDataSourceIdx: null,
+                    showDataSourceManageModal: false,
+                    managedDataSources: [],
+                    editingDataSourceIndex: null,
+                    savingDataSource: false,
+                    dataSourceForm: {
+                        name: '',
+                        type: 'ORACLE',
+                        url: '',
+                        pxc: true,
+                        username: '',
+                        password: '',
+                        slave: ''
+                    },
                     tabs: [],
                     activeTabId: null,
                     maxTabs: 15,
@@ -3044,7 +3204,7 @@
                             nameKey: 'sql.pivotRowCol',
                             categoryKey: 'sql.pivotRowColCategory',
                             descKey: 'sql.pivotRowColDesc',
-                            dbTypes: ['ORACLE', 'DM', 'MYSQL'],
+                            dbTypes: ['ORACLE', 'DM', 'MYSQL', 'STARROCKS'],
                             sql: "SELECT ${group_col},\n       SUM(CASE WHEN ${pivot_col} = '${val1}' THEN ${value_col} ELSE 0 END) AS ${val1_alias},\n       SUM(CASE WHEN ${pivot_col} = '${val2}' THEN ${value_col} ELSE 0 END) AS ${val2_alias},\n       SUM(CASE WHEN ${pivot_col} = '${val3}' THEN ${value_col} ELSE 0 END) AS ${val3_alias}\nFROM ${table_name}\nGROUP BY ${group_col}\nORDER BY ${group_col};"
                         },
                         {
@@ -3052,7 +3212,7 @@
                             nameKey: 'sql.unpivotColRow',
                             categoryKey: 'sql.unpivotColRowCategory',
                             descKey: 'sql.unpivotColRowDesc',
-                            dbTypes: ['ORACLE', 'DM', 'MYSQL'],
+                            dbTypes: ['ORACLE', 'DM', 'MYSQL', 'STARROCKS'],
                             sql: "SELECT ${pk_col}, '${col1}' AS metric_name, ${col1} AS metric_value FROM ${table_name}\nUNION ALL\nSELECT ${pk_col}, '${col2}' AS metric_name, ${col2} AS metric_value FROM ${table_name}\nUNION ALL\nSELECT ${pk_col}, '${col3}' AS metric_name, ${col3} AS metric_value FROM ${table_name};"
                         },
                         {
@@ -3068,7 +3228,7 @@
                             nameKey: 'sql.windowTopN',
                             categoryKey: 'sql.windowTopNCategory',
                             descKey: 'sql.windowTopNDesc',
-                            dbTypes: ['ORACLE', 'DM', 'MYSQL'],
+                            dbTypes: ['ORACLE', 'DM', 'MYSQL', 'STARROCKS'],
                             sql: "SELECT *\nFROM (\n    SELECT t.*,\n           ROW_NUMBER() OVER (PARTITION BY ${group_col} ORDER BY ${order_col} DESC) AS rn\n    FROM ${table_name} t\n) x\nWHERE x.rn <= ${top_n};"
                         },
                         {
@@ -3076,7 +3236,7 @@
                             nameKey: 'sql.keepLatestPerGroup',
                             categoryKey: 'sql.keepLatestPerGroupCategory',
                             descKey: 'sql.keepLatestPerGroupDesc',
-                            dbTypes: ['ORACLE', 'DM', 'MYSQL'],
+                            dbTypes: ['ORACLE', 'DM', 'MYSQL', 'STARROCKS'],
                             sql: "SELECT *\nFROM (\n    SELECT t.*,\n           ROW_NUMBER() OVER (PARTITION BY ${biz_key} ORDER BY ${time_col} DESC) AS rn\n    FROM ${table_name} t\n) z\nWHERE z.rn = 1;"
                         },
                         {
@@ -3092,7 +3252,7 @@
                             nameKey: 'sql.duplicateDetect',
                             categoryKey: 'sql.duplicateDetectCategory',
                             descKey: 'sql.duplicateDetectDesc',
-                            dbTypes: ['ORACLE', 'DM', 'MYSQL'],
+                            dbTypes: ['ORACLE', 'DM', 'MYSQL', 'STARROCKS'],
                             sql: "SELECT ${biz_key}, COUNT(*) AS cnt\nFROM ${table_name}\nGROUP BY ${biz_key}\nHAVING COUNT(*) > 1\nORDER BY cnt DESC;"
                         },
                         {
@@ -3123,6 +3283,10 @@
                 },
                 isMysqlDb() {
                     return (this.currentDbType || '').toUpperCase() === 'MYSQL';
+                },
+                isMysqlCompatibleDb() {
+                    const type = (this.currentDbType || '').toUpperCase();
+                    return type === 'MYSQL' || type === 'STARROCKS';
                 },
                 visibleCommonTools() {
                     return this.isMysqlDb ? [this.mysqlOnlineDdlTool, this.mysqlProcessTool, this.mysqlDiagnosticsTool] : this.commonTools;
@@ -3272,7 +3436,7 @@
                         const catKey = item.categoryKey ? this.t(item.categoryKey) : item.category;
                         const categoryMatch = !this.sqlTemplateCategory || catKey === this.sqlTemplateCategory;
                         if (!categoryMatch) return false;
-                        const dbTypes = item.dbTypes && item.dbTypes.length ? item.dbTypes : ['ORACLE', 'DM', 'MYSQL'];
+                        const dbTypes = item.dbTypes && item.dbTypes.length ? item.dbTypes : ['ORACLE', 'DM', 'MYSQL', 'STARROCKS'];
                         const dbTypeMatch = !this.onlyCurrentDbTemplates || dbTypes.includes((this.currentDbType || '').toUpperCase());
                         if (!dbTypeMatch) return false;
                         if (!keyword) return true;
@@ -4495,7 +4659,88 @@
                         console.error('获取CSRF Token异常:', e);
                     }
                 },
-                async loadDataSources() {
+                resetDataSourceForm() {
+                    this.editingDataSourceIndex = null;
+                    this.dataSourceForm = {
+                        name: '',
+                        type: 'ORACLE',
+                        url: '',
+                        pxc: true,
+                        username: '',
+                        password: '',
+                        slave: ''
+                    };
+                },
+                async openDataSourceManageModal() {
+                    this.showDataSourceManageModal = true;
+                    this.resetDataSourceForm();
+                    await this.loadManagedDataSources();
+                },
+                closeDataSourceManageModal() {
+                    this.showDataSourceManageModal = false;
+                },
+                async loadManagedDataSources() {
+                    const res = await axios.get('/api/oracle/datasources/manage');
+                    this.managedDataSources = res.data
+                        .map(dto => this.decryptData(dto.encryptedData))
+                        .filter(ds => ds !== null);
+                },
+                editManagedDataSource(ds) {
+                    this.editingDataSourceIndex = ds.index;
+                    this.dataSourceForm = {
+                        name: ds.name || '',
+                        type: ds.type || 'ORACLE',
+                        url: ds.url || '',
+                        pxc: ds.pxc !== false,
+                        username: ds.username || '',
+                        password: ds.password || '',
+                        slave: ds.slave || ''
+                    };
+                },
+                async saveManagedDataSource() {
+                    if (this.savingDataSource) return;
+                    this.savingDataSource = true;
+                    try {
+                        const payload = Object.assign({}, this.dataSourceForm);
+                        let res;
+                        if (this.editingDataSourceIndex === null || this.editingDataSourceIndex === undefined) {
+                            res = await axios.post('/api/oracle/datasources/manage', payload);
+                        } else {
+                            res = await axios.put(`/api/oracle/datasources/manage/${this.editingDataSourceIndex}`, payload);
+                        }
+                        if (res.data && res.data.success) {
+                            this.showToast(this.t('sql.success'), this.t('sql.saveDatasourceSuccess'), 'success');
+                            await this.loadManagedDataSources();
+                            await this.loadDataSources(this.selectedDataSourceIdx);
+                            this.resetDataSourceForm();
+                        } else {
+                            this.showToast(this.t('sql.error'), res.data?.errorMessage || this.t('sql.requestErrorNoArgs'), 'error');
+                        }
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), e.message || this.t('sql.requestErrorNoArgs'), 'error');
+                    } finally {
+                        this.savingDataSource = false;
+                    }
+                },
+                async deleteManagedDataSource(ds) {
+                    if (!confirm(this.t('sql.deleteDatasourceConfirm', ds.name))) {
+                        return;
+                    }
+                    try {
+                        const res = await axios.delete(`/api/oracle/datasources/manage/${ds.index}`);
+                        if (res.data && res.data.success) {
+                            this.showToast(this.t('sql.success'), this.t('sql.deleteDatasourceSuccess'), 'success');
+                            await this.loadManagedDataSources();
+                            await this.loadDataSources();
+                            this.resetDataSourceForm();
+                        } else {
+                            this.showToast(this.t('sql.error'), res.data?.errorMessage || this.t('sql.requestErrorNoArgs'), 'error');
+                        }
+                    } catch (e) {
+                        this.showToast(this.t('sql.error'), e.message || this.t('sql.requestErrorNoArgs'), 'error');
+                    }
+                },
+                async loadDataSources(preferredIndex = null) {
                     try {
                         const res = await axios.get('/api/oracle/datasources');
                         // 解密每个数据源信息（整个对象）
@@ -4503,8 +4748,14 @@
                             .map(dto => this.decryptData(dto.encryptedData))
                             .filter(ds => ds !== null);  // 过滤解密失败的
                         if (this.dataSources.length > 0) {
-                            this.selectedDataSourceIdx = this.dataSources[0].index;
+                            const preferred = preferredIndex !== null && preferredIndex !== undefined
+                                ? preferredIndex
+                                : this.selectedDataSourceIdx;
+                            const exists = this.dataSources.some(ds => ds.index === preferred);
+                            this.selectedDataSourceIdx = exists ? preferred : this.dataSources[0].index;
                             await this.fetchDatabaseType();
+                        } else {
+                            this.selectedDataSourceIdx = null;
                         }
                     } catch (e) {
                         alert(this.t('sql.loadDatasourceFailed', e.message));
@@ -4533,6 +4784,7 @@
                     }
                     const dialectMap = {
                         MYSQL: 'mysql',
+                        STARROCKS: 'mysql',
                         ORACLE: 'plsql',
                         DM: 'sql'
                     };

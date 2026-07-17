@@ -34,6 +34,7 @@ build/
 /.mvn/wrapper/maven-wrapper.properties
 /.mvn/wrapper/maven-wrapper.jar
 logs/
+data/
 .mybatis/
 .venv/
 

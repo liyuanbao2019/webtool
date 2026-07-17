@@ -1,5 +1,6 @@
 package com.gxcj.xjtool.controller;
 
+import com.gxcj.xjtool.config.OracleConfig;
 import com.gxcj.xjtool.dto.ExecuteSqlRequest;
 import com.gxcj.xjtool.dto.OracleDataSourceDto;
 import com.gxcj.xjtool.dto.ResultEditCommitRequest;
@@ -42,6 +43,28 @@ public class OracleController {
     @GetMapping("/datasources")
     public List<OracleDataSourceDto> getDataSources() {
         return oracleService.getDataSources();
+    }
+
+    @GetMapping("/datasources/manage")
+    public List<OracleDataSourceDto> getManageDataSources() {
+        return oracleService.getManageDataSources();
+    }
+
+    @PostMapping("/datasources/manage")
+    public SqlResultResponse addDataSource(@RequestBody OracleConfig.OracleDataSource request) {
+        return oracleService.addDataSource(request);
+    }
+
+    @PutMapping("/datasources/manage/{index}")
+    public SqlResultResponse updateDataSource(
+            @PathVariable("index") int datasourceIndex,
+            @RequestBody OracleConfig.OracleDataSource request) {
+        return oracleService.updateDataSource(datasourceIndex, request);
+    }
+
+    @DeleteMapping("/datasources/manage/{index}")
+    public SqlResultResponse deleteDataSource(@PathVariable("index") int datasourceIndex) {
+        return oracleService.deleteDataSource(datasourceIndex);
     }
 
     /**

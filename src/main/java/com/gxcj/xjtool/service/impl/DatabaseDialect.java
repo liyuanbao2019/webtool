@@ -10,7 +10,7 @@ public class DatabaseDialect {
      * 判断数据库类型
      */
     public static boolean isMySQL(String dbType) {
-        return "MYSQL".equalsIgnoreCase(dbType);
+        return "MYSQL".equalsIgnoreCase(dbType) || "STARROCKS".equalsIgnoreCase(dbType);
     }
 
     public static boolean isDM(String dbType) {
@@ -347,9 +347,15 @@ public class DatabaseDialect {
             return null;
 
         // MySQL URL格式: jdbc:mysql://host:port/database?params
+        String prefix = null;
         if (url.startsWith("jdbc:mysql://")) {
+            prefix = "jdbc:mysql://";
+        } else if (url.startsWith("jdbc:starrocks://")) {
+            prefix = "jdbc:starrocks://";
+        }
+        if (prefix != null) {
             try {
-                String afterHost = url.substring("jdbc:mysql://".length());
+                String afterHost = url.substring(prefix.length());
                 int slashIdx = afterHost.indexOf('/');
                 if (slashIdx > 0) {
                     String dbPart = afterHost.substring(slashIdx + 1);

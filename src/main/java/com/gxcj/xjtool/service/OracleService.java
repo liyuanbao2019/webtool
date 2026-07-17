@@ -19,6 +19,26 @@ public interface OracleService {
     List<OracleDataSourceDto> getDataSources();
 
     /**
+     * 获取可管理的数据源列表，包含完整配置（已加密传输）。
+     */
+    List<OracleDataSourceDto> getManageDataSources();
+
+    /**
+     * 新增数据源配置。
+     */
+    SqlResultResponse addDataSource(com.gxcj.xjtool.config.OracleConfig.OracleDataSource request);
+
+    /**
+     * 更新数据源配置。
+     */
+    SqlResultResponse updateDataSource(int datasourceIndex, com.gxcj.xjtool.config.OracleConfig.OracleDataSource request);
+
+    /**
+     * 删除数据源配置。
+     */
+    SqlResultResponse deleteDataSource(int datasourceIndex);
+
+    /**
      * 测试数据库连接
      * 
      * @param datasourceIndex 数据源索引

@@ -1,5 +1,7 @@
 package com.gxcj.xjtool.service.impl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gxcj.xjtool.config.OracleConfig;
 import com.gxcj.xjtool.config.SecurityConfig;
 import com.gxcj.xjtool.dto.ExecuteSqlRequest;
@@ -15,12 +17,16 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.servlet.http.HttpSession;
+import java.io.File;
+import java.io.IOException;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -42,6 +48,11 @@ public class OracleServiceImpl implements OracleService {
     private final SqlSecurityService sqlSecurityService;
     private final DangerousCommandTokenService tokenService;
     private final SecurityConfig securityConfig;
+
+    @Value("${app.sql-datasource-config-file:./data/sql-datasources.json}")
+    private String dataSourceConfigFile;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     // 缓存连接池，key为数据源索引
     private final Map<Integer, HikariDataSource> dataSourcePools = new ConcurrentHashMap<>();
@@ -122,6 +133,23 @@ public class OracleServiceImpl implements OracleService {
         "  AND (UPPER(NVL(b.event, ' ')) LIKE 'ENQ: TM%' OR UPPER(NVL(b.event, ' ')) LIKE 'ENQ: TX%') " +
         "  AND (SELECT NVL(MAX(ctime), 0) FROM v$lock WHERE sid = b.sid AND type IN ('TM', 'TX')) > 60 " +
         "ORDER BY lock_duration_seconds DESC";
+
+    @PostConstruct
+    public void loadRuntimeDataSources() {
+        File file = new File(dataSourceConfigFile);
+        if (!file.exists()) {
+            persistDataSources();
+            return;
+        }
+        try {
+            List<OracleConfig.OracleDataSource> loaded = objectMapper.readValue(file,
+                    new TypeReference<List<OracleConfig.OracleDataSource>>() {});
+            oracleConfig.setDatasources(new ArrayList<>(loaded));
+            log.info("Loaded runtime SQL datasources from {}", file.getAbsolutePath());
+        } catch (Exception e) {
+            log.error("Load runtime SQL datasource config failed: {}", file.getAbsolutePath(), e);
+        }
+    }
 
     @Override
     public List<OracleDataSourceDto> getDataSources() {
@@ -444,7 +472,7 @@ public class OracleServiceImpl implements OracleService {
                 return explainOracleSql(conn, sql, startTime);
             } else if ("DM".equals(dbType)) {
                 return explainDmSql(conn, sql, startTime);
-            } else if ("MYSQL".equals(dbType)) {
+            } else if (DatabaseDialect.isMySQL(dbType)) {
                 return explainMysqlSql(conn, sql, startTime);
             } else if ("POSTGRESQL".equals(dbType) || "POSTGRES".equals(dbType) || "PG".equals(dbType)) {
                 return explainPostgreSql(conn, sql, startTime);
@@ -899,7 +927,7 @@ public class OracleServiceImpl implements OracleService {
         final String preprocessed = stripTripleDashComments(sqlInput);
         try {
             com.alibaba.druid.DbType dbType;
-            if ("MYSQL".equalsIgnoreCase(dbTypeStr)) {
+            if (DatabaseDialect.isMySQL(dbTypeStr)) {
                 dbType = com.alibaba.druid.DbType.mysql;
             } else if ("POSTGRESQL".equalsIgnoreCase(dbTypeStr) || "POSTGRES".equalsIgnoreCase(dbTypeStr) || "PG".equalsIgnoreCase(dbTypeStr)) {
                 dbType = com.alibaba.druid.DbType.postgresql;
@@ -1137,7 +1165,7 @@ public class OracleServiceImpl implements OracleService {
                 // 2. 构建分页 SQL
                 int offset = (page - 1) * pageSize;
                 String pagedSql;
-                if ("MYSQL".equalsIgnoreCase(dbType)
+                if (DatabaseDialect.isMySQL(dbType)
                         || "POSTGRESQL".equalsIgnoreCase(dbType)
                         || "POSTGRES".equalsIgnoreCase(dbType)
                         || "PG".equalsIgnoreCase(dbType)) {
@@ -1233,6 +1261,7 @@ public class OracleServiceImpl implements OracleService {
         try {
             String productName = conn.getMetaData().getDatabaseProductName().toUpperCase();
             if (productName.contains("ORACLE")) return "ORACLE";
+            if (productName.contains("STARROCKS")) return "STARROCKS";
             if (productName.contains("MySQL") || productName.contains("MYSQL")) return "MYSQL";
             if (productName.contains("DM") || productName.contains("达梦")) return "DM";
             if (productName.contains("POSTGRESQL") || productName.contains("POSTGRES")) return "POSTGRESQL";
@@ -1685,14 +1714,14 @@ public class OracleServiceImpl implements OracleService {
         String lookupSchema = normalizeMetadataIdentifier(schemaName, dbType);
         String catalog = null;
         String schema = lookupSchema;
-        if ("MYSQL".equalsIgnoreCase(dbType)) {
+        if (DatabaseDialect.isMySQL(dbType)) {
             catalog = lookupSchema != null ? lookupSchema : conn.getCatalog();
             schema = null;
         }
 
         // 当未指定 schema 时，优先使用当前连接的 schema 查找，
         // 避免 DatabaseMetaData 匹配到其他 schema 的同名表
-        if (lookupSchema == null && !"MYSQL".equalsIgnoreCase(dbType)) {
+        if (lookupSchema == null && !DatabaseDialect.isMySQL(dbType)) {
             TableEditInfo info = readTableEditInfo(meta, null, conn.getSchema(), lookupTable);
             if (info != null) {
                 return info;
@@ -1700,7 +1729,7 @@ public class OracleServiceImpl implements OracleService {
         }
 
         TableEditInfo info = readTableEditInfo(meta, catalog, schema, lookupTable);
-        if (info == null && lookupSchema == null && !"MYSQL".equalsIgnoreCase(dbType)) {
+        if (info == null && lookupSchema == null && !DatabaseDialect.isMySQL(dbType)) {
             // 前面已经尝试过 conn.getSchema()，这里用 null schema 做最后的回退
             info = readTableEditInfo(meta, null, null, lookupTable);
         }
@@ -1787,6 +1816,85 @@ public class OracleServiceImpl implements OracleService {
             return result.substring(1, result.length() - 1);
         }
         return result;
+    }
+
+    @Override
+    public List<OracleDataSourceDto> getManageDataSources() {
+        List<OracleDataSourceDto> result = new ArrayList<>();
+        List<OracleConfig.OracleDataSource> datasources = oracleConfig.getDatasources();
+        if (datasources == null) {
+            return result;
+        }
+        for (int i = 0; i < datasources.size(); i++) {
+            OracleConfig.OracleDataSource ds = datasources.get(i);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("index", i);
+            row.put("name", ds.getName());
+            row.put("type", ds.getType());
+            row.put("url", ds.getUrl());
+            row.put("pxc", ds.isPxc());
+            row.put("username", ds.getUsername());
+            row.put("password", ds.getPassword());
+            row.put("slave", ds.getSlave());
+            try {
+                OracleDataSourceDto dto = new OracleDataSourceDto();
+                dto.setEncryptedData(com.gxcj.xjtool.util.CryptoUtil.encrypt(objectMapper.writeValueAsString(row)));
+                result.add(dto);
+            } catch (Exception e) {
+                log.error("Encrypt datasource management row failed", e);
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public synchronized SqlResultResponse addDataSource(OracleConfig.OracleDataSource request) {
+        String validationError = validateDataSource(request);
+        if (validationError != null) {
+            return SqlResultResponse.error(validationError);
+        }
+        List<OracleConfig.OracleDataSource> datasources = ensureMutableDataSources();
+        datasources.add(copyDataSource(request));
+        oracleConfig.setDatasources(datasources);
+        persistDataSources();
+        closeAllDataSourcePools();
+        return SqlResultResponse.success(Collections.singletonList("message"),
+                Collections.<Map<String, Object>>singletonList(Collections.<String, Object>singletonMap("message", "数据源已新增")),
+                0);
+    }
+
+    @Override
+    public synchronized SqlResultResponse updateDataSource(int datasourceIndex, OracleConfig.OracleDataSource request) {
+        String validationError = validateDataSource(request);
+        if (validationError != null) {
+            return SqlResultResponse.error(validationError);
+        }
+        List<OracleConfig.OracleDataSource> datasources = ensureMutableDataSources();
+        if (datasourceIndex < 0 || datasourceIndex >= datasources.size()) {
+            return SqlResultResponse.error("数据源不存在");
+        }
+        datasources.set(datasourceIndex, copyDataSource(request));
+        oracleConfig.setDatasources(datasources);
+        persistDataSources();
+        closeAllDataSourcePools();
+        return SqlResultResponse.success(Collections.singletonList("message"),
+                Collections.<Map<String, Object>>singletonList(Collections.<String, Object>singletonMap("message", "数据源已更新")),
+                0);
+    }
+
+    @Override
+    public synchronized SqlResultResponse deleteDataSource(int datasourceIndex) {
+        List<OracleConfig.OracleDataSource> datasources = ensureMutableDataSources();
+        if (datasourceIndex < 0 || datasourceIndex >= datasources.size()) {
+            return SqlResultResponse.error("数据源不存在");
+        }
+        datasources.remove(datasourceIndex);
+        oracleConfig.setDatasources(datasources);
+        persistDataSources();
+        closeAllDataSourcePools();
+        return SqlResultResponse.success(Collections.singletonList("message"),
+                Collections.<Map<String, Object>>singletonList(Collections.<String, Object>singletonMap("message", "数据源已删除")),
+                0);
     }
 
     private String findStringIgnoreCase(Collection<String> values, String target) {
@@ -1904,6 +2012,88 @@ public class OracleServiceImpl implements OracleService {
         return datasources.get(index);
     }
 
+    private List<OracleConfig.OracleDataSource> ensureMutableDataSources() {
+        List<OracleConfig.OracleDataSource> datasources = oracleConfig.getDatasources();
+        if (datasources == null) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(datasources);
+    }
+
+    private String validateDataSource(OracleConfig.OracleDataSource request) {
+        if (request == null) {
+            return "数据源配置不能为空";
+        }
+        if (isBlank(request.getName())) {
+            return "数据源名称不能为空";
+        }
+        if (isBlank(request.getType())) {
+            return "数据库类型不能为空";
+        }
+        String type = request.getType().trim().toUpperCase();
+        if (!Arrays.asList("ORACLE", "DM", "MYSQL", "STARROCKS", "POSTGRESQL", "POSTGRES", "PG").contains(type)) {
+            return "不支持的数据库类型: " + request.getType();
+        }
+        if (isBlank(request.getUrl())) {
+            return "JDBC URL不能为空";
+        }
+        if ("STARROCKS".equals(type) && !request.getUrl().trim().toLowerCase().startsWith("jdbc:mysql://")) {
+            return "StarRocks 使用 MySQL 兼容协议，请填写 jdbc:mysql://FE_HOST:QUERY_PORT/DATABASE 格式的 JDBC URL";
+        }
+        if (isBlank(request.getUsername())) {
+            return "用户名不能为空";
+        }
+        if (request.getPassword() == null) {
+            request.setPassword("");
+        }
+        request.setType(type);
+        return null;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private OracleConfig.OracleDataSource copyDataSource(OracleConfig.OracleDataSource source) {
+        OracleConfig.OracleDataSource target = new OracleConfig.OracleDataSource();
+        target.setName(source.getName() == null ? null : source.getName().trim());
+        target.setType(source.getType() == null ? "ORACLE" : source.getType().trim().toUpperCase());
+        target.setUrl(source.getUrl() == null ? null : source.getUrl().trim());
+        target.setPxc(source.isPxc());
+        target.setUsername(source.getUsername() == null ? null : source.getUsername().trim());
+        target.setPassword(source.getPassword());
+        target.setSlave(source.getSlave() == null ? null : source.getSlave().trim());
+        return target;
+    }
+
+    private void persistDataSources() {
+        File file = new File(dataSourceConfigFile);
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            log.warn("Create SQL datasource config directory failed: {}", parent.getAbsolutePath());
+            return;
+        }
+        try {
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, ensureMutableDataSources());
+        } catch (IOException e) {
+            log.error("Persist SQL datasource config failed: {}", file.getAbsolutePath(), e);
+        }
+    }
+
+    private void closeAllDataSourcePools() {
+        for (HikariDataSource ds : dataSourcePools.values()) {
+            closePoolSafely(ds);
+        }
+        dataSourcePools.clear();
+        dataSourceTypes.clear();
+        dataSourceDatabases.clear();
+        for (HikariDataSource ds : slavePools.values()) {
+            closePoolSafely(ds);
+        }
+        slavePools.clear();
+        slavePoolStartTimes.clear();
+    }
+
     /**
      * 根据索引获取数据库连接（使用连接池）
      */
@@ -1928,7 +2118,7 @@ public class OracleServiceImpl implements OracleService {
                     dataSourceTypes.put(index, dbType);
 
                     // 缓存MySQL数据库名称
-                    if ("MYSQL".equals(dbType)) {
+                    if (DatabaseDialect.isMySQL(dbType)) {
                         String database = DatabaseDialect.extractDatabaseFromUrl(config.getUrl());
                         if (database != null) {
                             dataSourceDatabases.put(index, database);
@@ -1952,11 +2142,15 @@ public class OracleServiceImpl implements OracleService {
 
         // 根据数据库类型设置驱动和测试查询
         String dbType = config.getType() != null ? config.getType().toUpperCase() : "ORACLE";
-        if ("MYSQL".equals(dbType)) {
+        if (DatabaseDialect.isMySQL(dbType)) {
             // MySQL数据库
+            if ("STARROCKS".equals(dbType)
+                    && (config.getUrl() == null || !config.getUrl().toLowerCase().startsWith("jdbc:mysql://"))) {
+                throw new IllegalArgumentException("StarRocks 使用 MySQL 兼容协议，请填写 jdbc:mysql://FE_HOST:QUERY_PORT/DATABASE 格式的 JDBC URL");
+            }
             hikariConfig.setDriverClassName("com.mysql.cj.jdbc.Driver");
             hikariConfig.setConnectionTestQuery("SELECT 1");
-            hikariConfig.setPoolName("MySQLPool-" + config.getName());
+            hikariConfig.setPoolName(dbType + "Pool-" + config.getName());
             log.info("初始化MySQL数据库连接池: {}, URL: {}", config.getName(), config.getUrl());
         } else if ("DM".equals(dbType)) {
             // 达梦数据库
