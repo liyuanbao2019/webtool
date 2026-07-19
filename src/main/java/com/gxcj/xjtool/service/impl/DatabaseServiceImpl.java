@@ -1,32 +1,26 @@
 package com.gxcj.xjtool.service.impl;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.gxcj.xjtool.config.OracleConfig;
+import com.gxcj.xjtool.config.DatabaseConfig;
 import com.gxcj.xjtool.config.SecurityConfig;
 import com.gxcj.xjtool.dto.ExecuteSqlRequest;
-import com.gxcj.xjtool.dto.OracleDataSourceDto;
+import com.gxcj.xjtool.dto.DataSourceDto;
 import com.gxcj.xjtool.dto.ResultEditCommitRequest;
 import com.gxcj.xjtool.dto.ResultEditMetadata;
 import com.gxcj.xjtool.dto.SqlResultResponse;
 import com.gxcj.xjtool.service.DangerousCommandTokenService;
-import com.gxcj.xjtool.service.OracleService;
+import com.gxcj.xjtool.service.DatabaseService;
 import com.gxcj.xjtool.service.SqlAuditService;
 import com.gxcj.xjtool.service.SqlSecurityService;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.servlet.http.HttpSession;
-import java.io.File;
-import java.io.IOException;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -37,33 +31,23 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Oracle 数据库服务实现
- * 集成 HikariCP 连接池与查询保护机制
+ * Coordinates cross-database SQL execution, metadata inspection and lock administration.
+ * Datasource lifecycle and vendor-specific MySQL operations are delegated to focused services.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class OracleServiceImpl implements OracleService {
+public class DatabaseServiceImpl implements DatabaseService {
 
-    private final OracleConfig oracleConfig;
+    private final DatabaseConfig databaseConfig;
     private final SqlAuditService sqlAuditService;
     private final SqlSecurityService sqlSecurityService;
     private final DangerousCommandTokenService tokenService;
     private final SecurityConfig securityConfig;
-
-    @Value("${app.sql-datasource-config-file:./data/sql-datasources.json}")
-    private String dataSourceConfigFile;
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
-    // 缓存连接池，key为数据源索引
-    private final Map<Integer, HikariDataSource> dataSourcePools = new ConcurrentHashMap<>();
-
-    // 缓存数据库类型，key为数据源索引
-    private final Map<Integer, String> dataSourceTypes = new ConcurrentHashMap<>();
-
-    // 缓存数据库名称（MySQL用），key为数据源索引
-    private final Map<Integer, String> dataSourceDatabases = new ConcurrentHashMap<>();
+    private final DatabaseConnectionManager connectionManager;
+    private final DatabaseDataSourceRegistry dataSourceRegistry;
+    private final MysqlAdministrationService mysqlAdministrationService;
+    private final DatabaseSqlParser sqlParser;
 
     // Slave 连接池缓存：key = "datasourceIndex@slaveIp"，value = HikariDataSource
     private final Map<String, HikariDataSource> slavePools = new ConcurrentHashMap<>();
@@ -91,28 +75,19 @@ public class OracleServiceImpl implements OracleService {
     private static final String MYSQL_QUALIFIED_TABLE_REF_REGEX =
             "(?:" + MYSQL_TABLE_REF_REGEX + ")(?:\\s*\\.\\s*(?:" + MYSQL_TABLE_REF_REGEX + "))?";
     private static final Pattern MYSQL_CREATE_INDEX_PATTERN = Pattern.compile(
-            "(?is)^\\s*CREATE\\s+(?:UNIQUE\\s+|FULLTEXT\\s+|SPATIAL\\s+)?INDEX\\s+(?:" + MYSQL_TABLE_REF_REGEX + ")\\s+ON\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b");
+            "(?is)^\\s*CREATE\\s+(?:UNIQUE\\s+|FULLTEXT\\s+|SPATIAL\\s+)?INDEX\\s+(?:" + MYSQL_TABLE_REF_REGEX + ")\\s+ON\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")(?=\\s|$|[;(,])");
     private static final Pattern MYSQL_DROP_INDEX_PATTERN = Pattern.compile(
-            "(?is)^\\s*DROP\\s+INDEX\\s+(?:" + MYSQL_TABLE_REF_REGEX + ")\\s+ON\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b");
+            "(?is)^\\s*DROP\\s+INDEX\\s+(?:" + MYSQL_TABLE_REF_REGEX + ")\\s+ON\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")(?=\\s|$|[;(,])");
     private static final Pattern MYSQL_ALTER_TABLE_PATTERN = Pattern.compile(
-            "(?is)^\\s*ALTER\\s+TABLE\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
+            "(?is)^\\s*ALTER\\s+TABLE\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")(?=\\s|$|[;(,]).*$");
     private static final Pattern MYSQL_SINGLE_TABLE_DDL_PATTERN = Pattern.compile(
-            "(?is)^\\s*(TRUNCATE|OPTIMIZE|REPAIR)\\s+(?:TABLE\\s+)?(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
+            "(?is)^\\s*(TRUNCATE|OPTIMIZE|REPAIR)\\s+(?:TABLE\\s+)?(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")(?=\\s|$|[;(,]).*$");
     private static final Pattern MYSQL_DROP_TABLE_PATTERN = Pattern.compile(
-            "(?is)^\\s*DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
+            "(?is)^\\s*DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")(?=\\s|$|[;(,]).*$");
     private static final Pattern MYSQL_RENAME_TABLE_PATTERN = Pattern.compile(
-            "(?is)^\\s*RENAME\\s+TABLE\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\s+TO\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
+            "(?is)^\\s*RENAME\\s+TABLE\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\s+TO\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")(?=\\s|$|[;(,]).*$");
     private static final Pattern MYSQL_DATABASE_DDL_PATTERN = Pattern.compile(
             "(?is)^\\s*(CREATE|ALTER|DROP)\\s+(?:DATABASE|SCHEMA)\\b.*$");
-    private static final Pattern MYSQL_ALTER_TABLE_CAPTURE_PATTERN = Pattern.compile(
-            "(?is)^\\s*ALTER\\s+TABLE\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\s+(.*)$");
-    private static final Pattern MYSQL_CREATE_INDEX_CAPTURE_PATTERN = Pattern.compile(
-            "(?is)^\\s*CREATE\\s+(UNIQUE\\s+|FULLTEXT\\s+|SPATIAL\\s+)?INDEX\\s+(" + MYSQL_TABLE_REF_REGEX + ")\\s+ON\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\s*(\\(.*)$");
-    private static final Pattern MYSQL_DROP_INDEX_CAPTURE_PATTERN = Pattern.compile(
-            "(?is)^\\s*DROP\\s+INDEX\\s+(" + MYSQL_TABLE_REF_REGEX + ")\\s+ON\\s+(" + MYSQL_QUALIFIED_TABLE_REF_REGEX + ")\\b.*$");
-    private static final Pattern MYSQL_JDBC_URL_PATTERN = Pattern.compile(
-            "^jdbc:mysql://([^:/?]+)(?::(\\d+))?/([^?]+).*", Pattern.CASE_INSENSITIVE);
-
     private static final String RAC_LOCK_QUERY_SQL =
         "SELECT " +
         "    b.inst_id, " +
@@ -165,61 +140,14 @@ public class OracleServiceImpl implements OracleService {
         "  AND (SELECT NVL(MAX(ctime), 0) FROM v$lock WHERE sid = b.sid AND type IN ('TM', 'TX')) > 60 " +
         "ORDER BY lock_duration_seconds DESC";
 
-    @PostConstruct
-    public void loadRuntimeDataSources() {
-        File file = new File(dataSourceConfigFile);
-        if (!file.exists()) {
-            persistDataSources();
-            return;
-        }
-        try {
-            List<OracleConfig.OracleDataSource> loaded = objectMapper.readValue(file,
-                    new TypeReference<List<OracleConfig.OracleDataSource>>() {});
-            oracleConfig.setDatasources(new ArrayList<>(loaded));
-            log.info("Loaded runtime SQL datasources from {}", file.getAbsolutePath());
-        } catch (Exception e) {
-            log.error("Load runtime SQL datasource config failed: {}", file.getAbsolutePath(), e);
-        }
-    }
-
     @Override
-    public List<OracleDataSourceDto> getDataSources() {
-        List<OracleDataSourceDto> result = new ArrayList<>();
-        List<OracleConfig.OracleDataSource> datasources = oracleConfig.getDatasources();
-
-        if (datasources != null) {
-            for (int i = 0; i < datasources.size(); i++) {
-                OracleConfig.OracleDataSource ds = datasources.get(i);
-
-                // 构建明文DTO
-                OracleDataSourceDto plainDto = OracleDataSourceDto.builder()
-                        .index(i)
-                        .name(ds.getName())
-                        .url(ds.getUrl())
-                        .username(ds.getUsername())
-                        .build();
-
-                // 将整个DTO序列化为JSON并加密
-                try {
-                    com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    String json = objectMapper.writeValueAsString(plainDto);
-                    String encrypted = com.gxcj.xjtool.util.CryptoUtil.encrypt(json);
-
-                    // 创建只包含加密数据的DTO
-                    OracleDataSourceDto encryptedDto = new OracleDataSourceDto();
-                    encryptedDto.setEncryptedData(encrypted);
-                    result.add(encryptedDto);
-                } catch (Exception e) {
-                    log.error("数据源信息加密失败", e);
-                }
-            }
-        }
-        return result;
+    public List<DataSourceDto> getDataSources() {
+        return dataSourceRegistry.getEncryptedDataSources();
     }
 
     @Override
     public SqlResultResponse testConnection(int datasourceIndex) {
-        OracleConfig.OracleDataSource dsConfig = getDataSourceConfig(datasourceIndex);
+        DatabaseConfig.DataSourceConfig dsConfig = getDataSourceConfig(datasourceIndex);
         if (dsConfig == null) {
             return SqlResultResponse.error("数据源不存在");
         }
@@ -236,14 +164,7 @@ public class OracleServiceImpl implements OracleService {
             String dbVersion = metaData.getDatabaseProductName() + " " + metaData.getDatabaseProductVersion();
 
             // 获取连接池状态（如果是连接池）
-            HikariDataSource ds = dataSourcePools.get(datasourceIndex);
-            String poolState = "N/A";
-            if (ds != null) {
-                poolState = String.format("Active: %d, Idle: %d, Total: %d",
-                        ds.getHikariPoolMXBean().getActiveConnections(),
-                        ds.getHikariPoolMXBean().getIdleConnections(),
-                        ds.getHikariPoolMXBean().getTotalConnections());
-            }
+            String poolState = connectionManager.getPoolState(datasourceIndex);
 
             log.info("数据库连接测试成功: {}, 耗时: {}ms, 连接池: {}", dsConfig.getName(), executionTime, poolState);
 
@@ -265,13 +186,7 @@ public class OracleServiceImpl implements OracleService {
 
     @Override
     public String getDatasourceType(int datasourceIndex) {
-        // 确保连接池已创建以填充dataSourceTypes
-        try (Connection conn = getConnectionByIndex(datasourceIndex)) {
-            // Connection will be auto-closed
-        } catch (Exception e) {
-            log.warn("获取数据源类型失败，使用默认值ORACLE", e);
-        }
-        return dataSourceTypes.getOrDefault(datasourceIndex, "ORACLE");
+        return connectionManager.getDatabaseType(datasourceIndex);
     }
 
     @Override
@@ -281,14 +196,14 @@ public class OracleServiceImpl implements OracleService {
         }
 
         // 验证数据源
-        OracleConfig.OracleDataSource dsConfig = getDataSourceConfig(request.getDatasourceIndex());
+        DatabaseConfig.DataSourceConfig dsConfig = getDataSourceConfig(request.getDatasourceIndex());
         if (dsConfig == null) {
             return SqlResultResponse.error("数据源不存在");
         }
 
         String sqlInput = request.getSql().trim();
         String dbType = dsConfig.getType() != null ? dsConfig.getType().toUpperCase() : getDatasourceType(request.getDatasourceIndex());
-        List<String> validSqls = splitSqlStatements(sqlInput, dbType);
+        List<String> validSqls = sqlParser.splitStatements(sqlInput, dbType);
 
         SqlResultResponse pxcDdlCheck = checkMysqlPxcDdl(sqlInput, validSqls, request, dsConfig, dbType);
         if (pxcDdlCheck != null) {
@@ -417,7 +332,7 @@ public class OracleServiceImpl implements OracleService {
             return SqlResultResponse.error("Result edit authorization expired or invalid, please re-run the query");
         }
 
-        OracleConfig.OracleDataSource dsConfig = getDataSourceConfig(request.getDatasourceIndex());
+        DatabaseConfig.DataSourceConfig dsConfig = getDataSourceConfig(request.getDatasourceIndex());
         if (dsConfig == null) {
             return SqlResultResponse.error("Datasource does not exist");
         }
@@ -827,13 +742,13 @@ public class OracleServiceImpl implements OracleService {
      * 让 Druid 在干净的文本上做 AST 解析。
      */
     private SqlResultResponse checkMysqlPxcDdl(String originalSql, List<String> sqlList, ExecuteSqlRequest request,
-            OracleConfig.OracleDataSource dsConfig, String dbType) {
+            DatabaseConfig.DataSourceConfig dsConfig, String dbType) {
         SecurityConfig.MysqlPxcDdlConfig config = securityConfig.getSqlCheck().getMysqlPxcDdl();
         if (config == null || !config.isEnabled() || !"MYSQL".equalsIgnoreCase(dbType)) {
             return null;
         }
         List<MysqlPxcDdlTarget> targets = sqlList.stream()
-                .map(this::parseMysqlPxcDdlTarget)
+                .map(DatabaseServiceImpl::parseMysqlPxcDdlTarget)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
         if (targets.isEmpty()) {
@@ -900,7 +815,7 @@ public class OracleServiceImpl implements OracleService {
         return null;
     }
 
-    private MysqlPxcDdlTarget parseMysqlPxcDdlTarget(String sql) {
+    static MysqlPxcDdlTarget parseMysqlPxcDdlTarget(String sql) {
         if (MYSQL_DATABASE_DDL_PATTERN.matcher(sql).find()) {
             return MysqlPxcDdlTarget.blockAlways("DATABASE/SCHEMA DDL");
         }
@@ -932,7 +847,7 @@ public class OracleServiceImpl implements OracleService {
         return null;
     }
 
-    private MysqlPxcDdlTarget parseMysqlTableReference(String tableReference, String operation) {
+    private static MysqlPxcDdlTarget parseMysqlTableReference(String tableReference, String operation) {
         if (tableReference == null) {
             return null;
         }
@@ -943,7 +858,7 @@ public class OracleServiceImpl implements OracleService {
         return new MysqlPxcDdlTarget(null, cleanMysqlIdentifier(parts[0]), operation, false);
     }
 
-    private String cleanMysqlIdentifier(String identifier) {
+    static String cleanMysqlIdentifier(String identifier) {
         String value = identifier == null ? "" : identifier.trim();
         while ((value.startsWith("`") && value.endsWith("`"))
                 || (value.startsWith("\"") && value.endsWith("\""))
@@ -972,11 +887,11 @@ public class OracleServiceImpl implements OracleService {
         }
     }
 
-    private static class MysqlPxcDdlTarget {
-        private final String schemaName;
-        private final String tableName;
-        private final String operation;
-        private final boolean blockAlways;
+    static class MysqlPxcDdlTarget {
+        final String schemaName;
+        final String tableName;
+        final String operation;
+        final boolean blockAlways;
 
         private MysqlPxcDdlTarget(String schemaName, String tableName, String operation, boolean blockAlways) {
             this.schemaName = schemaName;
@@ -988,96 +903,6 @@ public class OracleServiceImpl implements OracleService {
         private static MysqlPxcDdlTarget blockAlways(String operation) {
             return new MysqlPxcDdlTarget(null, null, operation, true);
         }
-    }
-
-    private List<String> splitSqlStatements(String sqlInput, String dbTypeStr) {
-        List<String> validSqls = new ArrayList<>();
-        // 必须先预处理（Druid 失败时降级路径也要用同一份文本，否则会仍带 --- 交给 MySQL）
-        final String preprocessed = stripTripleDashComments(sqlInput);
-        try {
-            com.alibaba.druid.DbType dbType;
-            if (DatabaseDialect.isMySQL(dbTypeStr)) {
-                dbType = com.alibaba.druid.DbType.mysql;
-            } else if ("POSTGRESQL".equalsIgnoreCase(dbTypeStr) || "POSTGRES".equalsIgnoreCase(dbTypeStr) || "PG".equalsIgnoreCase(dbTypeStr)) {
-                dbType = com.alibaba.druid.DbType.postgresql;
-            } else if ("DM".equalsIgnoreCase(dbTypeStr)) {
-                dbType = com.alibaba.druid.DbType.dm;
-            } else {
-                dbType = com.alibaba.druid.DbType.oracle;
-            }
-
-            // 使用 Druid 将大段 SQL 或脚本完美拆分为多个 Statement AST 节点
-            List<com.alibaba.druid.sql.ast.SQLStatement> stmtList =
-                    com.alibaba.druid.sql.SQLUtils.parseStatements(preprocessed, dbType);
-            for (com.alibaba.druid.sql.ast.SQLStatement stmt : stmtList) {
-                String sql = stmt.toString().trim();
-                sql = formatSqlForJdbcExecution(sql);
-                if (!sql.isEmpty() && !sql.equals("/")) {
-                    validSqls.add(sql);
-                }
-            }
-        } catch (com.alibaba.druid.sql.parser.ParserException e) {
-            log.warn("Druid SQL 解析失败，降级返回原 SQL: {}", e.getMessage());
-            String fallbackSql = formatSqlForJdbcExecution(preprocessed);
-            if (!fallbackSql.isEmpty() && !fallbackSql.equals("/")) {
-                validSqls.add(fallbackSql);
-            }
-        } catch (Exception e) {
-            log.error("SQL 分割时发生未知异常", e);
-            String fallbackSql = formatSqlForJdbcExecution(preprocessed);
-            if (!fallbackSql.isEmpty() && !fallbackSql.equals("/")) {
-                validSqls.add(fallbackSql);
-            }
-        }
-        return validSqls;
-    }
-
-    /**
-     * 预处理：去掉行首连续 3 个及以上 `-` 的整行（如 ---、---- 及 --- 标题）。
-     * 替换为空行以尽量保持行号，避免 Druid / MySQL 把 --- 当语法。
-     * 标准单行注释 `-- `（仅两个减号后接空格等）行首连续 `-` 数为 2，不处理。
-     */
-    private String stripTripleDashComments(String sql) {
-        StringBuilder out = new StringBuilder();
-        String[] lines = sql.split("\\r?\\n", -1);
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i];
-            String trimmed = line.trim();
-            int dashRun = 0;
-            while (dashRun < trimmed.length() && trimmed.charAt(dashRun) == '-') {
-                dashRun++;
-            }
-            if (dashRun >= 3) {
-                out.append("\n");
-                continue;
-            }
-            out.append(line).append(i < lines.length - 1 ? "\n" : "");
-        }
-        return out.toString();
-    }
-
-    /**
-     * 去除末尾多余的分号供 JDBC 执行（单条普通SQL不能带分号，否则报错ORA-00933等）
-     * 只有像 BEGIN..END 这样的 PL/SQL 块必须保留末尾分号
-     */
-    private String formatSqlForJdbcExecution(String sql) {
-        sql = sql.trim();
-        if (sql.endsWith(";")) {
-            boolean keepSemicolon = false;
-            String upperSql = sql.toUpperCase();
-            if (upperSql.startsWith("DECLARE") || upperSql.startsWith("BEGIN") ||
-                upperSql.startsWith("CREATE OR REPLACE PROCEDURE") || upperSql.startsWith("CREATE PROCEDURE") ||
-                upperSql.startsWith("CREATE OR REPLACE FUNCTION") || upperSql.startsWith("CREATE FUNCTION") ||
-                upperSql.startsWith("CREATE OR REPLACE TRIGGER") || upperSql.startsWith("CREATE TRIGGER") ||
-                upperSql.startsWith("CREATE OR REPLACE PACKAGE") || upperSql.startsWith("CREATE PACKAGE") ||
-                upperSql.startsWith("CREATE OR REPLACE TYPE") || upperSql.startsWith("CREATE TYPE")) {
-                keepSemicolon = true;
-            }
-            if (!keepSemicolon) {
-                sql = sql.substring(0, sql.length() - 1).trim();
-            }
-        }
-        return sql;
     }
 
     /**
@@ -1191,7 +1016,7 @@ public class OracleServiceImpl implements OracleService {
     private SqlResultResponse executeQuery(Connection conn, String sql, int maxRows, int page, int pageSize,
             long startTime, RunningQuery runningQuery)
             throws SQLException {
-        OracleConfig.QueryConfig queryConfig = oracleConfig.getQuery();
+        DatabaseConfig.QueryConfig queryConfig = databaseConfig.getQuery();
         String dbType = getDatasourceTypeByConn(conn);
 
         // 安全清理：去除末尾分号，防止 ORA-00911
@@ -1363,7 +1188,7 @@ public class OracleServiceImpl implements OracleService {
         try (Statement stmt = conn.createStatement()) {
             activateStatement(runningQuery, stmt);
             // 设置超时
-            stmt.setQueryTimeout(oracleConfig.getQuery().getMaxQueryTimeout());
+            stmt.setQueryTimeout(databaseConfig.getQuery().getMaxQueryTimeout());
 
             int affectedRows = stmt.executeUpdate(sql);
             long executionTime = System.currentTimeMillis() - startTime;
@@ -1433,7 +1258,7 @@ public class OracleServiceImpl implements OracleService {
     /**
      * 获取列值（处理特殊类型）
      */
-    private Object getColumnValue(ResultSet rs, int columnIndex, int columnType) throws SQLException {
+    static Object getColumnValue(ResultSet rs, int columnIndex, int columnType) throws SQLException {
         Object value = rs.getObject(columnIndex);
 
         if (value == null) {
@@ -1961,82 +1786,38 @@ public class OracleServiceImpl implements OracleService {
     }
 
     @Override
-    public List<OracleDataSourceDto> getManageDataSources() {
-        List<OracleDataSourceDto> result = new ArrayList<>();
-        List<OracleConfig.OracleDataSource> datasources = oracleConfig.getDatasources();
-        if (datasources == null) {
-            return result;
-        }
-        for (int i = 0; i < datasources.size(); i++) {
-            OracleConfig.OracleDataSource ds = datasources.get(i);
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("index", i);
-            row.put("name", ds.getName());
-            row.put("type", ds.getType());
-            row.put("url", ds.getUrl());
-            row.put("pxc", ds.isPxc());
-            row.put("username", ds.getUsername());
-            row.put("password", ds.getPassword());
-            row.put("slave", ds.getSlave());
-            try {
-                OracleDataSourceDto dto = new OracleDataSourceDto();
-                dto.setEncryptedData(com.gxcj.xjtool.util.CryptoUtil.encrypt(objectMapper.writeValueAsString(row)));
-                result.add(dto);
-            } catch (Exception e) {
-                log.error("Encrypt datasource management row failed", e);
-            }
-        }
-        return result;
+    public List<DataSourceDto> getManageDataSources() {
+        return dataSourceRegistry.getEncryptedManageDataSources();
     }
 
     @Override
-    public synchronized SqlResultResponse addDataSource(OracleConfig.OracleDataSource request) {
-        String validationError = validateDataSource(request);
-        if (validationError != null) {
-            return SqlResultResponse.error(validationError);
-        }
-        List<OracleConfig.OracleDataSource> datasources = ensureMutableDataSources();
-        datasources.add(copyDataSource(request));
-        oracleConfig.setDatasources(datasources);
-        persistDataSources();
-        closeAllDataSourcePools();
-        return SqlResultResponse.success(Collections.singletonList("message"),
-                Collections.<Map<String, Object>>singletonList(Collections.<String, Object>singletonMap("message", "数据源已新增")),
-                0);
+    public SqlResultResponse addDataSource(DatabaseConfig.DataSourceConfig request) {
+        SqlResultResponse response = dataSourceRegistry.add(request);
+        resetSlavePoolsAfterDataSourceChange(response);
+        return response;
     }
 
     @Override
-    public synchronized SqlResultResponse updateDataSource(int datasourceIndex, OracleConfig.OracleDataSource request) {
-        String validationError = validateDataSource(request);
-        if (validationError != null) {
-            return SqlResultResponse.error(validationError);
-        }
-        List<OracleConfig.OracleDataSource> datasources = ensureMutableDataSources();
-        if (datasourceIndex < 0 || datasourceIndex >= datasources.size()) {
-            return SqlResultResponse.error("数据源不存在");
-        }
-        datasources.set(datasourceIndex, copyDataSource(request));
-        oracleConfig.setDatasources(datasources);
-        persistDataSources();
-        closeAllDataSourcePools();
-        return SqlResultResponse.success(Collections.singletonList("message"),
-                Collections.<Map<String, Object>>singletonList(Collections.<String, Object>singletonMap("message", "数据源已更新")),
-                0);
+    public SqlResultResponse updateDataSource(int datasourceIndex, DatabaseConfig.DataSourceConfig request) {
+        SqlResultResponse response = dataSourceRegistry.update(datasourceIndex, request);
+        resetSlavePoolsAfterDataSourceChange(response);
+        return response;
     }
 
     @Override
-    public synchronized SqlResultResponse deleteDataSource(int datasourceIndex) {
-        List<OracleConfig.OracleDataSource> datasources = ensureMutableDataSources();
-        if (datasourceIndex < 0 || datasourceIndex >= datasources.size()) {
-            return SqlResultResponse.error("数据源不存在");
+    public SqlResultResponse deleteDataSource(int datasourceIndex) {
+        SqlResultResponse response = dataSourceRegistry.delete(datasourceIndex);
+        resetSlavePoolsAfterDataSourceChange(response);
+        return response;
+    }
+
+    private void resetSlavePoolsAfterDataSourceChange(SqlResultResponse response) {
+        if (response == null || !response.isSuccess()) {
+            return;
         }
-        datasources.remove(datasourceIndex);
-        oracleConfig.setDatasources(datasources);
-        persistDataSources();
-        closeAllDataSourcePools();
-        return SqlResultResponse.success(Collections.singletonList("message"),
-                Collections.<Map<String, Object>>singletonList(Collections.<String, Object>singletonMap("message", "数据源已删除")),
-                0);
+        slavePools.values().forEach(this::closePoolSafely);
+        slavePools.clear();
+        slavePoolStartTimes.clear();
     }
 
     private String findStringIgnoreCase(Collection<String> values, String target) {
@@ -2146,188 +1927,18 @@ public class OracleServiceImpl implements OracleService {
         }
     }
 
-    private OracleConfig.OracleDataSource getDataSourceConfig(int index) {
-        List<OracleConfig.OracleDataSource> datasources = oracleConfig.getDatasources();
-        if (datasources == null || index < 0 || index >= datasources.size()) {
-            return null;
-        }
-        return datasources.get(index);
-    }
-
-    private List<OracleConfig.OracleDataSource> ensureMutableDataSources() {
-        List<OracleConfig.OracleDataSource> datasources = oracleConfig.getDatasources();
-        if (datasources == null) {
-            return new ArrayList<>();
-        }
-        return new ArrayList<>(datasources);
-    }
-
-    private String validateDataSource(OracleConfig.OracleDataSource request) {
-        if (request == null) {
-            return "数据源配置不能为空";
-        }
-        if (isBlank(request.getName())) {
-            return "数据源名称不能为空";
-        }
-        if (isBlank(request.getType())) {
-            return "数据库类型不能为空";
-        }
-        String type = request.getType().trim().toUpperCase();
-        if (!Arrays.asList("ORACLE", "DM", "MYSQL", "STARROCKS", "POSTGRESQL", "POSTGRES", "PG").contains(type)) {
-            return "不支持的数据库类型: " + request.getType();
-        }
-        if (isBlank(request.getUrl())) {
-            return "JDBC URL不能为空";
-        }
-        if ("STARROCKS".equals(type) && !request.getUrl().trim().toLowerCase().startsWith("jdbc:mysql://")) {
-            return "StarRocks 使用 MySQL 兼容协议，请填写 jdbc:mysql://FE_HOST:QUERY_PORT/DATABASE 格式的 JDBC URL";
-        }
-        if (isBlank(request.getUsername())) {
-            return "用户名不能为空";
-        }
-        if (request.getPassword() == null) {
-            request.setPassword("");
-        }
-        request.setType(type);
-        return null;
+    private DatabaseConfig.DataSourceConfig getDataSourceConfig(int index) {
+        return dataSourceRegistry.get(index);
     }
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
     }
 
-    private OracleConfig.OracleDataSource copyDataSource(OracleConfig.OracleDataSource source) {
-        OracleConfig.OracleDataSource target = new OracleConfig.OracleDataSource();
-        target.setName(source.getName() == null ? null : source.getName().trim());
-        target.setType(source.getType() == null ? "ORACLE" : source.getType().trim().toUpperCase());
-        target.setUrl(source.getUrl() == null ? null : source.getUrl().trim());
-        target.setPxc(source.isPxc());
-        target.setUsername(source.getUsername() == null ? null : source.getUsername().trim());
-        target.setPassword(source.getPassword());
-        target.setSlave(source.getSlave() == null ? null : source.getSlave().trim());
-        return target;
-    }
-
-    private void persistDataSources() {
-        File file = new File(dataSourceConfigFile);
-        File parent = file.getParentFile();
-        if (parent != null && !parent.exists() && !parent.mkdirs()) {
-            log.warn("Create SQL datasource config directory failed: {}", parent.getAbsolutePath());
-            return;
-        }
-        try {
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, ensureMutableDataSources());
-        } catch (IOException e) {
-            log.error("Persist SQL datasource config failed: {}", file.getAbsolutePath(), e);
-        }
-    }
-
-    private void closeAllDataSourcePools() {
-        for (HikariDataSource ds : dataSourcePools.values()) {
-            closePoolSafely(ds);
-        }
-        dataSourcePools.clear();
-        dataSourceTypes.clear();
-        dataSourceDatabases.clear();
-        for (HikariDataSource ds : slavePools.values()) {
-            closePoolSafely(ds);
-        }
-        slavePools.clear();
-        slavePoolStartTimes.clear();
-    }
-
-    /**
-     * 根据索引获取数据库连接（使用连接池）
-     */
     private Connection getConnectionByIndex(int index) throws SQLException {
-        HikariDataSource ds = dataSourcePools.get(index);
-
-        // 如果连接池不存在，则创建（懒加载）
-        if (ds == null) {
-            synchronized (dataSourcePools) {
-                // 双重检查
-                ds = dataSourcePools.get(index);
-                if (ds == null) {
-                    OracleConfig.OracleDataSource config = getDataSourceConfig(index);
-                    if (config == null) {
-                        throw new SQLException("数据源配置不存在: index=" + index);
-                    }
-                    ds = createDataSourcePool(config);
-                    dataSourcePools.put(index, ds);
-
-                    // 缓存数据库类型
-                    String dbType = config.getType() != null ? config.getType().toUpperCase() : "ORACLE";
-                    dataSourceTypes.put(index, dbType);
-
-                    // 缓存MySQL数据库名称
-                    if (DatabaseDialect.isMySQL(dbType)) {
-                        String database = DatabaseDialect.extractDatabaseFromUrl(config.getUrl());
-                        if (database != null) {
-                            dataSourceDatabases.put(index, database);
-                        }
-                    }
-                }
-            }
-        }
-
-        return ds.getConnection();
+        return connectionManager.getConnection(index);
     }
 
-    /**
-     * 创建HikariCP连接池（支持Oracle、达梦、MySQL数据库）
-     */
-    private HikariDataSource createDataSourcePool(OracleConfig.OracleDataSource config) {
-        HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(config.getUrl());
-        hikariConfig.setUsername(config.getUsername());
-        hikariConfig.setPassword(config.getPassword());
-
-        // 根据数据库类型设置驱动和测试查询
-        String dbType = config.getType() != null ? config.getType().toUpperCase() : "ORACLE";
-        if (DatabaseDialect.isMySQL(dbType)) {
-            // MySQL数据库
-            if ("STARROCKS".equals(dbType)
-                    && (config.getUrl() == null || !config.getUrl().toLowerCase().startsWith("jdbc:mysql://"))) {
-                throw new IllegalArgumentException("StarRocks 使用 MySQL 兼容协议，请填写 jdbc:mysql://FE_HOST:QUERY_PORT/DATABASE 格式的 JDBC URL");
-            }
-            hikariConfig.setDriverClassName("com.mysql.cj.jdbc.Driver");
-            hikariConfig.setConnectionTestQuery("SELECT 1");
-            hikariConfig.setPoolName(dbType + "Pool-" + config.getName());
-            log.info("初始化MySQL数据库连接池: {}, URL: {}", config.getName(), config.getUrl());
-        } else if ("DM".equals(dbType)) {
-            // 达梦数据库
-            hikariConfig.setDriverClassName("dm.jdbc.driver.DmDriver");
-            hikariConfig.setConnectionTestQuery("SELECT 1");
-            hikariConfig.setPoolName("DMPool-" + config.getName());
-            log.info("初始化达梦数据库连接池: {}, URL: {}", config.getName(), config.getUrl());
-        } else if ("POSTGRESQL".equals(dbType) || "POSTGRES".equals(dbType) || "PG".equals(dbType)) {
-            // PostgreSQL数据库
-            hikariConfig.setDriverClassName("org.postgresql.Driver");
-            hikariConfig.setConnectionTestQuery("SELECT 1");
-            hikariConfig.setPoolName("PostgreSQLPool-" + config.getName());
-            log.info("初始化PostgreSQL数据库连接池: {}, URL: {}", config.getName(), config.getUrl());
-        } else {
-            // Oracle数据库（默认）
-            hikariConfig.setDriverClassName("oracle.jdbc.OracleDriver");
-            hikariConfig.setConnectionTestQuery("SELECT 1 FROM DUAL");
-            hikariConfig.setPoolName("OraclePool-" + config.getName());
-            log.info("初始化Oracle数据库连接池: {}, URL: {}", config.getName(), config.getUrl());
-        }
-
-        // 读取配置
-        OracleConfig.PoolConfig poolConfig = oracleConfig.getPool();
-        hikariConfig.setMaximumPoolSize(poolConfig.getMaximumPoolSize());
-        hikariConfig.setMinimumIdle(poolConfig.getMinimumIdle());
-        hikariConfig.setConnectionTimeout(poolConfig.getConnectionTimeout());
-        hikariConfig.setIdleTimeout(poolConfig.getIdleTimeout());
-        hikariConfig.setMaxLifetime(poolConfig.getMaxLifetime());
-
-        return new HikariDataSource(hikariConfig);
-    }
-
-    /**
-     * 关闭数据库资源
-     */
     private void closeResources(ResultSet rs, Statement stmt, Connection conn) {
         try {
             if (rs != null)
@@ -2355,10 +1966,7 @@ public class OracleServiceImpl implements OracleService {
     @PreDestroy
     public void destroy() {
         log.info("关闭所有数据库连接池（主池 + Slave 池）...");
-        for (HikariDataSource ds : dataSourcePools.values()) {
-            closePoolSafely(ds);
-        }
-        dataSourcePools.clear();
+        connectionManager.reset();
         for (HikariDataSource ds : slavePools.values()) {
             closePoolSafely(ds);
         }
@@ -2371,54 +1979,11 @@ public class OracleServiceImpl implements OracleService {
      * 判断 SQL 类型
      */
     private String getSqlType(String sql) {
-        String upperSql = sql.toUpperCase().trim();
-        // 跳过行首注释行（如 -- 注释、/* 块注释），找到第一条实际 SQL 关键字行
-        String effectiveLine = null;
-        for (String line : upperSql.split("\\r?\\n")) {
-            String trimmed = line.trim();
-            // 跳过空行和注释行
-            if (trimmed.isEmpty() || trimmed.startsWith("--") || trimmed.startsWith("/*")) {
-                continue;
-            }
-            effectiveLine = trimmed;
-            break;
-        }
-        if (effectiveLine == null) {
-            effectiveLine = upperSql.split("\\r?\\n")[0].trim(); // fallback
-        }
-        if (effectiveLine.startsWith("SELECT") || effectiveLine.startsWith("WITH")) {
-            return "SELECT";
-        } else if (effectiveLine.startsWith("SHOW")) {
-            return "SHOW";
-        } else if (effectiveLine.startsWith("DESC")) {
-            return "DESC";
-        } else if (effectiveLine.startsWith("DESCRIBE")) {
-            return "DESCRIBE";
-        } else if (effectiveLine.startsWith("EXPLAIN")) {
-            return "EXPLAIN";
-        } else if (effectiveLine.startsWith("INSERT")) {
-            return "INSERT";
-        } else if (effectiveLine.startsWith("UPDATE")) {
-            return "UPDATE";
-        } else if (effectiveLine.startsWith("DELETE")) {
-            return "DELETE";
-        } else if (effectiveLine.startsWith("CREATE")) {
-            return "CREATE";
-        } else if (effectiveLine.startsWith("DROP")) {
-            return "DROP";
-        } else if (effectiveLine.startsWith("ALTER")) {
-            return "ALTER";
-        } else {
-            return "OTHER";
-        }
+        return DatabaseSqlParser.sqlType(sql);
     }
 
     private boolean isResultSetSqlType(String sqlType) {
-        return "SELECT".equals(sqlType)
-                || "SHOW".equals(sqlType)
-                || "DESC".equals(sqlType)
-                || "DESCRIBE".equals(sqlType)
-                || "EXPLAIN".equals(sqlType);
+        return DatabaseSqlParser.isResultSetType(sqlType);
     }
 
     @Override
@@ -2430,8 +1995,8 @@ public class OracleServiceImpl implements OracleService {
         List<Map<String, String>> result = new ArrayList<>();
 
         // 获取数据库类型和数据库名称（MySQL需要）
-        String dbType = dataSourceTypes.getOrDefault(datasourceIndex, "ORACLE");
-        String database = dataSourceDatabases.getOrDefault(datasourceIndex, null);
+        String dbType = connectionManager.getCachedDatabaseType(datasourceIndex);
+        String database = connectionManager.getCachedDatabaseName(datasourceIndex);
 
         // 根据类型和数据库类型构建不同的查询 SQL
         String sql = DatabaseDialect.buildObjectQuerySql(type, dbType, database);
@@ -2476,7 +2041,7 @@ public class OracleServiceImpl implements OracleService {
         }
 
         // 获取数据库类型
-        String dbType = dataSourceTypes.getOrDefault(datasourceIndex, "ORACLE");
+        String dbType = connectionManager.getCachedDatabaseType(datasourceIndex);
 
         // PostgreSQL使用不同的DDL获取方式
         if (DatabaseDialect.isPostgreSQL(dbType)) {
@@ -2793,8 +2358,8 @@ public class OracleServiceImpl implements OracleService {
             stmt.setQueryTimeout(30);
 
             // 获取数据库类型和数据库名称（MySQL需要）并构建查询SQL
-            String dbType = dataSourceTypes.getOrDefault(datasourceIndex, "ORACLE");
-            String database = dataSourceDatabases.getOrDefault(datasourceIndex, null);
+            String dbType = connectionManager.getCachedDatabaseType(datasourceIndex);
+            String database = connectionManager.getCachedDatabaseName(datasourceIndex);
             String sql = DatabaseDialect.buildTableStructureQuerySql(tableName, dbType, database);
 
             rs = stmt.executeQuery(sql);
@@ -2834,8 +2399,8 @@ public class OracleServiceImpl implements OracleService {
             stmt.setQueryTimeout(30);
 
             // 获取数据库类型和数据库名称（MySQL需要）并构建查询SQL
-            String dbType = dataSourceTypes.getOrDefault(datasourceIndex, "ORACLE");
-            String database = dataSourceDatabases.getOrDefault(datasourceIndex, null);
+            String dbType = connectionManager.getCachedDatabaseType(datasourceIndex);
+            String database = connectionManager.getCachedDatabaseName(datasourceIndex);
             String sql = DatabaseDialect.buildTableIndexesQuerySql(tableName, dbType, database);
 
             rs = stmt.executeQuery(sql);
@@ -2877,8 +2442,8 @@ public class OracleServiceImpl implements OracleService {
             stmt = conn.createStatement();
             stmt.setQueryTimeout(30);
 
-            String dbType = dataSourceTypes.getOrDefault(datasourceIndex, "ORACLE");
-            String database = dataSourceDatabases.getOrDefault(datasourceIndex, null);
+            String dbType = connectionManager.getCachedDatabaseType(datasourceIndex);
+            String database = connectionManager.getCachedDatabaseName(datasourceIndex);
             String sql = DatabaseDialect.buildTablePartitionsQuerySql(tableName, dbType, database);
 
             rs = stmt.executeQuery(sql);
@@ -2915,8 +2480,8 @@ public class OracleServiceImpl implements OracleService {
             stmt = conn.createStatement();
             stmt.setQueryTimeout(30);
 
-            String dbType = dataSourceTypes.getOrDefault(datasourceIndex, "ORACLE");
-            String database = dataSourceDatabases.getOrDefault(datasourceIndex, null);
+            String dbType = connectionManager.getCachedDatabaseType(datasourceIndex);
+            String database = connectionManager.getCachedDatabaseName(datasourceIndex);
             String sql = DatabaseDialect.buildTableTriggersQuerySql(tableName, dbType, database);
 
             rs = stmt.executeQuery(sql);
@@ -3059,7 +2624,7 @@ public class OracleServiceImpl implements OracleService {
 
                 case "indexes":
                     // MySQL的索引是表的一部分,需要查表名再SHOW CREATE TABLE
-                    String database = dataSourceDatabases.getOrDefault(datasourceIndex, null);
+                    String database = connectionManager.getCachedDatabaseName(datasourceIndex);
                     String findTableSql = String.format(
                             "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.STATISTICS " +
                                     "WHERE TABLE_SCHEMA = '%s' AND INDEX_NAME = '%s' LIMIT 1",
@@ -3139,7 +2704,7 @@ public class OracleServiceImpl implements OracleService {
      */
     private List<String> getNodeAddresses(int datasourceIndex) {
         List<String> nodes = new ArrayList<>();
-        OracleConfig.OracleDataSource ds = getDataSourceConfig(datasourceIndex);
+        DatabaseConfig.DataSourceConfig ds = getDataSourceConfig(datasourceIndex);
         if (ds == null) return nodes;
 
         // 主节点：从 URL 提取 host:port
@@ -3222,7 +2787,7 @@ public class OracleServiceImpl implements OracleService {
             synchronized (slavePools) {
                 ds = slavePools.get(poolKey);
                 if (ds == null) {
-                    OracleConfig.OracleDataSource master = getDataSourceConfig(datasourceIndex);
+                    DatabaseConfig.DataSourceConfig master = getDataSourceConfig(datasourceIndex);
                     if (master == null) throw new SQLException("数据源不存在: " + datasourceIndex);
 
                     HikariConfig cfg = new HikariConfig();
@@ -3236,7 +2801,7 @@ public class OracleServiceImpl implements OracleService {
                     cfg.setMinimumIdle(0);               // 空闲立即回收，不常驻
                     cfg.setIdleTimeout(30 * 1000);       // 30 秒无活动则关闭空闲连接
                     cfg.setMaxLifetime(SLAVE_POOL_MAX_LIFE_MS); // 定期轮换物理连接
-                    cfg.setConnectionTimeout(oracleConfig.getPool().getConnectionTimeout());
+                    cfg.setConnectionTimeout(databaseConfig.getPool().getConnectionTimeout());
 
                     ds = new HikariDataSource(cfg);
                     slavePools.put(poolKey, ds);
@@ -3288,7 +2853,7 @@ public class OracleServiceImpl implements OracleService {
 
     @Override
     public List<Map<String, Object>> getLockedObjects(int datasourceIndex) {
-        OracleConfig.OracleDataSource ds = getDataSourceConfig(datasourceIndex);
+        DatabaseConfig.DataSourceConfig ds = getDataSourceConfig(datasourceIndex);
         if (ds == null) return Collections.emptyList();
         String dbType = ds.getType() == null ? "ORACLE" : ds.getType().toUpperCase(Locale.ROOT);
         if ("DM".equals(dbType)) return queryDmLockedObjects(datasourceIndex);
@@ -3378,7 +2943,7 @@ public class OracleServiceImpl implements OracleService {
             if (nodeAddress != null) {
                 conn = getConnectionByNode(datasourceIndex, nodeAddress);
             } else {
-                OracleConfig.OracleDataSource datasource = getDataSourceConfig(datasourceIndex);
+                DatabaseConfig.DataSourceConfig datasource = getDataSourceConfig(datasourceIndex);
                 if (datasource == null) throw new IllegalArgumentException("数据源不存在: " + datasourceIndex);
                 Properties properties = new Properties();
                 properties.setProperty("user", datasource.getUsername());
@@ -3451,7 +3016,7 @@ public class OracleServiceImpl implements OracleService {
     @Override
     public Map<String, Object> unlockSession(String sid, String serial, int datasourceIndex) {
         Map<String, Object> res = new LinkedHashMap<>();
-        OracleConfig.OracleDataSource ds = getDataSourceConfig(datasourceIndex);
+        DatabaseConfig.DataSourceConfig ds = getDataSourceConfig(datasourceIndex);
         if (ds == null) {
             res.put("success", false);
             res.put("message", "数据源不存在");
@@ -3524,7 +3089,7 @@ public class OracleServiceImpl implements OracleService {
         return res;
     }
 
-    private Map<String, Object> closeDmSession(long sessionId, int datasourceIndex, OracleConfig.OracleDataSource ds) {
+    private Map<String, Object> closeDmSession(long sessionId, int datasourceIndex, DatabaseConfig.DataSourceConfig ds) {
         Map<String, Object> result = new LinkedHashMap<>();
         try (Connection conn = getConnectionByIndex(datasourceIndex);
              CallableStatement statement = conn.prepareCall("{call SP_CLOSE_SESSION(?)}")) {
@@ -3541,7 +3106,7 @@ public class OracleServiceImpl implements OracleService {
         return result;
     }
 
-    private Map<String, Object> killMysqlSession(long sessionId, int datasourceIndex, OracleConfig.OracleDataSource ds) {
+    private Map<String, Object> killMysqlSession(long sessionId, int datasourceIndex, DatabaseConfig.DataSourceConfig ds) {
         Map<String, Object> result = new LinkedHashMap<>();
         try (Connection conn = getConnectionByIndex(datasourceIndex);
              Statement statement = conn.createStatement()) {
@@ -3557,641 +3122,47 @@ public class OracleServiceImpl implements OracleService {
         return result;
     }
 
-    private static final Set<String> MYSQL_PROCESS_DATABASE_WHITELIST =
-            new HashSet<>(Arrays.asList("tm_xj", "tm_xj_jike", "ingp_auth", "ingp_auth_jike"));
-
     @Override
-    public List<Map<String, Object>> getMysqlWsrepProcesses(int datasourceIndex, String databaseName, String command, String eventType) {
-        validateMysqlProcessDatasource(datasourceIndex, databaseName);
-
-        StringBuilder sql = new StringBuilder();
-        sql.append("SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO ");
-        sql.append("FROM information_schema.PROCESSLIST ");
-        sql.append("WHERE DB = ? ");
-
-        List<Object> params = new ArrayList<>();
-        params.add(databaseName);
-
-        // COMMAND 筛选条件
-        if (command != null && !command.trim().isEmpty()) {
-            sql.append("AND COMMAND = ? ");
-            params.add(command.trim());
-        }
-
-        // 事件类型筛选
-        if ("cluster_wait".equals(eventType)) {
-            sql.append("AND STATE LIKE ? ");
-            params.add("%wsrep:%");
-        }
-
-        sql.append("ORDER BY TIME DESC, ID DESC");
-
-        List<Map<String, Object>> rows = new ArrayList<>();
-        try (Connection conn = getConnectionByIndex(datasourceIndex);
-                PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
-            stmt.setQueryTimeout(15);
-            for (int i = 0; i < params.size(); i++) {
-                Object param = params.get(i);
-                if (param instanceof String) {
-                    stmt.setString(i + 1, (String) param);
-                } else if (param instanceof Integer) {
-                    stmt.setInt(i + 1, (Integer) param);
-                } else if (param instanceof Long) {
-                    stmt.setLong(i + 1, (Long) param);
-                }
-            }
-            try (ResultSet rs = stmt.executeQuery()) {
-                ResultSetMetaData metaData = rs.getMetaData();
-                int columnCount = metaData.getColumnCount();
-                List<String> columns = new ArrayList<>();
-                for (int i = 1; i <= columnCount; i++) {
-                    columns.add(metaData.getColumnLabel(i));
-                }
-                while (rs.next()) {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    for (int i = 1; i <= columnCount; i++) {
-                        row.put(columns.get(i - 1), getColumnValue(rs, i, metaData.getColumnType(i)));
-                    }
-                    rows.add(row);
-                }
-            }
-            log.info("MySQL wsrep process query success datasource={}, database={}, rows={}",
-                    datasourceIndex, databaseName, rows.size());
-        } catch (SQLException e) {
-            log.error("MySQL wsrep process query failed datasource={}, database={}", datasourceIndex, databaseName, e);
-            throw new IllegalStateException(e.getMessage(), e);
-        }
-        return rows;
+    public List<Map<String, Object>> getMysqlWsrepProcesses(int datasourceIndex, String databaseName,
+            String command, String eventType) {
+        return mysqlAdministrationService.getMysqlWsrepProcesses(datasourceIndex, databaseName, command, eventType);
     }
 
     @Override
     public List<Map<String, Object>> getMysqlCurrentSlowSql(int datasourceIndex, String databaseName, int minSeconds) {
-        validateMysqlProcessDatasource(datasourceIndex, databaseName);
-        int threshold = Math.max(1, Math.min(minSeconds, 3600));
-
-        String sql = "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO " +
-                "FROM information_schema.PROCESSLIST " +
-                "WHERE DB = ? " +
-                "AND COMMAND = 'Query' " +
-                "AND ID <> CONNECTION_ID() " +
-                "AND TIME >= ? " +
-                "AND INFO IS NOT NULL " +
-                "ORDER BY TIME DESC, ID DESC " +
-                "LIMIT 200";
-
-        try (Connection conn = getConnectionByIndex(datasourceIndex);
-                PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setQueryTimeout(15);
-            stmt.setString(1, databaseName);
-            stmt.setInt(2, threshold);
-            try (ResultSet rs = stmt.executeQuery()) {
-                List<Map<String, Object>> rows = readRows(rs);
-                log.info("MySQL current slow SQL query success datasource={}, database={}, threshold={}s, rows={}",
-                        datasourceIndex, databaseName, threshold, rows.size());
-                return rows;
-            }
-        } catch (SQLException e) {
-            log.error("MySQL current slow SQL query failed datasource={}, database={}", datasourceIndex, databaseName, e);
-            throw new IllegalStateException(e.getMessage(), e);
-        }
+        return mysqlAdministrationService.getMysqlCurrentSlowSql(datasourceIndex, databaseName, minSeconds);
     }
 
     @Override
     public Map<String, Object> getMysqlTransactionDiagnostics(int datasourceIndex, String databaseName, int minSeconds) {
-        validateMysqlProcessDatasource(datasourceIndex, databaseName);
-        int threshold = Math.max(1, Math.min(minSeconds, 86400));
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        try (Connection conn = getConnectionByIndex(datasourceIndex)) {
-            List<Map<String, Object>> longTransactions = queryMysqlLongTransactions(conn, databaseName, threshold);
-            result.put("longTransactions", longTransactions);
-            result.put("longTransactionCount", longTransactions.size());
-
-            try {
-                List<Map<String, Object>> lockWaits = queryMysqlLockWaits(conn, databaseName);
-                result.put("lockWaits", lockWaits);
-                result.put("lockWaitCount", lockWaits.size());
-                result.put("lockWaitMessage", null);
-            } catch (SQLException lockEx) {
-                log.warn("MySQL information_schema lock wait query failed datasource={}, database={}: {}",
-                        datasourceIndex, databaseName, lockEx.getMessage());
-                try {
-                    List<Map<String, Object>> lockWaits = queryMysqlLockWaitsFromPerformanceSchema(conn, databaseName);
-                    result.put("lockWaits", lockWaits);
-                    result.put("lockWaitCount", lockWaits.size());
-                    result.put("lockWaitMessage", null);
-                } catch (SQLException performanceLockEx) {
-                    log.warn("MySQL performance_schema lock wait query failed datasource={}, database={}: {}",
-                            datasourceIndex, databaseName, performanceLockEx.getMessage());
-                    result.put("lockWaits", Collections.emptyList());
-                    result.put("lockWaitCount", 0);
-                    result.put("lockWaitMessage", "Lock wait detail unavailable: " + performanceLockEx.getMessage());
-                }
-            }
-
-            log.info("MySQL transaction diagnostics success datasource={}, database={}, threshold={}s, trxCount={}",
-                    datasourceIndex, databaseName, threshold, longTransactions.size());
-            return result;
-        } catch (SQLException e) {
-            log.error("MySQL transaction diagnostics failed datasource={}, database={}", datasourceIndex, databaseName, e);
-            throw new IllegalStateException(e.getMessage(), e);
-        }
+        return mysqlAdministrationService.getMysqlTransactionDiagnostics(datasourceIndex, databaseName, minSeconds);
     }
 
     @Override
-    public Map<String, Object> buildMysqlOnlineDdlPlan(int datasourceIndex, String databaseName, String ddl, String username) {
-        validateMysqlProcessDatasource(datasourceIndex, databaseName);
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("success", false);
-
-        if (ddl == null || ddl.trim().isEmpty()) {
-            result.put("message", "DDL cannot be empty");
-            return result;
-        }
-
-        OracleConfig.OracleDataSource ds = getDataSourceConfig(datasourceIndex);
-        if (ds == null || !"MYSQL".equalsIgnoreCase(ds.getType())) {
-            result.put("message", "Only MySQL datasource supports online DDL plan");
-            return result;
-        }
-
-        String normalizedDdl = formatSqlForJdbcExecution(ddl.trim());
-        OnlineDdlAlter alter = buildOnlineAlter(normalizedDdl);
-        MysqlPxcDdlTarget target = parseMysqlPxcDdlTarget(normalizedDdl);
-        if (target == null) {
-            result.put("message", "Only ALTER TABLE, CREATE INDEX, and DROP INDEX can be converted to online DDL");
-            result.put("supported", false);
-            return result;
-        }
-        if (target.blockAlways || alter == null) {
-            result.put("message", target.operation + " is not supported by the online DDL assistant");
-            result.put("supported", false);
-            result.put("operation", target.operation);
-            return result;
-        }
-
-        String targetSchema = target.schemaName != null ? target.schemaName : databaseName;
-        String targetTable = target.tableName;
-        if (!databaseName.equalsIgnoreCase(targetSchema)) {
-            result.put("message", "DDL target database must match selected database: " + databaseName);
-            result.put("supported", false);
-            return result;
-        }
-
-        List<String> warnings = new ArrayList<>();
-        List<String> blockers = new ArrayList<>();
-        Map<String, Object> tableStats = new LinkedHashMap<>();
-        int wsrepWaitCount = 0;
-        int longTransactionCount = 0;
-        int lockWaitCount = 0;
-
-        try (Connection conn = getConnectionByIndex(datasourceIndex)) {
-            tableStats = queryMysqlTableStats(conn, targetSchema, targetTable);
-            long tableRows = toLong(tableStats.get("tableRows"), -1L);
-            long totalBytes = toLong(tableStats.get("totalBytes"), -1L);
-
-            if (tableRows < 0) {
-                blockers.add("Cannot determine table size from information_schema.TABLES");
-            } else if (tableRows >= securityConfig.getSqlCheck().getMysqlPxcDdl().getLargeTableRows()) {
-                warnings.add("Large table detected: estimated rows=" + tableRows);
-            }
-            if (totalBytes >= 0) {
-                tableStats.put("totalSizeMb", totalBytes / 1024 / 1024);
-            }
-
-            wsrepWaitCount = countMysqlWsrepWaits(conn, targetSchema);
-            if (wsrepWaitCount > 0) {
-                blockers.add("Current wsrep cluster wait processes: " + wsrepWaitCount);
-            }
-
-            List<Map<String, Object>> longTransactions = queryMysqlLongTransactions(conn, targetSchema, 30);
-            longTransactionCount = longTransactions.size();
-            if (longTransactionCount > 0) {
-                blockers.add("Long transactions running >=30s: " + longTransactionCount);
-            }
-
-            try {
-                List<Map<String, Object>> lockWaits = queryMysqlLockWaits(conn, targetSchema);
-                lockWaitCount = lockWaits.size();
-            } catch (SQLException e) {
-                try {
-                    List<Map<String, Object>> lockWaits = queryMysqlLockWaitsFromPerformanceSchema(conn, targetSchema);
-                    lockWaitCount = lockWaits.size();
-                } catch (SQLException ignored) {
-                    warnings.add("Lock wait detail unavailable: " + e.getMessage());
-                }
-            }
-            if (lockWaitCount > 0) {
-                blockers.add("Current lock waits: " + lockWaitCount);
-            }
-        } catch (SQLException e) {
-            result.put("message", "Precheck failed: " + e.getMessage());
-            result.put("supported", true);
-            return result;
-        }
-
-        String command = buildPtOnlineSchemaChangeCommand(ds, targetSchema, targetTable, alter.alterClause, true);
-        String dryRunCommand = buildPtOnlineSchemaChangeCommand(ds, targetSchema, targetTable, alter.alterClause, false);
-        boolean canExecute = blockers.isEmpty();
-
-        result.put("success", true);
-        result.put("supported", true);
-        result.put("canExecute", canExecute);
-        result.put("riskLevel", canExecute ? (warnings.isEmpty() ? "LOW" : "MEDIUM") : "HIGH");
-        result.put("operation", alter.operation);
-        result.put("database", targetSchema);
-        result.put("table", targetTable);
-        result.put("alterClause", alter.alterClause);
-        result.put("command", command);
-        result.put("dryRunCommand", dryRunCommand);
-        result.put("tableStats", tableStats);
-        result.put("wsrepWaitCount", wsrepWaitCount);
-        result.put("longTransactionCount", longTransactionCount);
-        result.put("lockWaitCount", lockWaitCount);
-        result.put("warnings", warnings);
-        result.put("blockers", blockers);
-        result.put("message", canExecute
-                ? "Online DDL plan generated. Execute only in an approved maintenance window."
-                : "Online DDL plan generated but blockers must be cleared before execution.");
-
-        try {
-            sqlAuditService.logSqlExecution(
-                    username,
-                    "MYSQL ONLINE DDL PLAN: " + normalizedDdl,
-                    true,
-                    canExecute ? null : blockers.toString(),
-                    0,
-                    0,
-                    ds.getName());
-        } catch (Exception e) {
-            log.warn("Record MySQL online DDL plan audit failed", e);
-        }
-
-        return result;
-    }
-
-    private OnlineDdlAlter buildOnlineAlter(String ddl) {
-        Matcher alterMatcher = MYSQL_ALTER_TABLE_CAPTURE_PATTERN.matcher(ddl);
-        if (alterMatcher.find()) {
-            return new OnlineDdlAlter("ALTER TABLE", alterMatcher.group(2).trim());
-        }
-
-        Matcher createIndexMatcher = MYSQL_CREATE_INDEX_CAPTURE_PATTERN.matcher(ddl);
-        if (createIndexMatcher.find()) {
-            String indexKind = createIndexMatcher.group(1) == null ? "" : createIndexMatcher.group(1).trim() + " ";
-            String indexName = cleanMysqlIdentifier(createIndexMatcher.group(2));
-            String definition = createIndexMatcher.group(4).trim();
-            return new OnlineDdlAlter("CREATE INDEX", "ADD " + indexKind + "INDEX `" + indexName + "` " + definition);
-        }
-
-        Matcher dropIndexMatcher = MYSQL_DROP_INDEX_CAPTURE_PATTERN.matcher(ddl);
-        if (dropIndexMatcher.find()) {
-            String indexName = cleanMysqlIdentifier(dropIndexMatcher.group(1));
-            return new OnlineDdlAlter("DROP INDEX", "DROP INDEX `" + indexName + "`");
-        }
-
-        return null;
-    }
-
-    private Map<String, Object> queryMysqlTableStats(Connection conn, String schemaName, String tableName) throws SQLException {
-        String sql = "SELECT TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, ENGINE, TABLE_COLLATION " +
-                "FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?";
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setQueryTimeout(10);
-            stmt.setString(1, schemaName);
-            stmt.setString(2, tableName);
-            try (ResultSet rs = stmt.executeQuery()) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                if (!rs.next()) {
-                    row.put("tableRows", -1L);
-                    row.put("dataLength", -1L);
-                    row.put("indexLength", -1L);
-                    row.put("totalBytes", -1L);
-                    return row;
-                }
-                long dataLength = rs.getLong("DATA_LENGTH");
-                long indexLength = rs.getLong("INDEX_LENGTH");
-                row.put("tableRows", rs.getLong("TABLE_ROWS"));
-                row.put("dataLength", dataLength);
-                row.put("indexLength", indexLength);
-                row.put("totalBytes", dataLength + indexLength);
-                row.put("engine", rs.getString("ENGINE"));
-                row.put("tableCollation", rs.getString("TABLE_COLLATION"));
-                return row;
-            }
-        }
-    }
-
-    private int countMysqlWsrepWaits(Connection conn, String databaseName) throws SQLException {
-        String sql = "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB = ? AND STATE LIKE ?";
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setQueryTimeout(10);
-            stmt.setString(1, databaseName);
-            stmt.setString(2, "%wsrep:%");
-            try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next() ? rs.getInt(1) : 0;
-            }
-        }
-    }
-
-    private String buildPtOnlineSchemaChangeCommand(OracleConfig.OracleDataSource ds, String databaseName,
-            String tableName, String alterClause, boolean execute) {
-        MysqlJdbcEndpoint endpoint = parseMysqlJdbcEndpoint(ds.getUrl());
-        List<String> parts = new ArrayList<>();
-        parts.add("pt-online-schema-change");
-        parts.add("--alter " + shellQuote(alterClause));
-        parts.add("--host=" + shellQuote(endpoint.host));
-        parts.add("--port=" + endpoint.port);
-        parts.add("--user=" + shellQuote(ds.getUsername()));
-        parts.add("--ask-pass");
-        parts.add("--max-load=Threads_running=50");
-        parts.add("--critical-load=Threads_running=100");
-        parts.add("--chunk-time=0.5");
-        parts.add("--set-vars=lock_wait_timeout=3");
-        parts.add("--check-interval=2");
-        parts.add("--recursion-method=none");
-        parts.add(execute ? "--execute" : "--dry-run");
-        parts.add("D=" + databaseName + ",t=" + tableName);
-        return String.join(" \\\n  ", parts);
-    }
-
-    private MysqlJdbcEndpoint parseMysqlJdbcEndpoint(String url) {
-        Matcher matcher = MYSQL_JDBC_URL_PATTERN.matcher(url == null ? "" : url);
-        if (matcher.find()) {
-            String port = matcher.group(2) == null ? "3306" : matcher.group(2);
-            return new MysqlJdbcEndpoint(matcher.group(1), port);
-        }
-        return new MysqlJdbcEndpoint("127.0.0.1", "3306");
-    }
-
-    private String shellQuote(String value) {
-        String safe = value == null ? "" : value.replace("'", "'\"'\"'");
-        return "'" + safe + "'";
-    }
-
-    private long toLong(Object value, long defaultValue) {
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
-        }
-        try {
-            return value == null ? defaultValue : Long.parseLong(String.valueOf(value));
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
-    }
-
-    private static class OnlineDdlAlter {
-        private final String operation;
-        private final String alterClause;
-
-        private OnlineDdlAlter(String operation, String alterClause) {
-            this.operation = operation;
-            this.alterClause = alterClause;
-        }
-    }
-
-    private static class MysqlJdbcEndpoint {
-        private final String host;
-        private final String port;
-
-        private MysqlJdbcEndpoint(String host, String port) {
-            this.host = host;
-            this.port = port;
-        }
-    }
-
-    private List<Map<String, Object>> queryMysqlLongTransactions(Connection conn, String databaseName, int minSeconds)
-            throws SQLException {
-        String sql = "SELECT " +
-                "t.trx_id AS TRX_ID, " +
-                "t.trx_state AS TRX_STATE, " +
-                "DATE_FORMAT(t.trx_started, '%Y-%m-%d %H:%i:%s') AS TRX_STARTED, " +
-                "TIMESTAMPDIFF(SECOND, t.trx_started, NOW()) AS TRX_SECONDS, " +
-                "t.trx_mysql_thread_id AS PROCESS_ID, " +
-                "p.USER AS USER, p.HOST AS HOST, p.DB AS DB, p.COMMAND AS COMMAND, p.TIME AS PROCESS_TIME, " +
-                "p.STATE AS STATE, COALESCE(t.trx_query, p.INFO) AS SQL_TEXT, " +
-                "t.trx_rows_locked AS ROWS_LOCKED, t.trx_rows_modified AS ROWS_MODIFIED, " +
-                "t.trx_tables_locked AS TABLES_LOCKED, t.trx_lock_structs AS LOCK_STRUCTS " +
-                "FROM information_schema.innodb_trx t " +
-                "LEFT JOIN information_schema.PROCESSLIST p ON p.ID = t.trx_mysql_thread_id " +
-                "WHERE (p.DB = ? OR p.DB IS NULL) " +
-                "AND TIMESTAMPDIFF(SECOND, t.trx_started, NOW()) >= ? " +
-                "ORDER BY TRX_SECONDS DESC, PROCESS_ID DESC " +
-                "LIMIT 200";
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setQueryTimeout(15);
-            stmt.setString(1, databaseName);
-            stmt.setInt(2, minSeconds);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return readRows(rs);
-            }
-        }
-    }
-
-    private List<Map<String, Object>> queryMysqlLockWaits(Connection conn, String databaseName) throws SQLException {
-        String sql = "SELECT " +
-                "r.trx_id AS WAITING_TRX_ID, " +
-                "r.trx_mysql_thread_id AS WAITING_PROCESS_ID, " +
-                "TIMESTAMPDIFF(SECOND, r.trx_started, NOW()) AS WAITING_SECONDS, " +
-                "rp.USER AS WAITING_USER, rp.HOST AS WAITING_HOST, rp.DB AS WAITING_DB, " +
-                "COALESCE(r.trx_query, rp.INFO) AS WAITING_SQL, " +
-                "b.trx_id AS BLOCKING_TRX_ID, " +
-                "b.trx_mysql_thread_id AS BLOCKING_PROCESS_ID, " +
-                "TIMESTAMPDIFF(SECOND, b.trx_started, NOW()) AS BLOCKING_SECONDS, " +
-                "bp.USER AS BLOCKING_USER, bp.HOST AS BLOCKING_HOST, bp.DB AS BLOCKING_DB, " +
-                "COALESCE(b.trx_query, bp.INFO) AS BLOCKING_SQL " +
-                "FROM information_schema.innodb_lock_waits w " +
-                "JOIN information_schema.innodb_trx r ON w.requesting_trx_id = r.trx_id " +
-                "JOIN information_schema.innodb_trx b ON w.blocking_trx_id = b.trx_id " +
-                "LEFT JOIN information_schema.PROCESSLIST rp ON rp.ID = r.trx_mysql_thread_id " +
-                "LEFT JOIN information_schema.PROCESSLIST bp ON bp.ID = b.trx_mysql_thread_id " +
-                "WHERE (rp.DB = ? OR bp.DB = ?) " +
-                "ORDER BY WAITING_SECONDS DESC, WAITING_PROCESS_ID DESC " +
-                "LIMIT 200";
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setQueryTimeout(15);
-            stmt.setString(1, databaseName);
-            stmt.setString(2, databaseName);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return readRows(rs);
-            }
-        }
-    }
-
-    private List<Map<String, Object>> queryMysqlLockWaitsFromPerformanceSchema(Connection conn, String databaseName)
-            throws SQLException {
-        String sql = "SELECT " +
-                "r.trx_id AS WAITING_TRX_ID, " +
-                "r.trx_mysql_thread_id AS WAITING_PROCESS_ID, " +
-                "TIMESTAMPDIFF(SECOND, r.trx_started, NOW()) AS WAITING_SECONDS, " +
-                "rp.USER AS WAITING_USER, rp.HOST AS WAITING_HOST, rp.DB AS WAITING_DB, " +
-                "COALESCE(r.trx_query, rp.INFO) AS WAITING_SQL, " +
-                "b.trx_id AS BLOCKING_TRX_ID, " +
-                "b.trx_mysql_thread_id AS BLOCKING_PROCESS_ID, " +
-                "TIMESTAMPDIFF(SECOND, b.trx_started, NOW()) AS BLOCKING_SECONDS, " +
-                "bp.USER AS BLOCKING_USER, bp.HOST AS BLOCKING_HOST, bp.DB AS BLOCKING_DB, " +
-                "COALESCE(b.trx_query, bp.INFO) AS BLOCKING_SQL " +
-                "FROM performance_schema.data_lock_waits w " +
-                "JOIN information_schema.innodb_trx r ON w.REQUESTING_ENGINE_TRANSACTION_ID = r.trx_id " +
-                "JOIN information_schema.innodb_trx b ON w.BLOCKING_ENGINE_TRANSACTION_ID = b.trx_id " +
-                "LEFT JOIN information_schema.PROCESSLIST rp ON rp.ID = r.trx_mysql_thread_id " +
-                "LEFT JOIN information_schema.PROCESSLIST bp ON bp.ID = b.trx_mysql_thread_id " +
-                "WHERE (rp.DB = ? OR bp.DB = ?) " +
-                "ORDER BY WAITING_SECONDS DESC, WAITING_PROCESS_ID DESC " +
-                "LIMIT 200";
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setQueryTimeout(15);
-            stmt.setString(1, databaseName);
-            stmt.setString(2, databaseName);
-            try (ResultSet rs = stmt.executeQuery()) {
-                return readRows(rs);
-            }
-        }
+    public Map<String, Object> buildMysqlOnlineDdlPlan(int datasourceIndex, String databaseName, String ddl,
+            String username) {
+        return mysqlAdministrationService.buildMysqlOnlineDdlPlan(datasourceIndex, databaseName, ddl, username);
     }
 
     @Override
-    public Map<String, Object> killMysqlProcesses(int datasourceIndex, String databaseName, String command, String eventType, List<Long> processIds, String username) {
-        validateMysqlProcessDatasource(datasourceIndex, databaseName);
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        List<Long> requestedIds = processIds == null
-                ? Collections.emptyList()
-                : processIds.stream()
-                        .filter(Objects::nonNull)
-                        .filter(id -> id > 0)
-                        .distinct()
-                        .collect(Collectors.toList());
-
-        if (requestedIds.isEmpty()) {
-            result.put("success", false);
-            result.put("message", "No process selected");
-            result.put("killedIds", Collections.emptyList());
-            result.put("failed", Collections.emptyList());
-            return result;
-        }
-
-        // 构建验证 SQL，保持与查询条件一致
-        StringBuilder validateSql = new StringBuilder();
-        validateSql.append("SELECT COUNT(*) FROM information_schema.PROCESSLIST ");
-        validateSql.append("WHERE ID = ? AND DB = ? ");
-
-        List<Object> validateParams = new ArrayList<>();
-        validateParams.add(null); // ID placeholder
-        validateParams.add(databaseName);
-
-        // COMMAND 筛选条件
-        if (command != null && !command.trim().isEmpty()) {
-            validateSql.append("AND COMMAND = ? ");
-            validateParams.add(command.trim());
-        }
-
-        // 事件类型筛选（集群等待时添加 STATE LIKE 条件）
-        if ("cluster_wait".equals(eventType)) {
-            validateSql.append("AND STATE LIKE ? ");
-            validateParams.add("%wsrep:%");
-        }
-
-        List<Long> killedIds = new ArrayList<>();
-        List<Map<String, Object>> failed = new ArrayList<>();
-
-        try (Connection conn = getConnectionByIndex(datasourceIndex);
-                PreparedStatement validateStmt = conn.prepareStatement(validateSql.toString());
-                Statement killStmt = conn.createStatement()) {
-            validateStmt.setQueryTimeout(10);
-            killStmt.setQueryTimeout(10);
-
-            for (Long processId : requestedIds) {
-                try {
-                    // 设置验证 SQL 参数
-                    validateStmt.setLong(1, processId);
-                    for (int i = 2; i <= validateParams.size(); i++) {
-                        Object param = validateParams.get(i - 1);
-                        if (param instanceof String) {
-                            validateStmt.setString(i, (String) param);
-                        } else if (param instanceof Integer) {
-                            validateStmt.setInt(i, (Integer) param);
-                        }
-                    }
-                    boolean allowed = false;
-                    try (ResultSet rs = validateStmt.executeQuery()) {
-                        allowed = rs.next() && rs.getInt(1) > 0;
-                    }
-
-                    if (!allowed) {
-                        failed.add(buildMysqlKillFailure(processId, "Process no longer matches the kill filter"));
-                        continue;
-                    }
-
-                    killStmt.execute("KILL " + processId);
-                    killedIds.add(processId);
-                    log.info("MySQL process killed datasource={}, database={}, processId={}, user={}",
-                            datasourceIndex, databaseName, processId, username);
-                } catch (SQLException e) {
-                    failed.add(buildMysqlKillFailure(processId, e.getMessage()));
-                    log.warn("MySQL process kill failed datasource={}, database={}, processId={}: {}",
-                            datasourceIndex, databaseName, processId, e.getMessage());
-                }
-            }
-        } catch (SQLException e) {
-            log.error("MySQL process batch kill failed datasource={}, database={}, ids={}",
-                    datasourceIndex, databaseName, requestedIds, e);
-            throw new IllegalStateException(e.getMessage(), e);
-        }
-
-        try {
-            OracleConfig.OracleDataSource dsConfig = getDataSourceConfig(datasourceIndex);
-            sqlAuditService.logSqlExecution(
-                    username,
-                    "KILL MYSQL PROCESS IDS " + requestedIds + " ON " + databaseName,
-                    failed.isEmpty(),
-                    failed.isEmpty() ? null : failed.toString(),
-                    0,
-                    killedIds.size(),
-                    dsConfig != null ? dsConfig.getName() : String.valueOf(datasourceIndex));
-        } catch (Exception e) {
-            log.error("Record MySQL process kill audit failed", e);
-        }
-
-        result.put("success", failed.isEmpty());
-        result.put("message", "Killed " + killedIds.size() + " process(es), failed " + failed.size());
-        result.put("killedIds", killedIds);
-        result.put("failed", failed);
-        return result;
+    public Map<String, Object> killMysqlProcesses(int datasourceIndex, String databaseName, String command,
+            String eventType, List<Long> processIds, String username) {
+        return mysqlAdministrationService.killMysqlProcesses(datasourceIndex, databaseName, command, eventType,
+                processIds, username);
     }
 
-    private void validateMysqlProcessDatasource(int datasourceIndex, String databaseName) {
-        OracleConfig.OracleDataSource ds = getDataSourceConfig(datasourceIndex);
-        if (ds == null) {
-            throw new IllegalArgumentException("Datasource does not exist");
-        }
-        if (!"MYSQL".equalsIgnoreCase(ds.getType())) {
-            throw new IllegalArgumentException("Only MySQL datasource supports process killing");
-        }
-        if (databaseName == null || !MYSQL_PROCESS_DATABASE_WHITELIST.contains(databaseName)) {
-            throw new IllegalArgumentException("Unsupported database: " + databaseName);
-        }
-    }
-
-    private Map<String, Object> buildMysqlKillFailure(Long processId, String message) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("id", processId);
-        row.put("message", message);
-        return row;
-    }
-
-    private List<Map<String, Object>> readRows(ResultSet rs) throws SQLException {
-        ResultSetMetaData metaData = rs.getMetaData();
+    private List<Map<String, Object>> readRows(ResultSet resultSet) throws SQLException {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        ResultSetMetaData metaData = resultSet.getMetaData();
         int columnCount = metaData.getColumnCount();
-        List<String> columns = new ArrayList<>();
+        List<String> columns = new ArrayList<>(columnCount);
         for (int i = 1; i <= columnCount; i++) {
             columns.add(metaData.getColumnLabel(i));
         }
-        List<Map<String, Object>> rows = new ArrayList<>();
-        while (rs.next()) {
+        while (resultSet.next()) {
             Map<String, Object> row = new LinkedHashMap<>();
             for (int i = 1; i <= columnCount; i++) {
-                row.put(columns.get(i - 1), getColumnValue(rs, i, metaData.getColumnType(i)));
+                row.put(columns.get(i - 1), getColumnValue(resultSet, i, metaData.getColumnType(i)));
             }
             rows.add(row);
         }

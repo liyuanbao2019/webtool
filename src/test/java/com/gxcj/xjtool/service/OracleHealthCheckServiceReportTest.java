@@ -1,6 +1,6 @@
 package com.gxcj.xjtool.service;
 
-import com.gxcj.xjtool.config.OracleConfig;
+import com.gxcj.xjtool.config.DatabaseConfig;
 import com.itextpdf.text.pdf.PdfReader;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
@@ -21,8 +21,8 @@ class OracleHealthCheckServiceReportTest {
     @Test
     void summaryPdfContainsAllTwentyNineInspectionItems() throws Exception {
         OracleHealthCheckService service = new OracleHealthCheckService(
-                new OracleConfig(), mock(OracleService.class), mock(OracleSshCommandService.class),
-                mock(OracleRecycleBinService.class));
+                new DatabaseConfig(), mock(DatabaseService.class), mock(OracleSshCommandService.class),
+                mock(OracleRecycleBinService.class), new OracleHealthReportExporter());
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("generatedAt", "2026-03-18 19:02:29");
         report.put("total", 29);

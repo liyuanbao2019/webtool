@@ -7,15 +7,14 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 数据源信息 DTO（前端展示用）
- * 整个对象加密传输，保护所有敏感信息
+ * Encrypted datasource summary returned to the SQL tool frontend.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class OracleDataSourceDto {
+public class DataSourceDto {
     /**
      * 索引（用于选择）- 解密后使用
      */

@@ -1,6 +1,6 @@
 package com.gxcj.xjtool.service;
 
-import com.gxcj.xjtool.config.OracleConfig;
+import com.gxcj.xjtool.config.DatabaseConfig;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -63,8 +63,8 @@ class DatabaseToolsServiceTest {
     }
 
     private DatabaseToolsService serviceFor(String type) {
-        OracleConfig config = new OracleConfig();
-        OracleConfig.OracleDataSource datasource = new OracleConfig.OracleDataSource();
+        DatabaseConfig config = new DatabaseConfig();
+        DatabaseConfig.DataSourceConfig datasource = new DatabaseConfig.DataSourceConfig();
         datasource.setName("test-" + type.toLowerCase());
         datasource.setType(type);
         config.getDatasources().add(datasource);

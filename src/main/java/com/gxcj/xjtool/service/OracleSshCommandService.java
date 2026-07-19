@@ -1,7 +1,7 @@
 package com.gxcj.xjtool.service;
 
 import com.gxcj.xjtool.config.ExcelServerConfigLoader;
-import com.gxcj.xjtool.config.OracleConfig;
+import com.gxcj.xjtool.config.DatabaseConfig;
 import com.gxcj.xjtool.model.ServerInfo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,11 +34,11 @@ public class OracleSshCommandService {
     private static final Pattern ORACLE_JDBC_HOST = Pattern.compile(
             "jdbc:oracle:thin:@(?:\\(.*?HOST\\s*=\\s*)?/?/?([^:/)]+)", Pattern.CASE_INSENSITIVE);
 
-    private final OracleConfig oracleConfig;
+    private final DatabaseConfig databaseConfig;
     private final ExcelServerConfigLoader serverConfigLoader;
 
     public CommandResult cleanupArchiveLogs(int datasourceIndex, int retentionDays) {
-        OracleConfig.OracleDataSource datasource = oracleDatasource(datasourceIndex);
+        DatabaseConfig.DataSourceConfig datasource = oracleDatasource(datasourceIndex);
         String databaseHost = extractOracleHost(datasource.getUrl());
         ServerInfo server = serverConfigLoader.findServerByHost(databaseHost);
         if (server == null) {
@@ -69,7 +69,7 @@ public class OracleSshCommandService {
     }
 
     public List<ServerInfo> databaseServers(int datasourceIndex) {
-        OracleConfig.OracleDataSource datasource = oracleDatasource(datasourceIndex);
+        DatabaseConfig.DataSourceConfig datasource = oracleDatasource(datasourceIndex);
         Set<String> hosts = new LinkedHashSet<>();
         hosts.add(extractOracleHost(datasource.getUrl()));
         if (datasource.getSlave() != null) {
@@ -122,12 +122,12 @@ public class OracleSshCommandService {
         }
     }
 
-    private OracleConfig.OracleDataSource oracleDatasource(int datasourceIndex) {
-        List<OracleConfig.OracleDataSource> datasources = oracleConfig.getDatasources();
+    private DatabaseConfig.DataSourceConfig oracleDatasource(int datasourceIndex) {
+        List<DatabaseConfig.DataSourceConfig> datasources = databaseConfig.getDatasources();
         if (datasources == null || datasourceIndex < 0 || datasourceIndex >= datasources.size()) {
             throw new IllegalArgumentException("数据源不存在: " + datasourceIndex);
         }
-        OracleConfig.OracleDataSource datasource = datasources.get(datasourceIndex);
+        DatabaseConfig.DataSourceConfig datasource = datasources.get(datasourceIndex);
         if (!"ORACLE".equals((datasource.getType() == null ? "ORACLE" : datasource.getType()).toUpperCase(Locale.ROOT))) {
             throw new IllegalArgumentException("SSH/RMAN 清理仅支持 Oracle 数据源");
         }

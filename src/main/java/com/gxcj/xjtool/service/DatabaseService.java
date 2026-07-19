@@ -1,7 +1,7 @@
 package com.gxcj.xjtool.service;
 
 import com.gxcj.xjtool.dto.ExecuteSqlRequest;
-import com.gxcj.xjtool.dto.OracleDataSourceDto;
+import com.gxcj.xjtool.dto.DataSourceDto;
 import com.gxcj.xjtool.dto.ResultEditCommitRequest;
 import com.gxcj.xjtool.dto.SqlResultResponse;
 
@@ -9,29 +9,29 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Oracle 数据库服务接口
+ * Unified database operations for every supported database engine.
  */
-public interface OracleService {
+public interface DatabaseService {
 
     /**
      * 获取配置的数据源列表
      */
-    List<OracleDataSourceDto> getDataSources();
+    List<DataSourceDto> getDataSources();
 
     /**
      * 获取可管理的数据源列表，包含完整配置（已加密传输）。
      */
-    List<OracleDataSourceDto> getManageDataSources();
+    List<DataSourceDto> getManageDataSources();
 
     /**
      * 新增数据源配置。
      */
-    SqlResultResponse addDataSource(com.gxcj.xjtool.config.OracleConfig.OracleDataSource request);
+    SqlResultResponse addDataSource(com.gxcj.xjtool.config.DatabaseConfig.DataSourceConfig request);
 
     /**
      * 更新数据源配置。
      */
-    SqlResultResponse updateDataSource(int datasourceIndex, com.gxcj.xjtool.config.OracleConfig.OracleDataSource request);
+    SqlResultResponse updateDataSource(int datasourceIndex, com.gxcj.xjtool.config.DatabaseConfig.DataSourceConfig request);
 
     /**
      * 删除数据源配置。

@@ -1,6 +1,6 @@
 package com.gxcj.xjtool.service;
 
-import com.gxcj.xjtool.config.OracleConfig;
+import com.gxcj.xjtool.config.DatabaseConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
@@ -31,7 +31,7 @@ import java.util.*;
 public class DatabaseToolsService {
 
     private static final int MAX_ROWS = 500;
-    private final OracleConfig oracleConfig;
+    private final DatabaseConfig databaseConfig;
     private final OracleSshCommandService oracleSshCommandService;
     private final OracleHealthCheckService oracleHealthCheckService;
     private final OracleRecycleBinService oracleRecycleBinService;
@@ -648,11 +648,11 @@ public class DatabaseToolsService {
     }
 
     private DataSourceContext context(int datasourceIndex) {
-        List<OracleConfig.OracleDataSource> dataSources = oracleConfig.getDatasources();
+        List<DatabaseConfig.DataSourceConfig> dataSources = databaseConfig.getDatasources();
         if (dataSources == null || datasourceIndex < 0 || datasourceIndex >= dataSources.size()) {
             throw new IllegalArgumentException("数据源不存在: " + datasourceIndex);
         }
-        OracleConfig.OracleDataSource config = dataSources.get(datasourceIndex);
+        DatabaseConfig.DataSourceConfig config = dataSources.get(datasourceIndex);
         String type = config.getType() == null ? "ORACLE" : config.getType().trim().toUpperCase(Locale.ROOT);
         if (!"ORACLE".equals(type) && !"DM".equals(type) && !"MYSQL".equals(type)) {
             throw new IllegalArgumentException("该工具仅支持 Oracle、达梦和 MySQL，当前类型: " + type);
@@ -762,11 +762,11 @@ public class DatabaseToolsService {
     }
 
     private static final class DataSourceContext {
-        private final OracleConfig.OracleDataSource config;
+        private final DatabaseConfig.DataSourceConfig config;
         private final String type;
         private final String name;
 
-        private DataSourceContext(OracleConfig.OracleDataSource config, String type) {
+        private DataSourceContext(DatabaseConfig.DataSourceConfig config, String type) {
             this.config = config;
             this.type = type;
             this.name = config.getName() == null ? "unnamed" : config.getName();

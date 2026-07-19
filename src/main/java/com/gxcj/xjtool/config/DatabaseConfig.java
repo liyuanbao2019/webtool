@@ -8,18 +8,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Oracle 数据源配置类
- * 从 application.yml 读取多个 Oracle 数据库连接配置
+ * Shared datasource, pool and query-protection configuration.
+ * The historical property prefix is retained so deployed application.yml files keep working.
  */
 @Data
 @Configuration
+// Keep the established "oracle" property prefix so existing production YAML remains valid.
 @ConfigurationProperties(prefix = "oracle")
-public class OracleConfig {
+public class DatabaseConfig {
 
     /**
      * 数据源列表
      */
-    private List<OracleDataSource> datasources = new ArrayList<>();
+    private List<DataSourceConfig> datasources = new ArrayList<>();
 
     /**
      * 连接池配置
@@ -35,7 +36,7 @@ public class OracleConfig {
      * 数据源配置（兼容Oracle、达梦、MySQL数据库）
      */
     @Data
-    public static class OracleDataSource {
+    public static class DataSourceConfig {
         /**
          * 数据源名称（显示用）
          */

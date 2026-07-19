@@ -1,16 +1,11 @@
 package com.gxcj.xjtool.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.gxcj.xjtool.config.ServerConfig;
 import com.gxcj.xjtool.model.ServerInfo;
-import com.gxcj.xjtool.service.SshService;
-import com.gxcj.xjtool.websocket.WebSshWebSocketHandler;
+import com.gxcj.xjtool.service.SftpSessionManager;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.sshd.client.SshClient;
-import org.apache.sshd.client.session.ClientSession;
 import org.apache.sshd.sftp.client.SftpClient;
-import org.apache.sshd.sftp.client.SftpClientFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,9 +15,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
-import org.springframework.web.socket.WebSocketSession;
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,15 +25,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
-import org.apache.sshd.client.keyverifier.AcceptAllServerKeyVerifier;
 
 @Slf4j
 @RestController
@@ -50,39 +38,12 @@ public class SftpController {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     // SFTP 连接和认证超时时间（毫秒）
-    private static final long SFTP_TIMEOUT = 30000; // 30秒
-    private static final long SESSION_IDLE_TIMEOUT = 5 * 60 * 1000L; // 5分钟空闲超时
-    private static final long CLEANUP_INTERVAL = 60 * 1000L; // 60秒清理一次
     private static final long MAX_EDITABLE_FILE_SIZE = 2 * 1024 * 1024L;
     private static final int TEXT_SNIFF_BYTES = 8192;
     private static final double NON_TEXT_RATIO_THRESHOLD = 0.30d;
 
-    private final ConcurrentMap<String, PooledSession> sessionPool = new ConcurrentHashMap<>();
-    private volatile long lastCleanupAt = 0L;
-    private SshClient sharedSshClient;
-
     @Autowired
-    private ServerConfig serverConfig;
-
-    @Autowired
-    private SshService sshService;
-
-    @Data
-    private static class PooledSession {
-        private final ClientSession session;
-        private volatile long lastAccessAt;
-    }
-
-    @FunctionalInterface
-    private interface SftpAction<T> {
-        T apply(SftpClient sftp) throws Exception;
-    }
-
-    @Data
-    private static class TerminalSftpAttempt<T> {
-        private final boolean attempted;
-        private final T result;
-    }
+    private SftpSessionManager sessionManager;
 
     @Data
     @lombok.EqualsAndHashCode(callSuper = false)
@@ -127,104 +88,6 @@ public class SftpController {
         private long size;
     }
 
-    @PostConstruct
-    public void initSharedSshClient() {
-        sharedSshClient = SshClient.setUpDefaultClient();
-        sharedSshClient.setServerKeyVerifier(AcceptAllServerKeyVerifier.INSTANCE);
-        sharedSshClient.getProperties().put("heartbeat-interval", "30000");
-        sharedSshClient.getProperties().put("heartbeat-reply-wait", "10000");
-        sharedSshClient.start();
-        log.info("SFTP共享SSH客户端已启动");
-    }
-
-    @PreDestroy
-    public void destroySharedResources() {
-        sessionPool.forEach((k, v) -> closeSessionQuietly(v.getSession()));
-        sessionPool.clear();
-        if (sharedSshClient != null) {
-            try {
-                sharedSshClient.stop();
-            } catch (Exception e) {
-                log.warn("关闭共享SSH客户端失败", e);
-            }
-        }
-    }
-
-    private String buildSessionKey(ServerInfo info) {
-        return info.getHost() + ":" + info.getPort() + ":" + info.getUsername() + ":"
-                + Integer.toHexString(Objects.hashCode(info.getPassword()));
-    }
-
-    private void cleanupExpiredSessionsIfNeeded() {
-        long now = System.currentTimeMillis();
-        if (now - lastCleanupAt < CLEANUP_INTERVAL) {
-            return;
-        }
-        lastCleanupAt = now;
-        sessionPool.forEach((key, pooled) -> {
-            if (now - pooled.getLastAccessAt() > SESSION_IDLE_TIMEOUT) {
-                if (sessionPool.remove(key, pooled)) {
-                    closeSessionQuietly(pooled.getSession());
-                }
-            }
-        });
-    }
-
-    private void closeSessionQuietly(ClientSession session) {
-        if (session == null) {
-            return;
-        }
-        try {
-            session.close();
-        } catch (Exception ignored) {
-        }
-    }
-
-    private ClientSession createAuthenticatedSession(ServerInfo info) throws Exception {
-        ClientSession session = sharedSshClient.connect(info.getUsername(), info.getHost(), info.getPort())
-                .verify(SFTP_TIMEOUT).getSession();
-        session.addPasswordIdentity(info.getPassword());
-        session.auth().verify(SFTP_TIMEOUT);
-        return session;
-    }
-
-    private ClientSession getOrCreateSession(ServerInfo info) throws Exception {
-        cleanupExpiredSessionsIfNeeded();
-        String key = buildSessionKey(info);
-        PooledSession pooled = sessionPool.get(key);
-        if (pooled != null && pooled.getSession() != null && pooled.getSession().isOpen()) {
-            pooled.setLastAccessAt(System.currentTimeMillis());
-            return pooled.getSession();
-        }
-        synchronized (sessionPool) {
-            pooled = sessionPool.get(key);
-            if (pooled != null && pooled.getSession() != null && pooled.getSession().isOpen()) {
-                pooled.setLastAccessAt(System.currentTimeMillis());
-                return pooled.getSession();
-            }
-            ClientSession session = createAuthenticatedSession(info);
-            PooledSession newPooled = new PooledSession(session);
-            newPooled.setLastAccessAt(System.currentTimeMillis());
-            sessionPool.put(key, newPooled);
-            return session;
-        }
-    }
-
-    private void invalidateSession(ServerInfo info) {
-        String key = buildSessionKey(info);
-        PooledSession removed = sessionPool.remove(key);
-        if (removed != null) {
-            closeSessionQuietly(removed.getSession());
-        }
-    }
-
-    private String getRequestWebSocketSessionId(ServerInfo info) {
-        if (info instanceof SftpRequest) {
-            return ((SftpRequest) info).getWebSocketSessionId();
-        }
-        return null;
-    }
-
     private SftpRequest buildRequest(ServerInfo info, String path, String webSocketSessionId) {
         SftpRequest request = new SftpRequest();
         request.setHost(info.getHost());
@@ -236,49 +99,11 @@ public class SftpController {
         return request;
     }
 
-    private <T> TerminalSftpAttempt<T> tryExecuteWithTerminalSession(ServerInfo info, SftpAction<T> action) throws Exception {
-        String webSocketSessionId = getRequestWebSocketSessionId(info);
-        if (webSocketSessionId == null || webSocketSessionId.trim().isEmpty()) {
-            return new TerminalSftpAttempt<>(false, null);
-        }
-        WebSocketSession webSocketSession = WebSshWebSocketHandler.findSession(webSocketSessionId.trim());
-        if (webSocketSession == null || !webSocketSession.isOpen()) {
-            return new TerminalSftpAttempt<>(false, null);
-        }
-        T result = sshService.executeSftpOnExistingSession(webSocketSession, info.getUsername(), action::apply);
-        return new TerminalSftpAttempt<>(true, result);
-    }
-
-    private void assertSftpAllowed() {
-        if (serverConfig != null
-                && serverConfig.getAgent() != null
-                && serverConfig.getAgent().isEnabled()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "SFTP is disabled while Agent mode is enabled");
-        }
-    }
-
-    private <T> T executeWithSftp(ServerInfo info, SftpAction<T> action) throws Exception {
-        assertSftpAllowed();
-        try {
-            TerminalSftpAttempt<T> terminalAttempt = tryExecuteWithTerminalSession(info, action);
-            if (terminalAttempt.isAttempted()) {
-                return terminalAttempt.getResult();
-            }
-        } catch (IllegalStateException e) {
-            log.debug("Skip terminal SSH session for SFTP: {}", e.getMessage());
-        }
-        Exception lastException = null;
-        for (int attempt = 0; attempt < 2; attempt++) {
-            ClientSession session = getOrCreateSession(info);
-            try (SftpClient sftp = SftpClientFactory.instance().createSftpClient(session)) {
-                return action.apply(sftp);
-            } catch (Exception e) {
-                lastException = e;
-                invalidateSession(info);
-            }
-        }
-        throw lastException;
+    private <T> T executeWithSftp(ServerInfo info, SftpSessionManager.SftpOperation<T> operation) throws Exception {
+        String webSocketSessionId = info instanceof SftpRequest
+                ? ((SftpRequest) info).getWebSocketSessionId()
+                : null;
+        return sessionManager.execute(info, webSocketSessionId, operation);
     }
 
     @PostMapping("/list")
@@ -310,7 +135,7 @@ public class SftpController {
 
     @PostMapping("/download")
     public ResponseEntity<StreamingResponseBody> download(@RequestBody SftpRequest request) throws IOException {
-        assertSftpAllowed();
+        sessionManager.assertSftpAllowed();
         String requestedPath = normalizeRemotePath(request.getPath());
         long[] fileSize = new long[] { -1L };
         try {
@@ -463,7 +288,7 @@ public class SftpController {
      */
     @PostMapping("/download-folder")
     public ResponseEntity<StreamingResponseBody> downloadFolder(@RequestBody SftpRequest request) {
-        assertSftpAllowed();
+        sessionManager.assertSftpAllowed();
         String folderPath = request.getPath();
         // 获取文件夹名称作为 ZIP 文件名
         String folderName = folderPath.substring(folderPath.lastIndexOf('/') + 1);

@@ -1,6 +1,6 @@
 package com.gxcj.xjtool.controller;
 
-import com.gxcj.xjtool.service.OracleService;
+import com.gxcj.xjtool.service.DatabaseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +18,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class DatabaseLockController {
 
-    private final OracleService oracleService;
+    private final DatabaseService databaseService;
 
     /**
      * 查询当前锁表信息
@@ -29,7 +29,7 @@ public class DatabaseLockController {
     @GetMapping("/locked-objects")
     public Map<String, Object> getLockedObjects(@RequestParam("datasourceIndex") int datasourceIndex) {
         try {
-            List<Map<String, Object>> rows = oracleService.getLockedObjects(datasourceIndex);
+            List<Map<String, Object>> rows = databaseService.getLockedObjects(datasourceIndex);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("data", rows);
@@ -60,7 +60,7 @@ public class DatabaseLockController {
             @RequestParam("serial") String serial,
             @RequestParam("datasourceIndex") int datasourceIndex) {
         log.info("解锁请求: SID={}, Serial={}, datasource={}", sid, serial, datasourceIndex);
-        return oracleService.unlockSession(sid, serial, datasourceIndex);
+        return databaseService.unlockSession(sid, serial, datasourceIndex);
     }
 
     /**
@@ -73,7 +73,7 @@ public class DatabaseLockController {
             @RequestParam(value = "command", required = false) String command,
             @RequestParam(value = "eventType", required = false, defaultValue = "cluster_wait") String eventType) {
         try {
-            List<Map<String, Object>> rows = oracleService.getMysqlWsrepProcesses(datasourceIndex, database, command, eventType);
+            List<Map<String, Object>> rows = databaseService.getMysqlWsrepProcesses(datasourceIndex, database, command, eventType);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("data", rows);
@@ -96,7 +96,7 @@ public class DatabaseLockController {
             @RequestParam("database") String database,
             @RequestParam(value = "minSeconds", required = false, defaultValue = "5") int minSeconds) {
         try {
-            List<Map<String, Object>> rows = oracleService.getMysqlCurrentSlowSql(datasourceIndex, database, minSeconds);
+            List<Map<String, Object>> rows = databaseService.getMysqlCurrentSlowSql(datasourceIndex, database, minSeconds);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("data", rows);
@@ -119,7 +119,7 @@ public class DatabaseLockController {
             @RequestParam("database") String database,
             @RequestParam(value = "minSeconds", required = false, defaultValue = "30") int minSeconds) {
         try {
-            Map<String, Object> diagnostics = oracleService.getMysqlTransactionDiagnostics(datasourceIndex, database, minSeconds);
+            Map<String, Object> diagnostics = databaseService.getMysqlTransactionDiagnostics(datasourceIndex, database, minSeconds);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.putAll(diagnostics);
@@ -146,7 +146,7 @@ public class DatabaseLockController {
         }
         log.info("MySQL kill process request datasource={}, database={}, ids={}, user={}",
                 request.getDatasourceIndex(), request.getDatabase(), request.getIds(), username);
-        return oracleService.killMysqlProcesses(
+        return databaseService.killMysqlProcesses(
                 request.getDatasourceIndex(),
                 request.getDatabase(),
                 request.getCommand(),
@@ -164,7 +164,7 @@ public class DatabaseLockController {
         log.info("MySQL online DDL plan request datasource={}, database={}, user={}",
                 request.getDatasourceIndex(), request.getDatabase(), username);
         try {
-            return oracleService.buildMysqlOnlineDdlPlan(
+            return databaseService.buildMysqlOnlineDdlPlan(
                     request.getDatasourceIndex(),
                     request.getDatabase(),
                     request.getDdl(),

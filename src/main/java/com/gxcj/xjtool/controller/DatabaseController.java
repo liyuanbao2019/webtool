@@ -1,11 +1,11 @@
 package com.gxcj.xjtool.controller;
 
-import com.gxcj.xjtool.config.OracleConfig;
+import com.gxcj.xjtool.config.DatabaseConfig;
 import com.gxcj.xjtool.dto.ExecuteSqlRequest;
-import com.gxcj.xjtool.dto.OracleDataSourceDto;
+import com.gxcj.xjtool.dto.DataSourceDto;
 import com.gxcj.xjtool.dto.ResultEditCommitRequest;
 import com.gxcj.xjtool.dto.SqlResultResponse;
-import com.gxcj.xjtool.service.OracleService;
+import com.gxcj.xjtool.service.DatabaseService;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -27,44 +27,44 @@ import java.util.Map;
 import java.util.HashMap;
 
 /**
- * Oracle 数据库工具 API 控制器
+ * Unified database tool API. The /api/oracle mapping remains as a production compatibility alias.
  */
 @RestController
-@RequestMapping("/api/oracle")
+@RequestMapping({"/api/database", "/api/oracle"})
 @RequiredArgsConstructor
-public class OracleController {
+public class DatabaseController {
 
-    private final OracleService oracleService;
+    private final DatabaseService databaseService;
     private static final int XLSX_MAX_ROWS_PER_SHEET = 1_048_576;
 
     /**
      * 获取配置的数据源列表
      */
     @GetMapping("/datasources")
-    public List<OracleDataSourceDto> getDataSources() {
-        return oracleService.getDataSources();
+    public List<DataSourceDto> getDataSources() {
+        return databaseService.getDataSources();
     }
 
     @GetMapping("/datasources/manage")
-    public List<OracleDataSourceDto> getManageDataSources() {
-        return oracleService.getManageDataSources();
+    public List<DataSourceDto> getManageDataSources() {
+        return databaseService.getManageDataSources();
     }
 
     @PostMapping("/datasources/manage")
-    public SqlResultResponse addDataSource(@RequestBody OracleConfig.OracleDataSource request) {
-        return oracleService.addDataSource(request);
+    public SqlResultResponse addDataSource(@RequestBody DatabaseConfig.DataSourceConfig request) {
+        return databaseService.addDataSource(request);
     }
 
     @PutMapping("/datasources/manage/{index}")
     public SqlResultResponse updateDataSource(
             @PathVariable("index") int datasourceIndex,
-            @RequestBody OracleConfig.OracleDataSource request) {
-        return oracleService.updateDataSource(datasourceIndex, request);
+            @RequestBody DatabaseConfig.DataSourceConfig request) {
+        return databaseService.updateDataSource(datasourceIndex, request);
     }
 
     @DeleteMapping("/datasources/manage/{index}")
     public SqlResultResponse deleteDataSource(@PathVariable("index") int datasourceIndex) {
-        return oracleService.deleteDataSource(datasourceIndex);
+        return databaseService.deleteDataSource(datasourceIndex);
     }
 
     /**
@@ -72,7 +72,7 @@ public class OracleController {
      */
     @PostMapping("/test-connection")
     public SqlResultResponse testConnection(@RequestParam("index") int datasourceIndex) {
-        return oracleService.testConnection(datasourceIndex);
+        return databaseService.testConnection(datasourceIndex);
     }
 
     /**
@@ -80,7 +80,7 @@ public class OracleController {
      */
     @GetMapping("/datasource-type")
     public Map<String, String> getDatasourceType(@RequestParam("index") int datasourceIndex) {
-        String type = oracleService.getDatasourceType(datasourceIndex);
+        String type = databaseService.getDatasourceType(datasourceIndex);
         Map<String, String> result = new HashMap<>();
         result.put("type", type);
         return result;
@@ -96,13 +96,13 @@ public class OracleController {
         String username = (String) session.getAttribute("LOGIN_USER");
         request.setUsername(username != null ? username : "unknown");
         request.setSessionId(session.getId()); // 设置会话ID用于安全验证
-        return oracleService.executeSql(request);
+        return databaseService.executeSql(request);
     }
 
     @PostMapping("/queries/{queryId}/cancel")
     public Map<String, Object> cancelQuery(@PathVariable("queryId") String queryId,
             javax.servlet.http.HttpSession session) {
-        boolean cancelled = oracleService.cancelQuery(queryId, session.getId());
+        boolean cancelled = databaseService.cancelQuery(queryId, session.getId());
         Map<String, Object> result = new HashMap<>();
         result.put("success", cancelled);
         result.put("queryId", queryId);
@@ -115,7 +115,7 @@ public class OracleController {
             javax.servlet.http.HttpSession session) {
         String username = (String) session.getAttribute("LOGIN_USER");
         request.setUsername(username != null ? username : "unknown");
-        return oracleService.commitResultEdits(request);
+        return databaseService.commitResultEdits(request);
     }
 
     @PostMapping("/export/{format}")
@@ -130,7 +130,7 @@ public class OracleController {
         request.setPageSize(0);
         request.setExportAll(true);
 
-        SqlResultResponse executeResult = oracleService.executeSql(request);
+        SqlResultResponse executeResult = databaseService.executeSql(request);
         SqlResultResponse exportResult = resolveExportResult(executeResult);
         if (exportResult == null || !exportResult.isSuccess() || exportResult.getColumns() == null || exportResult.getRows() == null) {
             String message = executeResult != null && executeResult.getErrorMessage() != null
@@ -168,7 +168,7 @@ public class OracleController {
         // 获取当前登录用户
         String username = (String) session.getAttribute("LOGIN_USER");
         request.setUsername(username != null ? username : "unknown");
-        return oracleService.explainSql(request);
+        return databaseService.explainSql(request);
     }
 
     /**
@@ -182,7 +182,7 @@ public class OracleController {
     public List<Map<String, String>> getDatabaseObjects(
             @PathVariable String type,
             @RequestParam("datasourceIndex") int datasourceIndex) {
-        return oracleService.getDatabaseObjects(type, datasourceIndex);
+        return databaseService.getDatabaseObjects(type, datasourceIndex);
     }
 
     /**
@@ -198,7 +198,7 @@ public class OracleController {
             @PathVariable String type,
             @PathVariable String name,
             @RequestParam("datasourceIndex") int datasourceIndex) {
-        String ddl = oracleService.getObjectDDL(type, name, datasourceIndex);
+        String ddl = databaseService.getObjectDDL(type, name, datasourceIndex);
         Map<String, String> result = new HashMap<>();
         result.put("ddl", ddl);
         return result;
@@ -211,7 +211,7 @@ public class OracleController {
      */
     @PostMapping("/cache/clear")
     public Map<String, String> clearCache(@RequestParam("datasourceIndex") int datasourceIndex) {
-        oracleService.clearObjectsCache(datasourceIndex);
+        databaseService.clearObjectsCache(datasourceIndex);
         Map<String, String> result = new HashMap<>();
         result.put("message", "缓存已禁用，无需清除");
         return result;
@@ -228,7 +228,7 @@ public class OracleController {
     public List<Map<String, Object>> getTableStructure(
             @PathVariable String tableName,
             @RequestParam("datasourceIndex") int datasourceIndex) {
-        return oracleService.getTableStructure(tableName, datasourceIndex);
+        return databaseService.getTableStructure(tableName, datasourceIndex);
     }
 
     /**
@@ -242,7 +242,7 @@ public class OracleController {
     public List<Map<String, Object>> getTableIndexes(
             @PathVariable String tableName,
             @RequestParam("datasourceIndex") int datasourceIndex) {
-        return oracleService.getTableIndexes(tableName, datasourceIndex);
+        return databaseService.getTableIndexes(tableName, datasourceIndex);
     }
 
     /**
@@ -256,7 +256,7 @@ public class OracleController {
     public Map<String, String> getCreateTableSQL(
             @PathVariable String tableName,
             @RequestParam("datasourceIndex") int datasourceIndex) {
-        String sql = oracleService.getCreateTableSQL(tableName, datasourceIndex);
+        String sql = databaseService.getCreateTableSQL(tableName, datasourceIndex);
         Map<String, String> result = new HashMap<>();
         result.put("sql", sql);
         return result;
@@ -273,7 +273,7 @@ public class OracleController {
     public List<Map<String, Object>> getTablePartitions(
             @PathVariable String tableName,
             @RequestParam("datasourceIndex") int datasourceIndex) {
-        return oracleService.getTablePartitions(tableName, datasourceIndex);
+        return databaseService.getTablePartitions(tableName, datasourceIndex);
     }
 
     /**
@@ -287,7 +287,7 @@ public class OracleController {
     public List<Map<String, Object>> getTableTriggers(
             @PathVariable String tableName,
             @RequestParam("datasourceIndex") int datasourceIndex) {
-        return oracleService.getTableTriggers(tableName, datasourceIndex);
+        return databaseService.getTableTriggers(tableName, datasourceIndex);
     }
 
     private SqlResultResponse resolveExportResult(SqlResultResponse result) {

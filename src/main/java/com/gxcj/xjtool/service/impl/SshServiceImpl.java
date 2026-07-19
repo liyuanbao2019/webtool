@@ -9,8 +9,7 @@ import com.gxcj.xjtool.model.WebSshData;
 import com.gxcj.xjtool.service.SshService;
 import com.gxcj.xjtool.service.SshAuditService;
 import com.gxcj.xjtool.service.DangerousCommandTokenService;
-import com.gxcj.xjtool.service.ScriptSecurityService;
-import com.gxcj.xjtool.config.SshSecurityConfig;
+import com.gxcj.xjtool.service.SshScriptSecurityHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.channel.ChannelShell;
@@ -28,14 +27,11 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
@@ -103,8 +99,11 @@ public class SshServiceImpl implements SshService {
     private SshSecurityConfig securityConfig;
 
     // 脚本安全扫描服务
-    @Autowired(required = false)
-    private ScriptSecurityService scriptSecurityService;
+    @Autowired
+    private SshScriptSecurityHandler scriptSecurityHandler;
+
+    @Autowired
+    private SshScriptFileReader scriptFileReader;
 
     // 服务器配置（用于查找 su/sudo 密码映射）
     @Autowired
@@ -329,7 +328,7 @@ public class SshServiceImpl implements SshService {
                 }
                 sshConnection.session = clientSession;
                 sshConnection.sshRemoteUsername = webSshData.getUsername();
-                sshConnection.shellWorkingDirectory = defaultUnixHomeForUser(webSshData.getUsername());
+                sshConnection.shellWorkingDirectory = UnixPathSupport.defaultHome(webSshData.getUsername());
 
                 // 从 ServerConfig 中查找此服务器的 su/sudo 密码映射
                 boolean suLoaded = false;
@@ -745,8 +744,10 @@ public class SshServiceImpl implements SshService {
                 // 先拦截并扫描脚本内容，发现危险操作则阻断并要求确认
                 // ============================================================
                 if (hasEnter && !commandText.isEmpty()) {
-                    ScriptBlockResult scriptBlock = checkScriptExecution(session, webSshData, commandText, connection);
-                    if (scriptBlock != null && scriptBlock.blocked) {
+                    SshScriptSecurityHandler.Decision scriptBlock = scriptSecurityHandler.check(
+                            session, webSshData, commandText, connection.charset,
+                            bytes -> sendMessage(session, bytes));
+                    if (scriptBlock != null && scriptBlock.isBlocked()) {
                         // 脚本被阻断，不执行
                         connection.commandBuffer.setLength(0);
                         return;
@@ -1705,80 +1706,6 @@ public class SshServiceImpl implements SshService {
     }
 
     /** Linux 下常见默认家目录（与真实 HOME 可能不一致，后续靠 cd 纠正） */
-    private static String defaultUnixHomeForUser(String user) {
-        if (user == null || user.trim().isEmpty()) {
-            return "/";
-        }
-        if ("root".equalsIgnoreCase(user.trim())) {
-            return "/root";
-        }
-        return "/home/" + user.trim();
-    }
-
-    private static String unixBasename(String path) {
-        if (path == null || path.isEmpty()) {
-            return null;
-        }
-        String p = path.trim();
-        int i = p.lastIndexOf('/');
-        return i >= 0 ? p.substring(i + 1) : p;
-    }
-
-    /**
-     * 规范化 Unix 风格路径（处理 .、..、多余斜杠）
-     */
-    private static String normalizeUnixPath(String path) {
-        if (path == null || path.isEmpty()) {
-            return "/";
-        }
-        String p = path.trim().replace('\\', '/');
-        boolean absolute = p.startsWith("/");
-        String[] parts = p.split("/");
-        Deque<String> stack = new ArrayDeque<>();
-        for (String part : parts) {
-            if (part.isEmpty() || ".".equals(part)) {
-                continue;
-            }
-            if ("..".equals(part)) {
-                if (!stack.isEmpty()) {
-                    stack.pollLast();
-                }
-            } else {
-                stack.addLast(part);
-            }
-        }
-        StringBuilder sb = new StringBuilder();
-        if (absolute) {
-            sb.append('/');
-        }
-        int i = 0;
-        for (String s : stack) {
-            if (i++ > 0) {
-                sb.append('/');
-            }
-            sb.append(s);
-        }
-        if (sb.length() == 0) {
-            return absolute ? "/" : ".";
-        }
-        return sb.toString();
-    }
-
-    private static String unixParentDir(String absPath) {
-        String n = normalizeUnixPath(absPath);
-        if ("/".equals(n)) {
-            return "/";
-        }
-        int i = n.lastIndexOf('/');
-        if (i <= 0) {
-            return "/";
-        }
-        return n.substring(0, i);
-    }
-
-    /**
-     * 根据用户已提交到 SSH 的一行命令更新 {@link SshConnection#shellWorkingDirectory}（仅处理常见 cd 形式）
-     */
     private void updateShellWorkingDirectoryFromCd(SshConnection c, String line) {
         if (c == null || c.shellWorkingDirectory == null || line == null) {
             return;
@@ -1793,14 +1720,14 @@ public class SshServiceImpl implements SshService {
         if (t.length() > 2 && !Character.isWhitespace(t.charAt(2))) {
             return;
         }
-        String home = defaultUnixHomeForUser(c.sshRemoteUsername);
+        String home = UnixPathSupport.defaultHome(c.sshRemoteUsername);
         String rest = t.substring(2).trim();
         if (rest.isEmpty() || "~".equals(rest)) {
             c.shellWorkingDirectory = home;
             return;
         }
         if (rest.startsWith("~/")) {
-            c.shellWorkingDirectory = normalizeUnixPath(home + rest.substring(1));
+            c.shellWorkingDirectory = UnixPathSupport.normalize(home + rest.substring(1));
             return;
         }
         if (rest.startsWith("~") && rest.length() > 1) {
@@ -1822,11 +1749,11 @@ public class SshServiceImpl implements SshService {
             return;
         }
         if ("..".equals(rest)) {
-            c.shellWorkingDirectory = unixParentDir(c.shellWorkingDirectory);
+            c.shellWorkingDirectory = UnixPathSupport.parent(c.shellWorkingDirectory);
             return;
         }
         if (rest.startsWith("/")) {
-            c.shellWorkingDirectory = normalizeUnixPath(rest);
+            c.shellWorkingDirectory = UnixPathSupport.normalize(rest);
             return;
         }
         if (rest.startsWith("./")) {
@@ -1834,7 +1761,7 @@ public class SshServiceImpl implements SshService {
         }
         String base = c.shellWorkingDirectory.endsWith("/") ? c.shellWorkingDirectory.substring(0,
                 c.shellWorkingDirectory.length() - 1) : c.shellWorkingDirectory;
-        c.shellWorkingDirectory = normalizeUnixPath(base + "/" + rest);
+        c.shellWorkingDirectory = UnixPathSupport.normalize(base + "/" + rest);
     }
 
     /**
@@ -1852,53 +1779,8 @@ public class SshServiceImpl implements SshService {
             log.warn("读取脚本文件失败：SSH会话不存在或未认证, sessionId={}", session.getId());
             return null;
         }
-
-        // 安全检查：脚本路径不能包含危险字符
-        if (scriptPath == null || scriptPath.trim().isEmpty()) {
-            log.warn("读取脚本文件失败：脚本路径为空, sessionId={}", session.getId());
-            return null;
-        }
-
-        String trimmed = scriptPath.trim();
-
-        // 禁止访问 /dev, /proc, /sys 等虚拟文件系统
-        if (trimmed.startsWith("/dev/") || trimmed.startsWith("/proc/") || trimmed.startsWith("/sys/")) {
-            log.warn("读取脚本文件失败：禁止访问虚拟文件系统路径: {}", trimmed);
-            return null;
-        }
-
-        Charset charset = resolveCharset(charsetName);
-        ClientSession clientSession = connection.session;
-
-        log.info("通过SFTP读取远程脚本文件: sessionId={}, requestPath={}, shellCwd={}", session.getId(), trimmed,
-                connection.shellWorkingDirectory);
-
-        try (SftpClient sftp = SftpClientFactory.instance().createSftpClient(clientSession)) {
-            String content = tryReadScriptAtSftpPath(sftp, trimmed, charset, session.getId());
-            if (content != null) {
-                return new ScriptReadResult(content, trimmed);
-            }
-            // 侧栏 SFTP 路径与终端里 cd 后的目录常不一致；用会话内跟踪的 shell 当前目录 + 文件名再试
-            String name = unixBasename(trimmed);
-            if (name != null && !name.isEmpty() && connection.shellWorkingDirectory != null) {
-                String alt = normalizeUnixPath(connection.shellWorkingDirectory + "/" + name);
-                if (!alt.equals(trimmed) && !alt.startsWith("/dev/") && !alt.startsWith("/proc/")
-                        && !alt.startsWith("/sys/")) {
-                    log.info("SFTP 首次路径未读到文件，按 shell 推断目录重试: sessionId={}, altPath={}", session.getId(),
-                            alt);
-                    content = tryReadScriptAtSftpPath(sftp, alt, charset, session.getId());
-                    if (content != null) {
-                        log.info("SFTP 已按 shell 目录读取成功: requestPath={} -> resolvedPath={}", trimmed, alt);
-                        return new ScriptReadResult(content, alt);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.error("通过SFTP读取脚本文件失败: sessionId={}, path={}, error={}",
-                    session.getId(), trimmed, e.getMessage());
-            return null;
-        }
-        return null;
+        return scriptFileReader.read(connection.session, session.getId(), scriptPath,
+                connection.shellWorkingDirectory, resolveCharset(charsetName));
     }
 
     @Override
@@ -1922,241 +1804,4 @@ public class SshServiceImpl implements SshService {
         }
     }
 
-    /**
-     * 从已打开的 SFTP 客户端读取单个脚本文件（失败返回 null，不记 error 级别日志）
-     */
-    private String tryReadScriptAtSftpPath(SftpClient sftp, String path, Charset charset, String sessionId) {
-        try {
-            SftpClient.Attributes attrs = sftp.stat(path);
-            if (attrs.isDirectory()) {
-                log.warn("读取脚本文件失败：目标路径是目录而非文件: {}", path);
-                return null;
-            }
-            final long MAX_SCRIPT_SIZE = 1024 * 1024; // 1MB
-            if (attrs.getSize() > MAX_SCRIPT_SIZE) {
-                log.warn("读取脚本文件失败：文件过大 ({} 字节)，超过最大限制 {} 字节: {}",
-                        attrs.getSize(), MAX_SCRIPT_SIZE, path);
-                return null;
-            }
-            try (InputStream is = sftp.read(path);
-                 ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-                byte[] buffer = new byte[8192];
-                int len;
-                while ((len = is.read(buffer)) != -1) {
-                    baos.write(buffer, 0, len);
-                }
-                String content = baos.toString(charset.name());
-                log.info("成功读取远程脚本文件: {} ({} 字节), sessionId={}", path, content.length(), sessionId);
-                return content;
-            }
-        } catch (Exception e) {
-            log.debug("SFTP 读取路径失败: sessionId={}, path={}, error={}", sessionId, path, e.getMessage());
-            return null;
-        }
-    }
-
-    // ============================================================
-    // 脚本执行拦截相关
-    // ============================================================
-
-    /**
-     * 脚本执行拦截结果
-     */
-    private static class ScriptBlockResult {
-        boolean blocked;       // 是否阻断
-        boolean needConfirm;   // 是否需要确认
-        String message;        // 提示消息
-        String riskLevel;      // 危险等级
-
-        static ScriptBlockResult allow() {
-            ScriptBlockResult r = new ScriptBlockResult();
-            r.blocked = false;
-            r.needConfirm = false;
-            return r;
-        }
-
-        static ScriptBlockResult block(String msg, String level) {
-            ScriptBlockResult r = new ScriptBlockResult();
-            r.blocked = true;
-            r.message = msg;
-            r.riskLevel = level;
-            return r;
-        }
-
-        static ScriptBlockResult confirm(String msg, String level) {
-            ScriptBlockResult r = new ScriptBlockResult();
-            r.blocked = true;
-            r.needConfirm = true;
-            r.message = msg;
-            r.riskLevel = level;
-            return r;
-        }
-    }
-
-    /**
-     * 检测并处理脚本执行命令
-     * 当用户执行 sh/bash/./ 等脚本执行命令时，拦截并扫描脚本内容
-     *
-     * @return null表示不拦截直接放行，ScriptBlockResult表示拦截结果
-     */
-    private ScriptBlockResult checkScriptExecution(WebSocketSession session, WebSshData webSshData,
-                                                   String commandText, SshConnection connection) {
-        // 脚本执行触发命令检测（sh/bash/zsh/./source + 脚本）
-        if (!isScriptExecCommand(commandText)) {
-            return null; // 非脚本执行命令，不拦截
-        }
-
-        // 脚本扫描服务未启用时放行
-        if (scriptSecurityService == null || securityConfig == null || !securityConfig.isScriptScanEnabled()) {
-            return null;
-        }
-
-        log.info("检测到脚本执行命令: {}", commandText);
-
-        // 如果前端已携带了确认Token，说明用户已完成确认流程
-        String confirmToken = webSshData.getScriptConfirmToken();
-        String confirmText = webSshData.getScriptConfirmText();
-        if (confirmToken != null && !confirmToken.isEmpty() && confirmText != null) {
-            // 验证确认Token
-            String httpSessionId = (String) session.getAttributes().get("HTTP.SESSION.ID");
-            String verifySessionId = (httpSessionId != null && !httpSessionId.isEmpty()) ? httpSessionId : session.getId();
-
-            if (tokenService != null && tokenService.validateAndConsumeToken(verifySessionId, confirmText, confirmToken)) {
-                log.info("脚本执行确认Token验证通过: {}", commandText);
-                return ScriptBlockResult.allow();
-            } else {
-                // Token验证失败，发送拒绝消息
-                String rejectMsg = "\r\n\033[1;31m⚠️  脚本执行被拒绝：确认Token无效或已过期，请重新确认\033[0m\r\n";
-                sendMessage(session, rejectMsg.getBytes(connection.charset));
-                return ScriptBlockResult.block("脚本确认Token无效", "critical");
-            }
-        }
-
-        // 执行脚本内容扫描
-        com.gxcj.xjtool.dto.ScriptScanResult scanResult = scriptSecurityService.scanCommand(commandText);
-
-        if (scanResult.isPassed()) {
-            // 脚本安全，直接放行
-            return ScriptBlockResult.allow();
-        }
-
-        String riskLevel = scanResult.getRiskLevel();
-        String message = scanResult.getMessage();
-
-        // 根据配置决定阻断行为（blockCriticalScriptOps=true 时，high 等级也阻断）
-        if (securityConfig.isBlockCriticalScriptOps() && "high".equals(riskLevel)) {
-            String blockMsg = String.format(
-                    "\r\n\033[1;31m========================================\033[0m\r\n" +
-                    "\033[1;31m⚠️  高危操作！脚本执行已被系统阻断！\033[0m\r\n" +
-                    "\033[1;31m========================================\033[0m\r\n" +
-                    "\r\n检测到危险等级: \033[1;33m%s\033[0m\r\n" +
-                    "\r\n%s\r\n\r\n" +
-                    "\033[1;31m该操作风险极高，已被系统阻断执行！\033[0m\r\n" +
-                    "\r\n如确需执行，请联系管理员授权。\r\n",
-                    com.gxcj.xjtool.service.ScriptSecurityService.getRiskLevelLabel(riskLevel),
-                    formatDangerousOpsForDisplay(scanResult.getDangerousOperations()));
-
-            sendMessage(session, blockMsg.getBytes(connection.charset));
-            log.warn("高危脚本执行被阻断（blockCriticalScriptOps=true）: sessionId={}, command={}",
-                    session.getId(), commandText);
-            return ScriptBlockResult.block(message, riskLevel);
-        }
-
-        // high/medium：需要用户确认
-        String confirmMsg = String.format(
-                "\r\n\033[1;33m========================================\033[0m\r\n" +
-                "\033[1;33m⚠️  检测到脚本包含危险操作！\033[0m\r\n" +
-                "\033[1;33m========================================\033[0m\r\n" +
-                "\r\n危险等级: \033[1;33m%s\033[0m\r\n" +
-                "\r\n%s\r\n" +
-                "\r\n如确认脚本安全，请在Web界面点击\"确认执行\"按钮。\r\n" +
-                "\r\n脚本命令: \033[1;36m%s\033[0m\r\n",
-                com.gxcj.xjtool.service.ScriptSecurityService.getRiskLevelLabel(riskLevel),
-                message,
-                commandText.length() > 200 ? commandText.substring(0, 200) + "..." : commandText);
-
-        sendMessage(session, confirmMsg.getBytes(connection.charset));
-
-        // 发送特殊消息给前端，触发确认弹窗（带上脚本路径供前端显示）
-        String scriptPath = webSshData.getScriptPath();
-        sendScriptConfirmRequest(session, scanResult, commandText, scriptPath);
-
-        log.warn("危险脚本执行被阻断，需确认: sessionId={}, riskLevel={}, operations={}",
-                session.getId(), riskLevel, scanResult.getDangerousOperations().size());
-
-        return ScriptBlockResult.confirm(message, riskLevel);
-    }
-
-    /**
-     * 格式化危险操作列表为终端显示格式
-     */
-    private String formatDangerousOpsForDisplay(List<com.gxcj.xjtool.dto.ScriptScanResult.DangerousOperation> operations) {
-        if (operations == null || operations.isEmpty()) {
-            return "未知危险操作";
-        }
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < Math.min(operations.size(), 5); i++) {
-            com.gxcj.xjtool.dto.ScriptScanResult.DangerousOperation op = operations.get(i);
-            sb.append(String.format("  %d. [%s] %s\r\n    操作: %s\r\n    建议: %s\r\n",
-                    i + 1,
-                    op.getRiskLevel().toUpperCase(),
-                    op.getDescription(),
-                    op.getOriginalText(),
-                    op.getSuggestion()));
-        }
-        if (operations.size() > 5) {
-            sb.append("  ... 还有 ").append(operations.size() - 5).append(" 个危险操作\r\n");
-        }
-        return sb.toString();
-    }
-
-    /**
-     * 向前端发送脚本确认请求
-     * 发送特殊格式的JSON消息，前端收到后弹出确认对话框
-     */
-    private void sendScriptConfirmRequest(WebSocketSession session,
-                                          com.gxcj.xjtool.dto.ScriptScanResult scanResult,
-                                          String commandText, String scriptPath) {
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-
-            Map<String, Object> confirmRequest = new java.util.HashMap<>();
-            confirmRequest.put("type", "script_confirm_required");
-            confirmRequest.put("riskLevel", scanResult.getRiskLevel());
-            confirmRequest.put("riskLevelLabel", com.gxcj.xjtool.service.ScriptSecurityService.getRiskLevelLabel(scanResult.getRiskLevel()));
-            confirmRequest.put("riskLevelColor", com.gxcj.xjtool.service.ScriptSecurityService.getRiskLevelColor(scanResult.getRiskLevel()));
-            confirmRequest.put("message", scanResult.getMessage());
-            confirmRequest.put("commandText", commandText.length() > 200 ? commandText.substring(0, 200) + "..." : commandText);
-            confirmRequest.put("operations", scanResult.getDangerousOperations());
-            confirmRequest.put("needConfirm", scanResult.isNeedConfirm());
-            if (scriptPath != null && !scriptPath.isEmpty()) {
-                confirmRequest.put("scriptPath", scriptPath);
-            }
-
-            String json = mapper.writeValueAsString(confirmRequest);
-            session.sendMessage(new TextMessage(json));
-
-            log.debug("已向前端发送脚本确认请求: sessionId={}", session.getId());
-        } catch (Exception e) {
-            log.error("发送脚本确认请求失败: {}", e.getMessage(), e);
-        }
-    }
-
-    /**
-     * 判断是否是脚本执行命令
-     */
-    private boolean isScriptExecCommand(String command) {
-        if (command == null || command.trim().isEmpty()) {
-            return false;
-        }
-        String trimmed = command.trim();
-        // 检测常见的脚本执行格式
-        // sh -c "..."  bash -c "..."  ./script.sh  bash script.sh  source script.sh
-        return trimmed.matches("(?i)^(sh|bash|zsh|dash|ksh|source|\\.)\\s+.*") ||
-               trimmed.matches("(?i)^\\./.*") ||
-               trimmed.matches("(?i)^bash\\s+.*") ||
-               trimmed.matches("(?i)^sh\\s+.*") ||
-               trimmed.matches("(?i)^zsh\\s+.*") ||
-               trimmed.matches("(?i)^source\\s+.*");
-    }
 }
