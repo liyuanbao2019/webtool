@@ -2,6 +2,7 @@ package com.gxcj.xjtool;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cache.annotation.EnableCaching;
 
@@ -13,7 +14,7 @@ import org.springframework.cache.annotation.EnableCaching;
  * @version 1.0.0-SNAPSHOT
  * @since 2026-01-16
  */
-@SpringBootApplication
+@SpringBootApplication(exclude = DataSourceAutoConfiguration.class)
 @EnableConfigurationProperties
 @EnableCaching
 public class XjToolApplication {

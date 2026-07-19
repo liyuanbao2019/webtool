@@ -113,6 +113,32 @@ public class OracleServiceImpl implements OracleService {
     private static final Pattern MYSQL_JDBC_URL_PATTERN = Pattern.compile(
             "^jdbc:mysql://([^:/?]+)(?::(\\d+))?/([^?]+).*", Pattern.CASE_INSENSITIVE);
 
+    private static final String RAC_LOCK_QUERY_SQL =
+        "SELECT " +
+        "    b.inst_id, " +
+        "    c.object_name, " +
+        "    b.machine, " +
+        "    b.sid, " +
+        "    b.serial# as serial_num, " +
+        "    b.username, " +
+        "    b.program, " +
+        "    b.status, " +
+        "    b.event, " +
+        "    b.blocking_instance, " +
+        "    b.blocking_session, " +
+        "    a.locked_mode, " +
+        "    (SELECT NVL(MAX(l.ctime), 0) FROM gv$lock l WHERE l.inst_id = b.inst_id AND l.sid = b.sid AND l.type IN ('TM', 'TX')) as lock_duration_seconds, " +
+        "    TO_CHAR(b.logon_time, 'YYYY-MM-DD HH24:MI:SS') as logon_time " +
+        "FROM gv$locked_object a " +
+        "JOIN gv$session b ON b.inst_id = a.inst_id AND b.sid = a.session_id " +
+        "JOIN dba_objects c ON a.object_id = c.object_id " +
+        "WHERE c.owner NOT IN ('SYS', 'SYSTEM', 'SYSMAN', 'DBSNMP', 'OUTLN', 'XDB', 'WMSYS', 'EXFSYS', 'CTXSYS', 'ANONYMOUS', 'ORDSYS', 'ORDPLUGINS', 'MDSYS', 'APPQOSSYS', 'AUDSYS', 'DBSFWUSER', 'OJVMSYS', 'SYSBACKUP', 'SYSDG', 'SYSKM') " +
+        "  AND c.object_name NOT LIKE '%$%' " +
+        "  AND c.object_name NOT LIKE 'SYS_%' " +
+        "  AND (UPPER(NVL(b.event, ' ')) LIKE 'ENQ: TM%' OR UPPER(NVL(b.event, ' ')) LIKE 'ENQ: TX%') " +
+        "  AND (SELECT NVL(MAX(l.ctime), 0) FROM gv$lock l WHERE l.inst_id = b.inst_id AND l.sid = b.sid AND l.type IN ('TM', 'TX')) > 60 " +
+        "ORDER BY lock_duration_seconds DESC";
+
     private static final String LOCK_QUERY_SQL =
         "SELECT " +
         "    c.object_name, " +
@@ -3263,39 +3289,80 @@ public class OracleServiceImpl implements OracleService {
     @Override
     public List<Map<String, Object>> getLockedObjects(int datasourceIndex) {
         OracleConfig.OracleDataSource ds = getDataSourceConfig(datasourceIndex);
-        if (ds == null || !"ORACLE".equalsIgnoreCase(ds.getType())) {
-            return Collections.emptyList();
-        }
+        if (ds == null) return Collections.emptyList();
+        String dbType = ds.getType() == null ? "ORACLE" : ds.getType().toUpperCase(Locale.ROOT);
+        if ("DM".equals(dbType)) return queryDmLockedObjects(datasourceIndex);
+        if (DatabaseDialect.isMySQL(dbType)) return queryMysqlLockedObjects(datasourceIndex);
+        if (!"ORACLE".equals(dbType)) return Collections.emptyList();
 
-        List<String> nodes = getNodeAddresses(datasourceIndex);
+        // RAC 的 GV$ 视图可从当前连接一次读取全部实例，避免逐个连接 slave 节点导致
+        // “无锁也长时间转圈”。权限不足时 queryLocksOnNode 会自动回退 V$ 本实例视图。
+        return queryLocksOnNode(datasourceIndex, null);
+    }
 
-        // 统一并行查询，节点数 ≥ 1 时均走并行（内部根据实际情况串行或并行）
-        List<Future<List<Map<String, Object>>>> futures = new ArrayList<>();
-        for (String node : nodes) {
-            final String n = node;
-            futures.add(lockQueryExecutor.submit(() -> queryLocksOnNode(datasourceIndex, n)));
-        }
-
-        Map<String, Map<String, Object>> deduped = new LinkedHashMap<>();
-        for (Future<List<Map<String, Object>>> f : futures) {
-            try {
-                List<Map<String, Object>> rows = f.get(30, TimeUnit.SECONDS);
-                for (Map<String, Object> row : rows) {
-                    String key = row.get("SID") + ":" + row.get("SERIAL_NUM");
-                    Map<String, Object> existing = deduped.get(key);
-                    if (existing == null || compareLockDuration(row, existing) > 0) {
-                        deduped.put(key, row);
-                    }
+    /** DM exposes active object locks through V$LOCK; normalize them to the common lock dialog columns. */
+    private List<Map<String, Object>> queryDmLockedObjects(int datasourceIndex) {
+        String sql = "SELECT o.NAME AS OBJECT_NAME, s.CLNT_IP AS MACHINE, s.SESS_ID AS SID, " +
+                "s.SESS_SEQ AS SERIAL_NUM, s.USER_NAME AS USERNAME, s.APPNAME AS PROGRAM, " +
+                "CASE WHEN l.BLOCKED=1 THEN 'WAITING' ELSE s.STATE END AS STATUS, " +
+                "l.LTYPE || ' ' || l.LMODE AS EVENT, NULL AS BLOCKING_SESSION, l.LMODE AS LOCKED_MODE, " +
+                "DATEDIFF(SS, s.LAST_RECV_TIME, SYSDATE) AS LOCK_DURATION_SECONDS, s.CREATE_TIME AS LOGON_TIME " +
+                "FROM V$LOCK l LEFT JOIN SYSOBJECTS o ON o.ID=l.TABLE_ID " +
+                "LEFT JOIN V$SESSIONS s ON s.TRX_ID=l.TRX_ID " +
+                "WHERE l.TABLE_ID >= 0 AND s.SESS_ID IS NOT NULL " +
+                "AND (l.BLOCKED=1 OR EXISTS (SELECT 1 FROM V$TRXWAIT w WHERE w.WAIT_FOR_ID=l.TRX_ID)) " +
+                "ORDER BY l.BLOCKED DESC, LOCK_DURATION_SECONDS DESC";
+        try (Connection conn = getConnectionByIndex(datasourceIndex);
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setQueryTimeout(30);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return readRows(rs);
+            }
+        } catch (SQLException first) {
+            log.warn("DM lock dependency query failed, falling back to blocked locks: {}", first.getMessage());
+            String fallback = "SELECT o.NAME AS OBJECT_NAME, s.CLNT_IP AS MACHINE, s.SESS_ID AS SID, " +
+                    "s.SESS_SEQ AS SERIAL_NUM, s.USER_NAME AS USERNAME, s.APPNAME AS PROGRAM, s.STATE AS STATUS, " +
+                    "l.LTYPE || ' ' || l.LMODE AS EVENT, NULL AS BLOCKING_SESSION, l.LMODE AS LOCKED_MODE, " +
+                    "DATEDIFF(SS, s.LAST_RECV_TIME, SYSDATE) AS LOCK_DURATION_SECONDS, s.CREATE_TIME AS LOGON_TIME " +
+                    "FROM V$LOCK l LEFT JOIN SYSOBJECTS o ON o.ID=l.TABLE_ID " +
+                    "LEFT JOIN V$SESSIONS s ON s.TRX_ID=l.TRX_ID WHERE l.BLOCKED=1 ORDER BY LOCK_DURATION_SECONDS DESC";
+            try (Connection conn = getConnectionByIndex(datasourceIndex);
+                 PreparedStatement stmt = conn.prepareStatement(fallback)) {
+                stmt.setQueryTimeout(30);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    return readRows(rs);
                 }
-            } catch (Exception e) {
-                log.warn("节点锁查询失败: {}", e.getMessage());
+            } catch (SQLException e) {
+                throw new IllegalStateException("查询达梦锁信息失败: " + e.getMessage(), e);
             }
         }
+    }
 
-        // 清理已超时的 slave 池（懒清理，避免物理连接长期占用）
-        evictExpiredSlavePools();
-
-        return new ArrayList<>(deduped.values());
+    /** MySQL 8 uses performance_schema data_lock_waits instead of Oracle-style locked object views. */
+    private List<Map<String, Object>> queryMysqlLockedObjects(int datasourceIndex) {
+        String sql = "SELECT CONCAT(COALESCE(dl.OBJECT_SCHEMA,''), '.', COALESCE(dl.OBJECT_NAME,'')) AS OBJECT_NAME, " +
+                "p.HOST AS MACHINE, p.ID AS SID, '' AS SERIAL_NUM, p.USER AS USERNAME, p.COMMAND AS PROGRAM, " +
+                "'BLOCKING' AS STATUS, CONCAT(dl.LOCK_TYPE, ' ', dl.LOCK_MODE) AS EVENT, " +
+                "req.PROCESSLIST_ID AS BLOCKING_SESSION, dl.LOCK_MODE AS LOCKED_MODE, " +
+                "COALESCE(TIMESTAMPDIFF(SECOND, trx.TRX_STARTED, NOW()), p.TIME) AS LOCK_DURATION_SECONDS, " +
+                "trx.TRX_STARTED AS LOGON_TIME " +
+                "FROM performance_schema.data_lock_waits w " +
+                "JOIN performance_schema.data_locks dl ON dl.ENGINE=w.ENGINE " +
+                "AND dl.ENGINE_LOCK_ID=w.BLOCKING_ENGINE_LOCK_ID " +
+                "JOIN performance_schema.threads bt ON bt.THREAD_ID=w.BLOCKING_THREAD_ID " +
+                "JOIN performance_schema.threads req ON req.THREAD_ID=w.REQUESTING_THREAD_ID " +
+                "JOIN information_schema.PROCESSLIST p ON p.ID=bt.PROCESSLIST_ID " +
+                "LEFT JOIN information_schema.INNODB_TRX trx ON trx.TRX_MYSQL_THREAD_ID=p.ID " +
+                "WHERE p.ID<>CONNECTION_ID() ORDER BY LOCK_DURATION_SECONDS DESC";
+        try (Connection conn = getConnectionByIndex(datasourceIndex);
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setQueryTimeout(30);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return readRows(rs);
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("查询 MySQL 锁等待失败（需要 performance_schema 查询权限）: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -3311,11 +3378,26 @@ public class OracleServiceImpl implements OracleService {
             if (nodeAddress != null) {
                 conn = getConnectionByNode(datasourceIndex, nodeAddress);
             } else {
-                conn = getConnectionByIndex(datasourceIndex);
+                OracleConfig.OracleDataSource datasource = getDataSourceConfig(datasourceIndex);
+                if (datasource == null) throw new IllegalArgumentException("数据源不存在: " + datasourceIndex);
+                Properties properties = new Properties();
+                properties.setProperty("user", datasource.getUsername());
+                properties.setProperty("password", datasource.getPassword());
+                properties.setProperty("oracle.net.CONNECT_TIMEOUT", "5000");
+                properties.setProperty("oracle.jdbc.ReadTimeout", "10000");
+                conn = DriverManager.getConnection(datasource.getUrl(), properties);
             }
             stmt = conn.createStatement();
-            stmt.setQueryTimeout(30);
-            rs = stmt.executeQuery(LOCK_QUERY_SQL);
+            stmt.setQueryTimeout(10);
+            try {
+                rs = stmt.executeQuery(RAC_LOCK_QUERY_SQL);
+            } catch (SQLException globalViewError) {
+                log.debug("GV$ lock query unavailable, falling back to V$ views: {}", globalViewError.getMessage());
+                closeResources(rs, stmt, null);
+                stmt = conn.createStatement();
+                stmt.setQueryTimeout(10);
+                rs = stmt.executeQuery(LOCK_QUERY_SQL);
+            }
             ResultSetMetaData meta = rs.getMetaData();
             int cols = meta.getColumnCount();
             while (rs.next()) {
@@ -3330,6 +3412,9 @@ public class OracleServiceImpl implements OracleService {
             }
         } catch (Exception e) {
             log.error("查询锁表失败 node={}: {}", nodeAddress, e.getMessage());
+            if (nodeAddress == null) {
+                throw new IllegalStateException("查询 Oracle 锁信息失败: " + e.getMessage(), e);
+            }
         } finally {
             closeResources(rs, stmt, conn); // 连接归还给池（slave 池定期自动销毁）
         }
@@ -3367,31 +3452,58 @@ public class OracleServiceImpl implements OracleService {
     public Map<String, Object> unlockSession(String sid, String serial, int datasourceIndex) {
         Map<String, Object> res = new LinkedHashMap<>();
         OracleConfig.OracleDataSource ds = getDataSourceConfig(datasourceIndex);
-        if (ds == null || !"ORACLE".equalsIgnoreCase(ds.getType())) {
+        if (ds == null) {
             res.put("success", false);
-            res.put("message", "仅 Oracle 数据源支持解锁操作");
+            res.put("message", "数据源不存在");
+            return res;
+        }
+
+        String dbType = ds.getType() == null ? "ORACLE" : ds.getType().toUpperCase(Locale.ROOT);
+        final long sessionId;
+        try {
+            sessionId = Long.parseLong(sid);
+        } catch (NumberFormatException e) {
+            res.put("success", false);
+            res.put("message", "非法会话 ID");
+            return res;
+        }
+        if ("DM".equals(dbType)) return closeDmSession(sessionId, datasourceIndex, ds);
+        if (DatabaseDialect.isMySQL(dbType)) return killMysqlSession(sessionId, datasourceIndex, ds);
+        if (!"ORACLE".equals(dbType)) {
+            res.put("success", false);
+            res.put("message", "当前数据库类型不支持会话解锁");
+            return res;
+        }
+
+        final long serialNumber;
+        try {
+            serialNumber = Long.parseLong(serial);
+        } catch (NumberFormatException e) {
+            res.put("success", false);
+            res.put("message", "非法 Serial#");
             return res;
         }
 
         // 先检查会话是否存在
-        String checkSql = "SELECT COUNT(*) FROM v$session WHERE sid = " + sid + " AND serial# = " + serial;
-        String killSql = "ALTER SYSTEM KILL SESSION '" + sid + "," + serial + "'";
+        String checkSql = "SELECT COUNT(*) FROM v$session WHERE sid = ? AND serial# = ?";
+        String killSql = "ALTER SYSTEM KILL SESSION '" + sessionId + "," + serialNumber + "'";
         Connection conn = null;
         Statement stmt = null;
         ResultSet rs = null;
 
         try {
             conn = getConnectionByIndex(datasourceIndex);
-            stmt = conn.createStatement();
-            stmt.setQueryTimeout(10);
-
-            rs = stmt.executeQuery(checkSql);
+            PreparedStatement checkStatement = conn.prepareStatement(checkSql);
+            checkStatement.setQueryTimeout(10);
+            checkStatement.setLong(1, sessionId);
+            checkStatement.setLong(2, serialNumber);
+            rs = checkStatement.executeQuery();
             if (!rs.next() || rs.getInt(1) == 0) {
                 res.put("success", false);
                 res.put("message", "会话 SID=" + sid + ", Serial#=" + serial + " 不存在或已消失");
                 return res;
             }
-            closeResources(rs, stmt, null);
+            closeResources(rs, checkStatement, null);
             rs = null;
             stmt = null;
 
@@ -3410,6 +3522,39 @@ public class OracleServiceImpl implements OracleService {
             closeResources(rs, stmt, conn);
         }
         return res;
+    }
+
+    private Map<String, Object> closeDmSession(long sessionId, int datasourceIndex, OracleConfig.OracleDataSource ds) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try (Connection conn = getConnectionByIndex(datasourceIndex);
+             CallableStatement statement = conn.prepareCall("{call SP_CLOSE_SESSION(?)}")) {
+            statement.setLong(1, sessionId);
+            statement.setQueryTimeout(15);
+            statement.execute();
+            result.put("success", true);
+            result.put("message", "达梦会话 " + sessionId + " 已提交关闭请求（未强制提交事务）");
+            log.warn("DM session closed sid={} datasource={}({})", sessionId, datasourceIndex, ds.getName());
+        } catch (SQLException e) {
+            result.put("success", false);
+            result.put("message", "关闭达梦会话失败: " + e.getMessage());
+        }
+        return result;
+    }
+
+    private Map<String, Object> killMysqlSession(long sessionId, int datasourceIndex, OracleConfig.OracleDataSource ds) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try (Connection conn = getConnectionByIndex(datasourceIndex);
+             Statement statement = conn.createStatement()) {
+            statement.setQueryTimeout(15);
+            statement.execute("KILL CONNECTION " + sessionId);
+            result.put("success", true);
+            result.put("message", "MySQL 会话 " + sessionId + " 已终止");
+            log.warn("MySQL blocking session killed sid={} datasource={}({})", sessionId, datasourceIndex, ds.getName());
+        } catch (SQLException e) {
+            result.put("success", false);
+            result.put("message", "终止 MySQL 会话失败: " + e.getMessage());
+        }
+        return result;
     }
 
     private static final Set<String> MYSQL_PROCESS_DATABASE_WHITELIST =

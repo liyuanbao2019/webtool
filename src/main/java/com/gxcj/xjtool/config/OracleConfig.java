@@ -68,8 +68,8 @@ public class OracleConfig {
         private String password;
 
         /**
-         * RAC 从节点 IP 列表（逗号分隔），用于精准杀掉会话
-         * 仅 Oracle 且需要主备切换时配置
+         * Oracle RAC 节点地址列表（逗号分隔）。每项可为 IP、host:port 或完整 JDBC URL，
+         * 用于逐节点数据库体检、日志探查和节点级运维操作。
          */
         private String slave;
     }

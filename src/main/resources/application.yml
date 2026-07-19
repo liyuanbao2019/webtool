@@ -123,7 +123,7 @@ oracle:
       url: jdbc:oracle:thin:@//10.238.89.31:1521/db19c
       username: netmaintain
       password: zhdw_netmaintain
-      slave: 10.238.89.32,10.238.89.30
+      slave: 10.238.89.32
     # 达梦数据库示例
     - name: 达梦测试库
       type: DM

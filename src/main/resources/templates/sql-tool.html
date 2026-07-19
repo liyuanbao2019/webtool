@@ -236,6 +236,74 @@
             line-height: 1.4;
         }
 
+        .db-tool-modal {
+            height: min(780px, 92vh);
+            overflow: hidden;
+            border: 0;
+            box-shadow: 0 18px 55px rgba(15, 23, 42, 0.24);
+        }
+
+        .db-tool-modal .modal-header {
+            background: linear-gradient(120deg, #3157d5, #5089e8);
+            color: #fff;
+        }
+
+        .db-tool-body {
+            overflow: auto;
+            background: #f6f8fc;
+        }
+
+        .db-tool-panel {
+            border: 1px solid #dfe5ef;
+            border-radius: 9px;
+            background: #fff;
+            padding: 12px;
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+        }
+
+        .db-tool-table-wrap {
+            max-height: 470px;
+            overflow: auto;
+            border: 1px solid #dfe5ef;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        .db-tool-table {
+            min-width: 900px;
+            font-size: 0.76rem;
+            margin-bottom: 0;
+        }
+
+        .db-tool-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #eef3fa;
+            white-space: nowrap;
+        }
+
+        .db-health-card {
+            border-left: 4px solid #adb5bd;
+        }
+
+        .db-health-card.status-NORMAL { border-left-color: #198754; }
+        .db-health-card.status-WARNING { border-left-color: #f0ad4e; }
+        .db-health-card.status-CRITICAL { border-left-color: #dc3545; }
+        .db-health-card.status-SKIPPED { border-left-color: #6c757d; }
+        .db-health-card.status-ERROR { border-left-color: #dc3545; }
+
+        .db-tool-command {
+            white-space: pre-wrap;
+            word-break: break-all;
+            background: #172033;
+            color: #d9e6ff;
+            border-radius: 7px;
+            padding: 10px;
+            margin: 0;
+            font-size: 0.8rem;
+        }
+
         .mysql-process-modal {
             height: min(760px, 92vh);
             border: 1px solid var(--workspace-border);
@@ -1735,6 +1803,193 @@
         </div>
 
         <!-- Table Structure Modal -->
+        <!-- Oracle / DM / MySQL database administration tools -->
+        <div class="modal fade" id="databaseToolModal" tabindex="-1" ref="databaseToolModal">
+            <div class="modal-dialog modal-dialog-centered" style="max-width:min(1220px,96vw);">
+                <div class="modal-content db-tool-modal">
+                    <div class="modal-header">
+                        <div>
+                            <h5 class="modal-title mb-1"><i :class="dbToolData.icon" class="me-2"></i>{{ dbToolData.title }}</h5>
+                            <div class="small opacity-75">{{ currentDatabaseName }}</div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-light text-primary">{{ currentDbType }}</span>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                    </div>
+                    <div class="modal-body db-tool-body">
+                        <div class="db-tool-panel mb-3" v-if="dbToolData.id === 'large_table_query'">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-sm-4 col-lg-3">
+                                    <label class="form-label small fw-bold mb-1">{{ t('sql.minTableSizeGb') }}</label>
+                                    <input type="number" min="0" step="0.1" class="form-control form-control-sm"
+                                        v-model.number="dbToolData.minSizeGb" @keyup.enter="loadDatabaseTool">
+                                </div>
+                                <div class="col-auto">
+                                    <button class="btn btn-primary btn-sm" @click="loadDatabaseTool" :disabled="dbToolData.loading">
+                                        <i class="fas fa-search me-1"></i>{{ t('sql.query') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="db-tool-panel mb-3" v-if="dbToolData.id === 'archive_cleanup'">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-sm-4 col-lg-3">
+                                    <label class="form-label small fw-bold mb-1">{{ t('sql.retentionDays') }}</label>
+                                    <input type="number" min="1" max="3650" class="form-control form-control-sm"
+                                        v-model.number="dbToolData.retentionDays">
+                                </div>
+                                <div class="col text-muted small">{{ t('sql.archiveCleanupSafetyTip') }}</div>
+                            </div>
+                        </div>
+
+                        <div class="db-tool-panel mb-3" v-if="dbToolData.id === 'awr_export' && dbToolData.payload.snapshotMode">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-bold mb-1">{{ t('sql.beginSnapshot') }}</label>
+                                    <select class="form-select form-select-sm" v-model="dbToolData.beginSnapId">
+                                        <option value="">{{ t('sql.selectSnapshot') }}</option>
+                                        <option v-for="row in dbToolRows" :key="'b'+row.SNAP_ID" :value="row.SNAP_ID">
+                                            {{ row.SNAP_ID }} · {{ row.BEGIN_INTERVAL_TIME }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label small fw-bold mb-1">{{ t('sql.endSnapshot') }}</label>
+                                    <select class="form-select form-select-sm" v-model="dbToolData.endSnapId">
+                                        <option value="">{{ t('sql.selectSnapshot') }}</option>
+                                        <option v-for="row in dbToolRows" :key="'e'+row.SNAP_ID" :value="row.SNAP_ID">
+                                            {{ row.SNAP_ID }} · {{ row.END_INTERVAL_TIME }}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="dbToolData.loading" class="text-center py-5">
+                            <div class="spinner-border text-primary mb-2"></div>
+                            <div class="text-muted small">{{ t('sql.loading') }}</div>
+                        </div>
+                        <div v-else-if="dbToolData.error" class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>{{ dbToolData.error }}
+                        </div>
+                        <template v-else>
+                            <div v-if="dbToolData.payload.note" class="alert alert-info py-2 small">
+                                <i class="fas fa-info-circle me-2"></i>{{ dbToolData.payload.note }}
+                            </div>
+                            <div v-if="dbToolData.payload.supported === false" class="db-tool-panel text-center py-5 text-muted">
+                                <i class="fas fa-info-circle fa-2x mb-2 text-primary"></i>
+                                <div>{{ t('sql.notSupportedByDatabase', currentDbType) }}</div>
+                            </div>
+
+                            <div v-if="dbToolData.id === 'health_check'" class="row g-2">
+                                <div class="col-12 mb-1">
+                                    <span v-if="dbToolData.payload.racNodeCount" class="badge bg-primary me-1">
+                                        {{ t('sql.racNodes') }} {{ dbToolData.payload.racReachableNodeCount || 0 }}/{{ dbToolData.payload.racNodeCount }}
+                                    </span>
+                                    <span class="badge bg-success me-1">{{ t('sql.normal') }} {{ (dbToolData.payload.total || 0) - (dbToolData.payload.warningCount || 0) - (dbToolData.payload.criticalCount || 0) - (dbToolData.payload.skippedCount || 0) }}</span>
+                                    <span class="badge bg-warning text-dark me-1">{{ t('sql.warning') }} {{ dbToolData.payload.warningCount || 0 }}</span>
+                                    <span class="badge bg-danger me-1">{{ t('sql.critical') }} {{ dbToolData.payload.criticalCount || 0 }}</span>
+                                    <span class="badge bg-secondary">{{ t('sql.skipped') }} {{ dbToolData.payload.skippedCount || 0 }}</span>
+                                </div>
+                                <div class="col-12" v-for="(check, idx) in (dbToolData.payload.checks || [])" :key="idx">
+                                    <div class="db-tool-panel db-health-card h-100" :class="'status-' + check.status">
+                                        <div class="d-flex justify-content-between gap-2 mb-2">
+                                            <strong>{{ idx + 1 }}. {{ check.name }} <span class="text-muted small">({{ check.category }})</span></strong>
+                                            <span class="badge" :class="healthStatusClass(check.status)">{{ check.status }}</span>
+                                        </div>
+                                        <div v-if="healthDetailRows(check).length" class="db-tool-table-wrap mb-2" style="max-height:260px;">
+                                            <table class="table table-bordered table-sm db-tool-table">
+                                                <thead><tr><th v-for="column in healthDetailColumns(check)" :key="column">{{ column }}</th></tr></thead>
+                                                <tbody><tr v-for="(row, rowIdx) in healthDetailRows(check)" :key="rowIdx">
+                                                    <td v-for="column in healthDetailColumns(check)" :key="column">
+                                                        <pre class="m-0 text-wrap" style="font:inherit;white-space:pre-wrap;max-width:520px;">{{ formatToolValue(row[column]) }}</pre>
+                                                    </td>
+                                                </tr></tbody>
+                                            </table>
+                                        </div>
+                                        <div v-else class="small text-muted mb-2">{{ t('sql.noData') }}</div>
+                                        <div class="small"><i class="fas fa-lightbulb me-1 text-warning"></i>{{ check.suggestion }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-else-if="dbToolRows.length > 0 && dbToolData.id !== 'awr_export'" class="db-tool-table-wrap">
+                                <table class="table table-bordered table-hover table-sm db-tool-table">
+                                    <thead><tr><th>#</th><th v-for="column in dbToolColumns" :key="column">{{ column }}</th></tr></thead>
+                                    <tbody>
+                                        <tr v-for="(row, idx) in dbToolRows" :key="idx">
+                                            <td class="text-muted">{{ idx + 1 }}</td>
+                                            <td v-for="column in dbToolColumns" :key="column" :title="formatToolValue(row[column])">
+                                                {{ formatToolValue(row[column]) }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div v-else-if="dbToolData.id !== 'health_check' && dbToolData.id !== 'awr_export' && dbToolData.payload.supported !== false"
+                                class="db-tool-panel text-center py-5 text-muted">
+                                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                                <div>{{ t('sql.noData') }}</div>
+                            </div>
+
+                            <div v-if="dbToolSummaryEntries.length" class="db-tool-panel mt-3">
+                                <div class="fw-bold small mb-2">{{ t('sql.summary') }}</div>
+                                <div class="row g-2 small">
+                                    <div class="col-md-4" v-for="entry in dbToolSummaryEntries" :key="entry[0]">
+                                        <span class="text-muted">{{ entry[0] }}：</span>{{ formatToolValue(entry[1]) }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-if="dbToolData.actionMessage" class="alert mt-3 mb-0"
+                                :class="dbToolData.actionError ? 'alert-danger' : 'alert-success'">
+                                {{ dbToolData.actionMessage }}
+                            </div>
+                            <div v-if="dbToolData.command" class="mt-3">
+                                <div class="small fw-bold mb-1">{{ t('sql.generatedCommand') }}</div>
+                                <pre class="db-tool-command">{{ dbToolData.command }}</pre>
+                                <button class="btn btn-outline-secondary btn-sm mt-2" @click="copyText(dbToolData.command)">
+                                    <i class="fas fa-copy me-1"></i>{{ t('sql.copy') }}
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="modal-footer">
+                        <span class="me-auto small text-muted">{{ currentDbType }} · {{ currentDatabaseName }}</span>
+                        <button class="btn btn-outline-primary btn-sm" @click="loadDatabaseTool" :disabled="dbToolData.loading || dbToolData.acting">
+                            <i class="fas fa-redo me-1"></i>{{ t('sql.refresh') }}
+                        </button>
+                        <button v-if="dbToolData.id === 'large_table_query'" class="btn btn-success btn-sm"
+                            @click="downloadLargeTables" :disabled="dbToolData.loading || dbToolData.acting">
+                            <i class="fas fa-file-excel me-1"></i>{{ t('sql.downloadExcel') }}
+                        </button>
+                        <button v-if="dbToolData.id === 'health_check' && currentDbType === 'ORACLE'" class="btn btn-success btn-sm"
+                            @click="downloadHealthReport" :disabled="dbToolData.loading || dbToolData.acting">
+                            <i class="fas fa-file-excel me-1"></i>{{ t('sql.downloadHealthReport') }}
+                        </button>
+                        <button v-if="dbToolData.id === 'archive_cleanup'" class="btn btn-danger btn-sm"
+                            @click="cleanupArchiveLogs" :disabled="dbToolData.acting">
+                            <span v-if="dbToolData.acting" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fas fa-trash-alt me-1"></i>{{ currentDbType === 'ORACLE' ? t('sql.generateRmanCommand') : t('sql.executeCleanup') }}
+                        </button>
+                        <button v-if="dbToolData.id === 'recycle_bin_cleanup' && dbToolData.payload.supported !== false"
+                            class="btn btn-danger btn-sm" @click="cleanupRecycleBin" :disabled="dbToolData.acting">
+                            <span v-if="dbToolData.acting" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fas fa-trash-alt me-1"></i>{{ t('sql.clearRecycleBin') }}
+                        </button>
+                        <button v-if="dbToolData.id === 'awr_export'" class="btn btn-primary btn-sm"
+                            @click="exportPerformanceReport" :disabled="dbToolData.acting || (dbToolData.payload.snapshotMode && (!dbToolData.beginSnapId || !dbToolData.endSnapId))">
+                            <span v-if="dbToolData.acting" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fas fa-download me-1"></i>{{ t('sql.exportReport') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 解锁库表弹窗 -->
         <div class="modal fade" id="unlockTableModal" tabindex="-1" ref="unlockTableModal">
             <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"
@@ -2520,7 +2775,8 @@
             'sql.datasourceUser': 'User',
             'sql.datasourceUrl': 'URL',
             'sql.datasourcePassword': 'Password',
-            'sql.datasourceSlave': 'Slave nodes',
+            'sql.datasourceSlave': 'RAC node addresses',
+            'sql.racNodes': 'RAC nodes',
             'sql.noDatasourceConfigured': 'No datasource configured',
             'sql.actions': 'Actions',
             'sql.edit': 'Edit',
@@ -2635,19 +2891,40 @@
             'sql.noData': 'No data',
             'sql.commonTools': 'Common Tools',
             'sql.largeTableQuery': 'Large Table Query',
-            'sql.largeTableQueryDesc': 'Scan large tables by size/row count (pending)',
-            'sql.haSwitchover': 'HA Switchover',
-            'sql.haSwitchoverDesc': 'Primary-standby switchover and operations (pending)',
+            'sql.largeTableQueryDesc': 'Scan large tables by size and estimated row count',
             'sql.archiveCleanup': 'Archive Cleanup',
-            'sql.archiveCleanupDesc': 'Clean archive logs to free space (pending)',
+            'sql.archiveCleanupDesc': 'Manage Oracle archive, DM archive, or MySQL binary logs',
             'sql.recycleBinCleanup': 'Recycle Bin Cleanup',
-            'sql.recycleBinCleanupDesc': 'Clear or restore recycle bin objects (pending)',
+            'sql.recycleBinCleanupDesc': 'Inspect and purge native recycle-bin objects',
             'sql.unlockTablesTool': 'Unlock Tables',
-            'sql.unlockTablesToolDesc': 'Release table locks held by sessions (pending)',
+            'sql.unlockTablesToolDesc': 'Inspect blockers and terminate the selected session',
             'sql.healthCheck': 'Health Check',
-            'sql.healthCheckDesc': 'Database health and config inspection (pending)',
-            'sql.awrReport': 'AWR Report',
-            'sql.awrReportDesc': 'Export Oracle AWR performance report (pending)',
+            'sql.healthCheckDesc': 'Database-specific health and configuration inspection',
+            'sql.awrReport': 'Performance Report',
+            'sql.awrReportDesc': 'Export Oracle AWR or a DM/MySQL live performance report',
+            'sql.minTableSizeGb': 'Minimum table size (GB)',
+            'sql.downloadExcel': 'Download Excel',
+            'sql.downloadHealthReport': 'Download Inspection Report',
+            'sql.query': 'Query',
+            'sql.retentionDays': 'Retention days',
+            'sql.archiveCleanupSafetyTip': 'Archive cleanup is irreversible. Verify backups and replicas first.',
+            'sql.beginSnapshot': 'Begin snapshot',
+            'sql.endSnapshot': 'End snapshot',
+            'sql.selectSnapshot': 'Select snapshot',
+            'sql.notSupportedByDatabase': '{0} has no native equivalent; no operation was executed.',
+            'sql.normal': 'Normal',
+            'sql.warning': 'Warning',
+            'sql.critical': 'Critical',
+            'sql.skipped': 'Skipped',
+            'sql.summary': 'Summary',
+            'sql.generatedCommand': 'Generated maintenance command',
+            'sql.generateRmanCommand': 'Generate RMAN Command',
+            'sql.executeCleanup': 'Execute Cleanup',
+            'sql.clearRecycleBin': 'Purge Recycle Bin',
+            'sql.exportReport': 'Export Report',
+            'sql.confirmArchiveCleanup': 'Confirm cleanup of logs older than {0} days on {1}?',
+            'sql.confirmRecycleCleanup': 'Permanently purge the detected recycle-bin scope on {0}? Database-wide purge requires SYSDBA.',
+            'sql.reportExported': 'Performance report downloaded',
             'sql.mysqlProcessKill': 'Process Kill',
             'sql.mysqlProcessKillDesc': 'Query wsrep-related MySQL processes and kill selected sessions',
             'sql.database': 'Database',
@@ -2807,7 +3084,8 @@
             'sql.datasourceUser': '用户',
             'sql.datasourceUrl': 'URL',
             'sql.datasourcePassword': '密码',
-            'sql.datasourceSlave': '从节点',
+            'sql.datasourceSlave': 'RAC节点地址',
+            'sql.racNodes': 'RAC节点',
             'sql.noDatasourceConfigured': '暂无数据源配置',
             'sql.actions': '操作',
             'sql.edit': '编辑',
@@ -2922,19 +3200,40 @@
             'sql.noData': '暂无数据',
             'sql.commonTools': '常用工具',
             'sql.largeTableQuery': '大表查询',
-            'sql.largeTableQueryDesc': '按容量/行数筛查大表（待接入）',
-            'sql.haSwitchover': '主备倒换',
-            'sql.haSwitchoverDesc': '主备切换演练与操作（待接入）',
+            'sql.largeTableQueryDesc': '按容量与估算行数筛查大表',
             'sql.archiveCleanup': '归档清理',
-            'sql.archiveCleanupDesc': '清理归档日志释放空间（待接入）',
+            'sql.archiveCleanupDesc': '管理 Oracle/达梦归档或 MySQL 二进制日志',
             'sql.recycleBinCleanup': '清理回收站',
-            'sql.recycleBinCleanupDesc': '清空或还原回收站对象（待接入）',
+            'sql.recycleBinCleanupDesc': '查看并清理数据库原生回收站对象',
             'sql.unlockTablesTool': '解锁库表',
-            'sql.unlockTablesToolDesc': '释放会话占用的表锁（待接入）',
+            'sql.unlockTablesToolDesc': '查看阻塞会话并终止选中的会话',
             'sql.healthCheck': '智能体检',
-            'sql.healthCheckDesc': '数据库健康与配置巡检（待接入）',
-            'sql.awrReport': 'AWR报告',
-            'sql.awrReportDesc': '导出 Oracle AWR 性能报告（待接入）',
+            'sql.healthCheckDesc': '按数据库特性执行健康与配置巡检',
+            'sql.awrReport': '性能报告',
+            'sql.awrReportDesc': '导出 Oracle AWR 或达梦/MySQL 实时性能报告',
+            'sql.minTableSizeGb': '最小表容量（GB）',
+            'sql.downloadExcel': '下载 Excel',
+            'sql.downloadHealthReport': '下载体检报告',
+            'sql.query': '查询',
+            'sql.retentionDays': '保留天数',
+            'sql.archiveCleanupSafetyTip': '归档清理不可恢复，执行前请先确认备份与备库同步状态。',
+            'sql.beginSnapshot': '开始快照',
+            'sql.endSnapshot': '结束快照',
+            'sql.selectSnapshot': '请选择快照',
+            'sql.notSupportedByDatabase': '{0} 没有对应的原生能力，本次未执行任何操作。',
+            'sql.normal': '正常',
+            'sql.warning': '警告',
+            'sql.critical': '严重',
+            'sql.skipped': '跳过',
+            'sql.summary': '概览',
+            'sql.generatedCommand': '生成的运维命令',
+            'sql.generateRmanCommand': '生成 RMAN 命令',
+            'sql.executeCleanup': '执行清理',
+            'sql.clearRecycleBin': '清空回收站',
+            'sql.exportReport': '导出报告',
+            'sql.confirmArchiveCleanup': '确认清理 {1} 上早于 {0} 天的日志吗？',
+            'sql.confirmRecycleCleanup': '确认永久清理 {0} 当前检测到的回收站范围？全库清理需要 SYSDBA 权限。',
+            'sql.reportExported': '性能报告已下载',
             'sql.mysqlProcessKill': '进程查杀',
             'sql.mysqlProcessKillDesc': '查询 MySQL wsrep 相关进程并批量终止',
             'sql.database': '数据库',
@@ -3169,6 +3468,22 @@
                         error: null,
                         unlocking: null
                     },
+                    dbToolData: {
+                        id: '',
+                        title: '',
+                        icon: 'fas fa-database',
+                        loading: false,
+                        acting: false,
+                        error: null,
+                        actionMessage: '',
+                        actionError: false,
+                        command: '',
+                        minSizeGb: 1,
+                        retentionDays: 7,
+                        beginSnapId: '',
+                        endSnapId: '',
+                        payload: {}
+                    },
                     mysqlProcessData: {
                         loading: false,
                         killing: false,
@@ -3223,15 +3538,14 @@
                         ddl: '',
                         plan: null
                     },
-                    // 左侧「常用工具」配置（仅前端入口，后续接后端）
+                    // 左侧「常用工具」配置（Oracle / DM / MySQL 按各自特性适配）
                     commonTools: [
                         { id: 'large_table_query', labelKey: 'sql.largeTableQuery', descKey: 'sql.largeTableQueryDesc', icon: 'fas fa-th-large', requireOracle: false },
-                        { id: 'ha_switchover', labelKey: 'sql.haSwitchover', descKey: 'sql.haSwitchoverDesc', icon: 'fas fa-sync-alt', requireOracle: false },
                         { id: 'archive_cleanup', labelKey: 'sql.archiveCleanup', descKey: 'sql.archiveCleanupDesc', icon: 'fas fa-archive', requireOracle: false },
                         { id: 'recycle_bin_cleanup', labelKey: 'sql.recycleBinCleanup', descKey: 'sql.recycleBinCleanupDesc', icon: 'fas fa-recycle', requireOracle: false },
                         { id: 'unlock_tables', labelKey: 'sql.unlockTablesTool', descKey: 'sql.unlockTablesToolDesc', icon: 'fas fa-unlock-alt', requireOracle: false },
                         { id: 'health_check', labelKey: 'sql.healthCheck', descKey: 'sql.healthCheckDesc', icon: 'fas fa-heartbeat', requireOracle: false },
-                        { id: 'awr_export', labelKey: 'sql.awrReport', descKey: 'sql.awrReportDesc', icon: 'fas fa-chart-bar', requireOracle: true }
+                        { id: 'awr_export', labelKey: 'sql.awrReport', descKey: 'sql.awrReportDesc', icon: 'fas fa-chart-bar', requireOracle: false }
                     ],
                     // Context menu
                     contextMenu: {
@@ -3365,7 +3679,20 @@
                     return type === 'MYSQL' || type === 'STARROCKS';
                 },
                 visibleCommonTools() {
-                    return this.isMysqlDb ? [this.mysqlOnlineDdlTool, this.mysqlProcessTool, this.mysqlDiagnosticsTool] : this.commonTools;
+                    return this.isMysqlDb
+                        ? this.commonTools.concat([this.mysqlOnlineDdlTool, this.mysqlProcessTool, this.mysqlDiagnosticsTool])
+                        : this.commonTools;
+                },
+                dbToolRows() {
+                    return Array.isArray(this.dbToolData.payload?.rows) ? this.dbToolData.payload.rows : [];
+                },
+                dbToolColumns() {
+                    if (!this.dbToolRows.length) return [];
+                    return Object.keys(this.dbToolRows[0]).slice(0, 12);
+                },
+                dbToolSummaryEntries() {
+                    const summary = this.dbToolData.payload?.summary;
+                    return summary && typeof summary === 'object' ? Object.entries(summary) : [];
                 },
                 allMysqlProcessesSelected() {
                     const pageIds = this.paginatedMysqlProcessRows.map(row => Number(row.ID)).filter(id => Number.isFinite(id));
@@ -3590,8 +3917,7 @@
                     return sql;
                 },
                 filteredServers() { return []; }, // placeholder if reused, otherwise ignored
-                memoryUsageRate() { return '0%'; },
-                healthStatusClass() { return ''; }
+                memoryUsageRate() { return '0%'; }
             },
             watch: {
                 baseFontSize(val) {
@@ -3657,12 +3983,28 @@
                 if (this.resultSelectionMouseUpHandler) {
                     window.removeEventListener('mouseup', this.resultSelectionMouseUpHandler);
                 }
+                if (this.databaseToolModalHideHandler && this.$refs.databaseToolModal) {
+                    this.$refs.databaseToolModal.removeEventListener('hide.bs.modal', this.databaseToolModalHideHandler);
+                }
             },
             mounted() {
                 document.documentElement.style.setProperty('--base-font-size', this.baseFontSize + 'px');
                 this.setupCsrfInterceptor();
                 this.getCsrfToken();
                 this.loadDataSources();
+
+                // Bootstrap cannot hide a modal while one of its descendants still owns focus.
+                // Release that focus before aria-hidden is applied, including backdrop/Escape closes.
+                this.databaseToolModalHideHandler = () => {
+                    const modalElement = this.$refs.databaseToolModal;
+                    const activeElement = document.activeElement;
+                    if (modalElement && activeElement && modalElement.contains(activeElement)) {
+                        activeElement.blur();
+                    }
+                };
+                if (this.$refs.databaseToolModal) {
+                    this.$refs.databaseToolModal.addEventListener('hide.bs.modal', this.databaseToolModalHideHandler);
+                }
 
                 this.initTabs();
                 this.updateTitle();
@@ -4240,8 +4582,233 @@
                     } else if (tool.id === 'mysql_online_ddl') {
                         this.openMysqlOnlineDdlModal();
                     } else {
-                        this.showToast(this.t('sql.pendingFeature'), this.t('sql.featureInDevelopment', this.t(tool.labelKey), this.currentDatabaseName), 'success');
+                        this.openDatabaseTool(tool);
                     }
+                },
+                openDatabaseTool(tool) {
+                    this.dbToolData.id = tool.id;
+                    this.dbToolData.title = this.t(tool.labelKey);
+                    this.dbToolData.icon = tool.icon || 'fas fa-database';
+                    this.dbToolData.loading = false;
+                    this.dbToolData.acting = false;
+                    this.dbToolData.error = null;
+                    this.dbToolData.actionMessage = '';
+                    this.dbToolData.actionError = false;
+                    this.dbToolData.command = '';
+                    this.dbToolData.beginSnapId = '';
+                    this.dbToolData.endSnapId = '';
+                    this.dbToolData.payload = {};
+                    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('databaseToolModal'));
+                    modal.show();
+                    this.$nextTick(() => this.loadDatabaseTool());
+                },
+                async loadDatabaseTool() {
+                    const endpointMap = {
+                        large_table_query: '/api/database/tools/large-tables',
+                        archive_cleanup: '/api/database/tools/archive',
+                        recycle_bin_cleanup: '/api/database/tools/recycle-bin',
+                        health_check: '/api/database/tools/health-check',
+                        awr_export: '/api/database/tools/performance/snapshots'
+                    };
+                    const endpoint = endpointMap[this.dbToolData.id];
+                    if (!endpoint) return;
+                    this.dbToolData.loading = true;
+                    this.dbToolData.error = null;
+                    this.dbToolData.actionMessage = '';
+                    this.dbToolData.actionError = false;
+                    this.dbToolData.command = '';
+                    try {
+                        const params = { datasourceIndex: this.selectedDataSourceIdx };
+                        if (this.dbToolData.id === 'large_table_query') params.minSizeGb = this.dbToolData.minSizeGb || 0;
+                        const res = await axios.get(endpoint, { params });
+                        if (res.data?.success === false) throw new Error(res.data.message || this.t('sql.requestErrorNoArgs'));
+                        this.dbToolData.payload = res.data || {};
+                        if (this.dbToolData.id === 'awr_export' && this.dbToolData.payload.snapshotMode) {
+                            const rows = this.dbToolData.payload.rows || [];
+                            if (rows.length >= 2) {
+                                this.dbToolData.beginSnapId = rows[1].SNAP_ID;
+                                this.dbToolData.endSnapId = rows[0].SNAP_ID;
+                            }
+                        }
+                    } catch (e) {
+                        this.dbToolData.error = e.response?.data?.message || e.message;
+                        this.dbToolData.payload = {};
+                    } finally {
+                        this.dbToolData.loading = false;
+                    }
+                },
+                async cleanupArchiveLogs() {
+                    const days = Math.max(1, Number(this.dbToolData.retentionDays) || 7);
+                    if (!confirm(this.t('sql.confirmArchiveCleanup', days, this.currentDatabaseName))) return;
+                    this.dbToolData.acting = true;
+                    this.dbToolData.actionMessage = '';
+                    this.dbToolData.actionError = false;
+                    this.dbToolData.command = '';
+                    try {
+                        const res = await axios.post('/api/database/tools/archive/cleanup', {
+                            datasourceIndex: this.selectedDataSourceIdx,
+                            retentionDays: days,
+                            confirmed: true
+                        });
+                        if (res.data?.success === false) throw new Error(res.data.message || this.t('sql.requestErrorNoArgs'));
+                        this.dbToolData.actionMessage = res.data.message || this.t('sql.completed');
+                        this.dbToolData.command = res.data.command || '';
+                        if (res.data.executed) {
+                            const archiveResult = await axios.get('/api/database/tools/archive', {
+                                params: { datasourceIndex: this.selectedDataSourceIdx }
+                            });
+                            this.dbToolData.payload = archiveResult.data || this.dbToolData.payload;
+                        }
+                    } catch (e) {
+                        this.dbToolData.actionError = true;
+                        this.dbToolData.actionMessage = e.response?.data?.message || e.message;
+                    } finally {
+                        this.dbToolData.acting = false;
+                    }
+                },
+                async downloadLargeTables() {
+                    this.dbToolData.acting = true;
+                    this.dbToolData.actionMessage = '';
+                    this.dbToolData.actionError = false;
+                    try {
+                        const res = await axios.get('/api/database/tools/large-tables/export', {
+                            params: {
+                                datasourceIndex: this.selectedDataSourceIdx,
+                                minSizeGb: this.dbToolData.minSizeGb || 0
+                            },
+                            responseType: 'blob'
+                        });
+                        this.downloadResponseBlob(res, 'large_tables.xlsx');
+                    } catch (e) {
+                        this.dbToolData.actionError = true;
+                        this.dbToolData.actionMessage = e.response?.data?.message || e.message;
+                    } finally {
+                        this.dbToolData.acting = false;
+                    }
+                },
+                healthDetailRows(check) {
+                    return Array.isArray(check?.detail) ? check.detail : [];
+                },
+                healthDetailColumns(check) {
+                    const rows = this.healthDetailRows(check);
+                    return rows.length ? [...new Set(rows.flatMap(row => Object.keys(row || {})))] : [];
+                },
+                async downloadHealthReport() {
+                    this.dbToolData.acting = true;
+                    this.dbToolData.actionMessage = '';
+                    this.dbToolData.actionError = false;
+                    try {
+                        const res = await axios.get('/api/database/tools/health-check/report', {
+                            params: { datasourceIndex: this.selectedDataSourceIdx },
+                            responseType: 'blob'
+                        });
+                        this.downloadResponseBlob(res, 'oracle_health_check_report.zip');
+                    } catch (e) {
+                        this.dbToolData.actionError = true;
+                        this.dbToolData.actionMessage = e.response?.data?.message || e.message;
+                    } finally {
+                        this.dbToolData.acting = false;
+                    }
+                },
+                async cleanupRecycleBin() {
+                    if (!confirm(this.t('sql.confirmRecycleCleanup', this.currentDatabaseName))) return;
+                    this.dbToolData.acting = true;
+                    this.dbToolData.actionMessage = '';
+                    this.dbToolData.actionError = false;
+                    try {
+                        const res = await axios.post('/api/database/tools/recycle-bin/cleanup', {
+                            datasourceIndex: this.selectedDataSourceIdx,
+                            confirmed: true
+                        });
+                        if (res.data?.success === false) throw new Error(res.data.message || this.t('sql.requestErrorNoArgs'));
+                        this.dbToolData.actionMessage = res.data.message || this.t('sql.completed');
+                        const recycleResult = await axios.get('/api/database/tools/recycle-bin', {
+                            params: { datasourceIndex: this.selectedDataSourceIdx }
+                        });
+                        this.dbToolData.payload = recycleResult.data || this.dbToolData.payload;
+                    } catch (e) {
+                        this.dbToolData.actionError = true;
+                        this.dbToolData.actionMessage = e.response?.data?.message || e.message;
+                    } finally {
+                        this.dbToolData.acting = false;
+                    }
+                },
+                downloadResponseBlob(response, fallbackName) {
+                    let fileName = fallbackName;
+                    const disposition = response.headers?.['content-disposition'] || '';
+                    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+                    const normalMatch = disposition.match(/filename="?([^";]+)"?/i);
+                    if (utf8Match) fileName = decodeURIComponent(utf8Match[1]);
+                    else if (normalMatch) fileName = normalMatch[1];
+                    const url = window.URL.createObjectURL(response.data);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    window.URL.revokeObjectURL(url);
+                },
+                async exportPerformanceReport() {
+                    this.dbToolData.acting = true;
+                    this.dbToolData.actionMessage = '';
+                    this.dbToolData.actionError = false;
+                    try {
+                        const payload = { datasourceIndex: this.selectedDataSourceIdx };
+                        if (this.dbToolData.payload.snapshotMode) {
+                            payload.beginSnapId = Number(this.dbToolData.beginSnapId);
+                            payload.endSnapId = Number(this.dbToolData.endSnapId);
+                        }
+                        const res = await axios.post('/api/database/tools/performance/report', payload, {
+                            responseType: 'blob'
+                        });
+                        let fileName = `${(this.currentDbType || 'database').toLowerCase()}_performance_report.html`;
+                        const disposition = res.headers?.['content-disposition'] || '';
+                        const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+                        const normalMatch = disposition.match(/filename="?([^";]+)"?/i);
+                        if (utf8Match) fileName = decodeURIComponent(utf8Match[1]);
+                        else if (normalMatch) fileName = normalMatch[1];
+                        const url = window.URL.createObjectURL(res.data);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        window.URL.revokeObjectURL(url);
+                        this.dbToolData.actionMessage = this.t('sql.reportExported');
+                    } catch (e) {
+                        this.dbToolData.actionError = true;
+                        if (e.response?.data instanceof Blob) {
+                            try {
+                                const text = await e.response.data.text();
+                                const body = JSON.parse(text);
+                                this.dbToolData.actionMessage = body.message || text;
+                            } catch (ignored) {
+                                this.dbToolData.actionMessage = e.message;
+                            }
+                        } else {
+                            this.dbToolData.actionMessage = e.response?.data?.message || e.message;
+                        }
+                    } finally {
+                        this.dbToolData.acting = false;
+                    }
+                },
+                formatToolValue(value) {
+                    if (value === null || value === undefined) return '';
+                    if (typeof value === 'object') {
+                        try { return JSON.stringify(value, null, 2); } catch (e) { return String(value); }
+                    }
+                    return String(value);
+                },
+                healthStatusClass(status) {
+                    return {
+                        NORMAL: 'bg-success',
+                        WARNING: 'bg-warning text-dark',
+                        CRITICAL: 'bg-danger',
+                        SKIPPED: 'bg-secondary',
+                        ERROR: 'bg-danger'
+                    }[String(status || '').toUpperCase()] || 'bg-secondary';
                 },
                 /** 打开解锁库表弹窗并查询 */
                 openUnlockModal() {
@@ -4259,7 +4826,8 @@
                     this.lockData.error = null;
                     try {
                         const res = await axios.get('/api/database/lock/locked-objects', {
-                            params: { datasourceIndex: this.selectedDataSourceIdx }
+                            params: { datasourceIndex: this.selectedDataSourceIdx },
+                            timeout: 15000
                         });
                         if (res.data.success) {
                             this.lockData.rows = res.data.data || [];

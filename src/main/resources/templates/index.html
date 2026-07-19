@@ -1243,12 +1243,17 @@
                     axios.interceptors.response.use(
                         function(response) { return response; },
                         function async(error) {
-                            if (error.response && error.response.status === 403) {
+                            if (error.response && error.response.status === 403 && error.config && !error.config._csrfRetry) {
                                 var errorMsg = error.response.data && error.response.data.message || '';
                                 if (errorMsg.indexOf('CSRF') !== -1 || errorMsg.indexOf('Token') !== -1) {
                                     console.log('CSRF Token invalid, refreshing...');
-                                    self.getCsrfToken().then(function() {
-                                        var cfg = error.config;
+                                    var cfg = error.config;
+                                    cfg._csrfRetry = true;
+                                    self.csrfToken = null;
+                                    return self.getCsrfToken().then(function() {
+                                        if (!self.csrfToken) {
+                                            return Promise.reject(error);
+                                        }
                                         if (self.csrfToken) {
                                             cfg.headers['X-CSRF-Token'] = self.csrfToken;
                                         }
