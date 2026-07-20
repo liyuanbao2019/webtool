@@ -5,7 +5,7 @@ logging:
   file:
     name: ./logs/webtool-agent.log
   level:
-    com.gxcj.xjtool.agent: INFO
+    com.li.jc.webtool.agent: INFO
 
 agent:
   id: local-agent

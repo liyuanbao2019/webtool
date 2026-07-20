@@ -1,4 +1,4 @@
-# XjTool / WebTool
+# WebTool
 
 面向运维、开发和 DBA 的 Web 化运维工作台。系统以 Spring Boot 为后端，提供浏览器终端、服务器管理、SFTP 文件操作、SQL 执行与安全拦截、数据库诊断、批量分发执行、接口测试、审计看板等能力，适合内网运维平台、数据库维护平台和一线支撑工具场景。
 
@@ -557,7 +557,7 @@ audit:
 ## 目录结构
 
 ```text
-xjtool/
+webtool/
 ├─ pom.xml
 ├─ README.md
 ├─ start.bat
@@ -565,9 +565,9 @@ xjtool/
 │  └─ agent-mode-deployment-security.md
 ├─ webtool-agent/
 │  ├─ pom.xml
-│  └─ src/main/java/com/gxcj/xjtool/agent/
-├─ src/main/java/com/gxcj/xjtool/
-│  ├─ XjToolApplication.java
+│  └─ src/main/java/com/li/jc/webtool/agent/
+├─ src/main/java/com/li/jc/webtool/
+│  ├─ WebToolApplication.java
 │  ├─ agent/                # 主服务侧 Agent 客户端
 │  ├─ config/               # 认证、安全、服务器清单、WebSocket 配置
 │  ├─ controller/           # 页面和 REST API

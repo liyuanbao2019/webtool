@@ -1,5 +1,5 @@
 # ============================================
-# XjTool - 轻量级 Web SSH 终端与服务器管理工具
+# WebTool - 轻量级 Web SSH 终端与服务器管理工具
 # 作者: 李金才 (li.jc)
 # 版本: 1.0.0-SNAPSHOT
 # ============================================
@@ -232,4 +232,4 @@ security:
 # 日志配置
 logging:
   level:
-    com.gxcj.xjtool.service.impl.SshServiceImpl: DEBUG
+    com.li.jc.webtool.service.impl.SshServiceImpl: DEBUG
