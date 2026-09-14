@@ -668,7 +668,7 @@
                 <span class="workspace-brand-title">{{ t('index.brand') }}</span>
             </a>
 
-            <button class="icon-tool-btn" @click="reloadServers" :title="t('index.refresh')" style="margin-left:0.25rem;">
+            <button class="icon-tool-btn" @click="reloadServers" :disabled="reloading || savingServer" :title="t('index.refresh')" style="margin-left:0.25rem;">
                 <i class="fas fa-rotate" :class="{'fa-spin': reloading}"></i>
             </button>
 
@@ -940,7 +940,7 @@
                     </div>
                     <div class="modal-footer bg-light">
                         <button class="btn btn-light" @click="showModal = false">{{ t('modal.cancel') }}</button>
-                        <button class="btn btn-primary px-4" @click="isEditing ? updateServer() : addServer()">{{ isEditing ? t('modal.saveEdit') : t('modal.save') }}</button>
+                        <button class="btn btn-primary px-4" :disabled="savingServer" @click="isEditing ? updateServer() : addServer()">{{ isEditing ? t('modal.saveEdit') : t('modal.save') }}</button>
                     </div>
                 </div>
             </div>
@@ -1033,6 +1033,8 @@
             'alert.passwordRequired': 'Please enter password',
             'alert.loadFailed': 'Failed to load server info',
             'alert.deleteFailed': 'Failed to delete server',
+            'alert.saveFailed': 'Failed to save server',
+            'alert.savedRefreshFailed': 'Server saved, but the list could not refresh. Please refresh the list.',
             'alert.connectionLimit': 'Connection limit reached, please close some connections and retry.'
         };
 
@@ -1091,6 +1093,8 @@
             'alert.passwordRequired': '请输入密码',
             'alert.loadFailed': '加载服务器信息失败',
             'alert.deleteFailed': '删除服务器失败',
+            'alert.saveFailed': '保存服务器失败',
+            'alert.savedRefreshFailed': '服务器已保存，但列表刷新失败，请点击刷新重试。',
             'alert.connectionLimit': '当前服务器连接数已达上限，请关闭部分连接后重试。'
         };
 
@@ -1127,6 +1131,9 @@
                     },
                     existingGroups: [],
                     reloading: false,
+                    savingServer: false,
+                    serverLoadSequence: 0,
+                    groupLoadSequence: 0,
                     monitor: {
                         currentConnections: 0,
                         maxConnections: 50,
@@ -1292,7 +1299,9 @@
                 },
                 loadServers: function() {
                     var self = this;
-                    return axios.get('/api/server/list').then(function(res) {
+                    var sequence = ++this.serverLoadSequence;
+                    return axios.get('/api/server/list', { params: { _t: Date.now() } }).then(function(res) {
+                        if (sequence !== self.serverLoadSequence) return;
                         self.serverGroups = res.data.map(function(group) {
                             return {
                                 name: group.name,
@@ -1301,15 +1310,24 @@
                                     .filter(function(server) { return server !== null; })
                             };
                         });
+                        var selected = {};
+                        self.serverGroups.forEach(function(group) {
+                            group.servers.forEach(function(server) {
+                                if (self.selectedServerIds.indexOf(server.id) >= 0) selected[server.id] = server;
+                            });
+                        });
+                        self.selectedServersMap = selected;
+                        self.selectedServerIds = self.selectedServerIds.filter(function(id) { return !!selected[id]; });
                     });
                 },
                 reloadServers: function() {
                     var self = this;
+                    if (this.reloading || this.savingServer) return;
                     this.reloading = true;
-                    Promise.resolve(axios.post('/api/server/reload'))
+                    return Promise.resolve(axios.post('/api/server/reload'))
                         .then(function() { return self.loadServers(); })
                         .then(function() { return self.loadGroups(); })
-                        .catch(function(e) { console.error(e); })
+                        .catch(function(e) { self.showServerError(e, 'alert.loadFailed'); })
                         .then(function() { self.reloading = false; });
                 },
                 loadCommonWebsites: function() {
@@ -1349,13 +1367,13 @@
                     this.isEditing = false;
                     this.editingId = null;
                     this.newServer = { port: 22, groupName: '', newGroupName: '', name: '', host: '', username: '', password: '', suUser: '', suPassword: '' };
-                    this.loadGroups();
+                    this.loadGroups().catch(function(e) { console.error(e); });
                     this.showModal = true;
                 },
                 openEditModal: function(serverOrHost) {
                     var self = this;
-                    var host = typeof serverOrHost === 'string' ? serverOrHost : serverOrHost.host;
-                    axios.get('/api/server/' + encodeURIComponent(host)).then(function(res) {
+                    var id = typeof serverOrHost === 'string' ? serverOrHost : (serverOrHost.id || serverOrHost.host);
+                    return axios.get('/api/server/' + encodeURIComponent(id), { params: { _t: Date.now() } }).then(function(res) {
                         var data = res.data;
                         self.isEditing = true;
                         self.editingId = data.id;
@@ -1371,7 +1389,7 @@
                             suUser: suEntries.length > 0 ? suEntries[0][0] : '',
                             suPassword: suEntries.length > 0 ? suEntries[0][1] : ''
                         };
-                        self.loadGroups();
+                        self.loadGroups().catch(function(e) { console.error(e); });
                         self.showModal = true;
                     }).catch(function(e) {
                         alert(self.t('alert.loadFailed'));
@@ -1379,7 +1397,6 @@
                     });
                 },
                 updateServer: function() {
-                    var self = this;
                     if (!this.newServer.host) { alert(this.t('alert.hostRequired')); return; }
                     if (!this.newServer.username) { alert(this.t('alert.usernameRequired')); return; }
                     if (!this.newServer.password) { alert(this.t('alert.passwordRequired')); return; }
@@ -1396,10 +1413,7 @@
                     delete serverToUpdate.suUser;
                     delete serverToUpdate.suPassword;
                     delete serverToUpdate.newGroupName;
-                    axios.put('/api/server/' + this.editingId, serverToUpdate).then(function() {
-                        self.showModal = false;
-                        self.loadServers();
-                    });
+                    return this.saveServerChanges('put', '/api/server/' + encodeURIComponent(this.editingId), serverToUpdate);
                 },
                 deleteServer: function(server) {
                     var self = this;
@@ -1419,14 +1433,13 @@
                 },
                 loadGroups: function() {
                     var self = this;
-                    return axios.get('/api/server/groups').then(function(res) {
+                    var sequence = ++this.groupLoadSequence;
+                    return axios.get('/api/server/groups', { params: { _t: Date.now() } }).then(function(res) {
+                        if (sequence !== self.groupLoadSequence) return;
                         self.existingGroups = Array.isArray(res.data) ? res.data : [];
-                    }).catch(function(e) {
-                        self.existingGroups = [];
                     });
                 },
                 addServer: function() {
-                    var self = this;
                     if (!this.newServer.host) { alert(this.t('alert.hostRequired')); return; }
                     if (!this.newServer.username) { alert(this.t('alert.usernameRequired')); return; }
                     if (!this.newServer.password) { alert(this.t('alert.passwordRequired')); return; }
@@ -1443,10 +1456,30 @@
                     delete serverToAdd.suUser;
                     delete serverToAdd.suPassword;
                     delete serverToAdd.newGroupName;
-                    axios.post('/api/server/add', serverToAdd).then(function() {
+                    return this.saveServerChanges('post', '/api/server/add', serverToAdd);
+                },
+                saveServerChanges: function(method, url, data) {
+                    if (this.savingServer) return;
+                    var self = this;
+                    var saved = false;
+                    this.savingServer = true;
+                    // Invalidate requests made before the mutation; late responses must not restore old data.
+                    ++this.serverLoadSequence;
+                    ++this.groupLoadSequence;
+                    return axios[method](url, data).then(function() {
+                        saved = true;
                         self.showModal = false;
-                        self.loadServers();
+                        return Promise.all([self.loadServers(), self.loadGroups()]);
+                    }).catch(function(e) {
+                        self.showServerError(e, saved ? 'alert.savedRefreshFailed' : 'alert.saveFailed');
+                    }).then(function() {
+                        self.savingServer = false;
                     });
+                },
+                showServerError: function(error, messageKey) {
+                    var detail = error && error.response && error.response.data && error.response.data.message;
+                    alert(this.t(messageKey) + (detail ? ': ' + detail : ''));
+                    console.error(error);
                 },
                 setViewMode: function(mode) {
                     this.viewMode = mode;

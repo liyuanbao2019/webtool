@@ -23,6 +23,7 @@ public class CsrfInterceptor implements HandlerInterceptor {
 
     private static final String CSRF_TOKEN_HEADER = "X-CSRF-Token";
     private static final String CSRF_TOKEN_PARAM = "csrfToken";
+    private static final String CSRF_ERROR_HEADER = "X-CSRF-Error";
 
     // 白名单路径（不需要CSRF验证）
     private static final List<String> WHITELIST_PATHS = Arrays.asList(
@@ -71,6 +72,7 @@ public class CsrfInterceptor implements HandlerInterceptor {
         }
         if (token == null) {
             log.warn("CSRF验证失败：缺少Token [URI: {}, Method: {}]", uri, method);
+            response.setHeader(CSRF_ERROR_HEADER, "missing-token");
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"success\":false,\"message\":\"CSRF验证失败：缺少Token\"}");
@@ -79,6 +81,7 @@ public class CsrfInterceptor implements HandlerInterceptor {
 
         if (!csrfTokenService.validateToken(token)) {
             log.warn("CSRF验证失败：Token无效 [URI: {}, Method: {}]", uri, method);
+            response.setHeader(CSRF_ERROR_HEADER, "invalid-token");
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"success\":false,\"message\":\"CSRF验证失败：Token无效或已过期\"}");

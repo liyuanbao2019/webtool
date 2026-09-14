@@ -5,7 +5,7 @@
 当前版本重点围绕两条主线建设：
 
 - **安全执行**：SSH 危险命令确认、脚本内容扫描、SQL 风险语句拦截、MySQL PXC DDL 保护、CSRF、限流、登录失败锁定、来源检查。
-- **效率工具**：Web 终端、SFTP、服务器在线维护、SQL 编辑器、结果导出、结果集编辑提交、锁诊断、慢 SQL / 长事务 / 锁等待诊断、批量文件分发与命令执行、Agent 本地 PTY 模式。
+- **效率工具**：Web 终端、SFTP、服务器在线维护、在线数据源管理、SQL 编辑器、结果导出与编辑提交、数据库常用运维工具、Oracle RAC 智能体检、批量文件分发与命令执行、Agent 本地 PTY 模式。
 
 ## 功能总览
 
@@ -15,6 +15,8 @@
 - 支持传统 SSH 模式：WebTool 主服务通过 SSH 连接目标服务器。
 - 支持 Agent 模式：目标服务器部署 `webtool-agent`，主服务通过 WebSocket 调用目标机本地 PTY。
 - 支持 `su` / `sudo` 密码提示识别，并可按服务器维护多组切换用户密码。
+- 支持 UTF-8、GBK、GB2312、GB18030 等终端字符集切换。
+- 支持连接状态提示、断线重连、终端内容搜索和心跳保活。
 - 支持危险命令二次确认，默认覆盖 `rm`、`rmdir`、`dd`、`mkfs`、`fdisk`、`parted`、`shutdown`、`reboot`、`halt`、`poweroff`、`init` 等。
 - 支持脚本执行扫描，检测 `sh`、`bash`、`zsh`、`dash`、`ksh`、`source`、`.` 等触发方式，并对高危脚本内容执行确认或阻断。
 
@@ -32,18 +34,28 @@
 - 终端侧栏集成 SFTP 文件浏览。
 - 支持目录浏览、上传、下载、文件夹打包下载。
 - 支持文本文件探测、预览、编辑和保存。
+- 支持新建目录、重命名、删除、`chmod`，并复用已建立的 SSH/SFTP 会话降低重复连接开销。
 - 支持大文件上传配置，默认 Spring Multipart 上限为 `500MB`。
 - Agent 模式开启时，SFTP 接口会禁用，避免绕过 Agent 模式的安全边界。
 
 ### SQL 工具
 
-- 支持 Oracle、达梦 DM、MySQL、PostgreSQL 多数据源。
+- 支持 Oracle、达梦 DM、MySQL、StarRocks、PostgreSQL 多数据源；StarRocks 使用 MySQL 兼容协议。
 - 使用 HikariCP 管理连接池。
 - 支持 SQL 执行、分页结果、执行计划、对象列表、DDL 查看、表结构、索引、分区、触发器、建表语句生成。
+- 支持多 SQL 标签页、SQL 模板库、运行中查询取消、结果表排序/筛选和区域复制。
 - 支持 SQL 结果导出为 CSV、Excel、INSERT SQL。
 - Excel 导出使用流式 `SXSSFWorkbook`，支持超过单 Sheet 行数上限时自动拆分 Sheet。
 - 支持查询结果直接编辑并提交，适合少量数据修正场景。
+- 支持在 SQL 工具中新增、编辑、删除数据源，修改后自动重建连接池。
 - 支持 SQL 审计，记录执行用户、数据源、耗时、影响行数、成功/失败状态和 SQL 内容。
+
+### 在线数据源管理
+
+- SQL 工具右上角提供“管理数据源”，支持 Oracle、达梦、MySQL、StarRocks、PostgreSQL 的新增、修改和删除。
+- 运行时数据源默认持久化到 `./data/sql-datasources.json`，启动时优先加载该文件；首次启动若文件不存在，会以 `application.yml` 中 `oracle.datasources` 为初始内容生成。
+- 数据源列表返回浏览器前会封装为加密载荷；持久化文件仍包含数据库连接凭证，必须限制操作系统文件权限并避免提交到版本库。
+- 统一 API 使用 `/api/database/**`，同时保留历史 `/api/oracle/**` 路径作为兼容别名。
 
 ### SQL 安全拦截
 
@@ -59,14 +71,42 @@
   - 无法判断表规模时可配置为保守阻断。
 - 提供 MySQL Online DDL 方案生成接口，用于在执行高风险变更前生成更稳妥的 DDL 操作计划。
 
-### 数据库诊断
+### 数据库诊断与常用工具
 
-- Oracle 锁表查询与会话解锁。
-- MySQL PXC / wsrep 相关进程查询。
-- MySQL 进程批量 kill。
-- MySQL 当前慢 SQL 查询。
-- MySQL 长事务诊断。
-- MySQL 锁等待诊断。
+SQL 工具左下角提供数据库常用工具，并按照 Oracle、达梦和 MySQL 的能力分别执行：
+
+> StarRocks 和 PostgreSQL 可使用 SQL 编辑、对象浏览、导出等通用能力，但当前不开放本节的归档、回收站、智能体检等数据库管理操作。
+
+| 工具 | Oracle | 达梦 DM | MySQL |
+| --- | --- | --- | --- |
+| 大表查询 | `DBA_SEGMENTS/DBA_TABLES`，无权限时降级到用户视图 | Oracle 兼容段视图 | `information_schema.TABLES` |
+| 大表 Excel | 支持，容量统一使用 GB | 支持，容量统一使用 GB | 支持，区分数据与索引容量 |
+| 归档清理 | SSH 登录数据库节点，以 `oracle` 系统用户执行 RMAN | `SF_ARCHIVELOG_DELETE_BEFORE_TIME` | `PURGE BINARY LOGS BEFORE` |
+| 回收站 | 优先全库 `DBA_RECYCLEBIN`，无权限时降级当前用户 | 当前用户兼容回收站 | 无原生回收站，不执行清理 |
+| 解锁库表 | RAC 优先查询 `GV$`，权限不足回退本实例 `V$` | 查询并终止阻塞会话 | 查询并终止阻塞连接 |
+| 智能体检 | 完整 RAC 智能体检和报告下载 | 连接、表空间、归档等适配检查 | 连接、容量、连接数、复制等适配检查 |
+| 性能报告 | AWR 快照报告；无权限时导出当前状态报告 | 当前动态性能报告 | `performance_schema` 当前性能报告 |
+
+补充的 MySQL 运维诊断包括：
+
+- PXC / wsrep 相关进程查询和选中进程批量 `KILL`。
+- 当前慢 SQL、长事务和锁等待诊断。
+- Online DDL 方案生成，对 `ALTER TABLE`、创建/删除索引等操作生成适配建议并执行安全校验。
+
+#### Oracle RAC 智能体检
+
+- 智能体检逻辑按原数据库巡检项目迁移，目前包含 29 项检查，覆盖 RAC/主备状态、OS 资源、SGA/PGA、会话、Undo、RMAN 备份、临时表空间、统计信息、I/O 热点、序列、回收站、登录审计、HWM、表空间、ASM、等待事件、Redo、FRA、Top SQL、阻塞与长事务、GC、死锁、失效对象/索引、账号有效期、ADDM 和服务器日志。
+- 主备能力仅检查角色和同步时延，不提供主备倒换操作。
+- RAC 节点由 JDBC URL 中的主节点与 `slave` 中的其他节点合并、按主机去重；各节点会使用同一服务名直接建立 JDBC 连接，避免只检查负载均衡后的单个实例。
+- 系统与数据库日志检查会在 `servers.xlsx` 中按节点 IP 查找 SSH 配置，检查 `/var/log/messages` 和 Oracle `alert_*.log`；缺少服务器配置、SSH 权限或网络不可达时该项标记为 `SKIPPED`。
+- 报告下载为 ZIP，包含中文 PDF 摘要和 Excel 明细；Excel 提供诊断汇总及每个检查项的独立明细 Sheet。
+
+#### Oracle 运维权限与安全边界
+
+- Oracle 归档清理不会通过 JDBC 删除文件。系统从 JDBC URL 提取主机，在 `servers.xlsx` 中查找该主机，要求 SSH 用户为 `oracle`，然后执行 `rman target /`。RMAN 操作仅针对 URL 中的节点，不会轮询 `slave`。
+- Oracle 回收站查询与智能体检共用同一统计逻辑：能访问 `DBA_RECYCLEBIN` 时展示全库范围，否则只展示当前用户。全库清理使用 `PURGE DBA_RECYCLEBIN`，需要 `SYSDBA` 权限。
+- Oracle AWR 属于 Diagnostic Pack 功能，生成 AWR 报告前应确认目标环境的许可证允许使用。
+- 所有归档、回收站、会话终止等不可逆操作都要求页面显式确认；执行前仍应核对备份、主备同步和业务影响。
 
 ### 批量部署与批量命令
 
@@ -91,6 +131,7 @@
   - `{date}`
 - 支持特权执行：通过 `su - root` 切换后执行命令，并清理交互式输出中的敏感和脏内容。
 - 支持流式结果返回：`/api/deploy/batch-start` 启动任务，`/api/deploy/batch-events/{taskId}` 通过 SSE 推送节点状态和执行结果。
+- 已完成任务默认保留 30 分钟，任务注册表最多保存 500 条，页面短暂断线后可在保留窗口内重新获取结果。
 - 批量命令在 Agent 模式下会优先调用目标机 `webtool-agent` 执行。
 
 ### 接口测试与压测
@@ -157,6 +198,7 @@
 | Oracle | `ojdbc8 21.9.0.0` |
 | 达梦 DM8 | `DmJdbcDriver18 8.1.2.141` |
 | MySQL | `mysql-connector-j 8.0.33` |
+| StarRocks | 复用 MySQL Connector/J（MySQL 兼容协议） |
 | PostgreSQL | `postgresql 42.6.0` |
 
 ## 架构概览
@@ -165,6 +207,7 @@
 Browser
   ├─ xterm.js terminal
   ├─ SQL editor
+  ├─ datasource/database tool dialogs
   ├─ SFTP sidebar
   ├─ deploy console
   └─ audit dashboard
@@ -179,7 +222,9 @@ WebTool Main Service (:9090)
   ├─ SQL / SSH audit logger
   ├─ SFTP service
   ├─ Batch deploy service
-  └─ Multi datasource service
+  ├─ Runtime datasource registry
+  ├─ Multi datasource SQL service
+  └─ Database tools / Oracle RAC health reports
         │
         ├─ Traditional mode: SSH / SFTP
         │       ▼
@@ -191,8 +236,10 @@ WebTool Main Service (:9090)
         │
         └─ JDBC
                 ▼
-            Oracle / DM / MySQL / PostgreSQL
+            Oracle / DM / MySQL / StarRocks / PostgreSQL
 ```
+
+近期后端已完成模块化拆分：数据库连接池、数据源注册、SQL 解析、MySQL 管理、部署执行、SFTP 会话、SSH 脚本安全和 Oracle 报告导出均由独立服务负责。主包名已统一为 `com.li.jc.webtool`，旧的 `/api/oracle/**` 接口仍保留兼容。
 
 ## 快速开始
 
@@ -243,7 +290,7 @@ http://localhost:9090
 src/main/resources/application.yml
 ```
 
-生产部署时建议将 `application.yml`、`servers.xlsx` 等配置文件放到 JAR 同级目录或 `config/` 目录中，并通过启动参数显式指定配置。
+生产部署时建议通过启动参数显式指定外部 `application.yml`；服务器清单优先从 JAR 所在目录的 `config/servers.xlsx` 读取，未找到时再回退到 classpath 内置文件。
 
 ### SQL/SSH 功能增强
 
@@ -281,7 +328,12 @@ spring:
 app:
   servers-config-file: servers.xlsx
   default-group-name: Default Group
+  sql-datasource-config-file: ./data/sql-datasources.json
 ```
+
+首页新增、修改、删除服务器时，会先保存配置，再立即更新运行中的服务器列表，无需重启。Excel 配置的读取和写入使用同一个外部文件：Windows IDE 开发环境默认是工作目录下的 `config/servers.xlsx`；Linux/Windows 以 JAR 启动时默认是 JAR 所在目录下的 `config/servers.xlsx`，不受启动时工作目录影响。`app.servers-config-file` 也支持绝对路径。
+
+外部文件不存在时，首次读取 classpath 中的配置作为初始数据；第一次保存会创建外部文件，以后的刷新和启动均优先读取它。在线修改不会写回 `src/main/resources` 或 `target/classes`。运行账号需要对配置目录有写入权限；保存或刷新失败会显示错误并保留原列表。CSV/YAML 配置仍支持读取，在线保存需要使用 Excel 配置。
 
 Excel / CSV 推荐表头：
 
@@ -304,6 +356,8 @@ server-groups:
           root: root-password
           oracle: oracle-password
 ```
+
+Oracle RMAN 归档清理和智能体检的服务器日志探查会复用该服务器清单。数据库节点必须按 JDBC URL/`slave` 中的 IP 建立服务器记录；RMAN 清理对应记录的登录用户必须是操作系统 `oracle` 用户，密码来自服务器清单的 `Password` 列，而不是数据库连接密码。
 
 ### 常用网站入口
 
@@ -341,6 +395,8 @@ oracle:
       url: jdbc:oracle:thin:@//10.0.0.10:1521/orcl
       username: app
       password: change-me
+      # RAC 仅填写 URL 中主节点以外的节点，逗号分隔；URL 主节点会自动纳入体检
+      slave: 10.0.0.11,10.0.0.12
 
     - name: dm-test
       type: DM
@@ -360,7 +416,20 @@ oracle:
       url: jdbc:postgresql://10.0.0.40:5432/app
       username: app
       password: change-me
+
+    - name: starrocks-test
+      type: STARROCKS
+      url: jdbc:mysql://10.0.0.50:9030/app?useSSL=false&characterEncoding=utf8
+      username: app
+      password: change-me
 ```
+
+说明：
+
+- `oracle` 是为兼容历史配置而保留的属性前缀，列表内可以混合配置 Oracle、DM、MySQL、StarRocks 和 PostgreSQL。
+- `slave` 支持 IP、`host:port` 或完整 Oracle JDBC URL；仅用于 Oracle RAC 逐节点体检和节点日志探查。
+- 页面在线管理数据源后，`./data/sql-datasources.json` 会成为后续启动的数据源来源；如需重新以 YAML 初始化，应先备份并移走该 JSON 文件。
+- `data/sql-datasources.json`、`servers.xlsx` 和外部 `application.yml` 都可能包含明文凭证，应设置最小文件权限并纳入密钥管理和备份策略。
 
 ### SSH 审计与脚本扫描
 
@@ -542,6 +611,25 @@ GET  /api/deploy/batch-events/{taskId}
 | `privilegedExecution` | 是否尝试切换 root 后执行 |
 | `file` | 上传文件 |
 
+## 数据库工具接口
+
+以下接口均使用当前登录会话，并通过 `datasourceIndex` 指定数据源：
+
+| 方法与路径 | 说明 |
+| --- | --- |
+| `GET /api/database/tools/large-tables` | 按 GB 阈值查询大表 |
+| `GET /api/database/tools/large-tables/export` | 下载大表 Excel |
+| `GET /api/database/tools/archive` | 查询 Oracle/DM 归档或 MySQL binlog |
+| `POST /api/database/tools/archive/cleanup` | 按保留天数执行归档/binlog 清理，必须显式确认 |
+| `GET /api/database/tools/recycle-bin` | 查询数据库回收站及实际作用范围 |
+| `POST /api/database/tools/recycle-bin/cleanup` | 清理检测到的回收站范围，必须显式确认 |
+| `GET /api/database/tools/health-check` | 执行当前数据库类型的智能体检 |
+| `GET /api/database/tools/health-check/report` | 下载 Oracle 智能体检 ZIP 报告 |
+| `GET /api/database/tools/performance/snapshots` | 查询 Oracle AWR 快照或返回当前报告模式 |
+| `POST /api/database/tools/performance/report` | 下载 AWR/当前性能 HTML 报告 |
+
+数据源管理接口为 `GET/POST /api/database/datasources/manage`、`PUT/DELETE /api/database/datasources/manage/{index}`；历史 `/api/oracle` 前缀仍可使用。
+
 ## 日志与审计
 
 ```yaml
@@ -561,6 +649,8 @@ webtool/
 ├─ pom.xml
 ├─ README.md
 ├─ start.bat
+├─ data/
+│  └─ sql-datasources.json  # 页面维护的数据源目录（运行后生成，含敏感凭证）
 ├─ docs/
 │  └─ agent-mode-deployment-security.md
 ├─ webtool-agent/
@@ -573,12 +663,13 @@ webtool/
 │  ├─ controller/           # 页面和 REST API
 │  ├─ dto/                  # 请求与响应对象
 │  ├─ model/                # 领域模型
-│  ├─ service/              # 服务接口
-│  ├─ service/impl/         # SSH、SQL、安全、审计实现
+│  ├─ service/              # 部署、SFTP、Oracle 体检/报告及服务接口
+│  ├─ service/impl/         # 数据源、SQL、MySQL 管理、安全、审计实现
 │  ├─ util/                 # 加密、验证码等工具
 │  └─ websocket/            # WebSSH 与压测 WebSocket
 └─ src/main/resources/
    ├─ application.yml
+   ├─ servers.xlsx
    ├─ servers.en.csv
    ├─ i18n/
    ├─ static/
@@ -588,11 +679,14 @@ webtool/
 ## 安全建议
 
 - 首次部署必须修改 `auth.users`、数据库密码、服务器密码和 Agent token。
+- `data/sql-datasources.json`、`servers.xlsx` 与外部配置文件都应从版本库排除，并限制为仅运行账号可读。
 - 不建议在生产环境使用默认密码、弱密码或共享 root 密码。
 - Agent 端口必须限制来源 IP。
 - MySQL PXC 数据源建议显式配置 `pxc: true`。
 - 对生产库保持 `security.sql-check.enabled=true`。
 - 批量部署和特权执行建议只开放给受信任用户。
+- Oracle RMAN 清理使用密码 SSH 且当前维护通道接受目标机主机密钥，必须通过可信内网、访问控制和服务器清单白名单限制连接范围。
+- 执行 RMAN、回收站全库清理、会话终止和 AWR 导出前，应分别确认备份/主备状态、`SYSDBA` 权限、业务影响和 Oracle 许可证。
 - 定期归档 `logs/ssh_audit` 和 `logs/sql_audit`。
 - 外部访问场景建议开启 `origin-check` 并配置可信域名。
 
@@ -623,7 +717,18 @@ Agent 运行：
 java -jar webtool-agent-1.0.0-SNAPSHOT.jar --server.port=18080 --agent.token=replace-with-strong-secret
 ```
 
-## 版本重点
+## 近期版本重点（2026-07）
+
+- 项目名称统一为 WebTool，Maven 坐标调整为 `com.li.jc:webtool`，主包名调整为 `com.li.jc.webtool`。
+- 数据库接口由 Oracle 专用命名重构为统一的 `/api/database/**`，并保留 `/api/oracle/**` 兼容路径。
+- 新增 SQL 工具在线数据源管理，支持持久化到 `data/sql-datasources.json` 并在变更后重建连接池。
+- 新增大表查询（GB）、大表 Excel、归档/binlog 清理、回收站、跨数据库锁管理、智能体检和性能报告等常用工具，并分别适配 Oracle、达梦和 MySQL。
+- 新增 Oracle 29 项 RAC 智能体检：URL 主节点与 `slave` 节点合并逐节点检查，同时探查服务器 `/var/log/messages` 与 Oracle Alert Log。
+- 新增 Oracle 智能体检 ZIP 下载，内含 PDF 摘要和带汇总/明细跳转的 Excel 报告。
+- 新增 Oracle SSH/RMAN 一键归档清理；SSH 凭证来自 `servers.xlsx` 中对应数据库节点的 `oracle` 操作系统账号。
+- 统一 Oracle 智能体检与常用工具的回收站查询口径，支持 `DBA_RECYCLEBIN` 全库范围和当前用户降级，并明确全库清理需要 `SYSDBA`。
+- 优化 Oracle RAC 锁查询，优先通过 `GV$` 一次获取全局锁，权限不足时回退 `V$` 本实例视图，避免无锁场景长时间等待。
+- 后端拆分数据源注册、连接池、SQL 解析、MySQL 管理、部署执行、SFTP 会话、脚本扫描和 Oracle 报告导出服务，并补充对应特征/回归测试。
 
 - 新增 MySQL PXC 高风险 DDL 保护。
 - 新增 MySQL 慢 SQL、长事务、锁等待诊断。

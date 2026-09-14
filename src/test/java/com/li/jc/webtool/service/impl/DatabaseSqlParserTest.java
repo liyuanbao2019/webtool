@@ -1,6 +1,8 @@
 package com.li.jc.webtool.service.impl;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 
@@ -11,6 +13,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DatabaseSqlParserTest {
 
     private final DatabaseSqlParser parser = new DatabaseSqlParser();
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SHOW VARIABLES LIKE 'tmpdir';", "SHOW GLOBAL VARIABLES LIKE 'tmpdir';",
+            "SHOW SESSION VARIABLES LIKE 'tmpdir';", "SHOW VARIABLES;"})
+    void preservesMysqlShowVariablesStatement(String sql) {
+        List<String> statements = parser.splitStatements(sql, "MYSQL");
+
+        assertEquals(1, statements.size());
+        assertEquals(sql.substring(0, sql.length() - 1), statements.get(0).replaceAll("\\s+", " ").trim());
+        assertEquals("SHOW", DatabaseSqlParser.sqlType(statements.get(0)));
+    }
 
     @Test
     void splitsStatementsWithoutSplittingSemicolonInsideString() {

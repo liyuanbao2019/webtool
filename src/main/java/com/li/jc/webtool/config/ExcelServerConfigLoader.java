@@ -18,6 +18,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.util.*;
 
 @Slf4j
@@ -29,8 +31,6 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
 
     @Value("${app.servers-config-file:servers.xlsx}")
     private String serversConfigFile;
-
-    private String loadedFileName;
 
     private static final Map<String, Integer> CN_HEADER_MAP = new LinkedHashMap<>();
     private static final Map<String, Integer> EN_HEADER_MAP = new LinkedHashMap<>();
@@ -61,49 +61,59 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
     }
 
     public void reload() {
-        if (serverConfig.getServersConfigFile() == null
-                || serverConfig.getServersConfigFile().trim().isEmpty()) {
-            return;
+        synchronized (serverConfig) {
+            String fileName = serverConfig.getServersConfigFile();
+            if (fileName == null || fileName.trim().isEmpty()) return;
+            fileName = fileName.trim();
+            List<ServerGroup> groups;
+            String extension = fileName.toLowerCase(Locale.ROOT);
+            if (extension.endsWith(".csv")) {
+                groups = loadFromCsv(fileName);
+            } else if (extension.endsWith(".xlsx") || extension.endsWith(".xls")) {
+                groups = loadFromExcel(fileName);
+            } else {
+                groups = loadFromYaml(fileName);
+            }
+            preserveIds(groups);
+            // Publish only after a complete successful read. Never clear the live list first.
+            serverConfig.setServerGroups(groups);
+            serverConfig.setServers(new ArrayList<>());
+            log.info("服务器配置已刷新，共 {} 个分组", groups.size());
         }
-
-        String fileName = serverConfig.getServersConfigFile().trim();
-        this.loadedFileName = fileName;
-
-        serverConfig.getServerGroups().clear();
-        serverConfig.getServers().clear();
-
-        if (fileName.toLowerCase().endsWith(".csv")) {
-            loadFromCsv(fileName);
-        } else if (fileName.toLowerCase().endsWith(".xlsx") || fileName.toLowerCase().endsWith(".xls")) {
-            loadFromExcel(fileName);
-        } else {
-            loadFromYaml(fileName);
-        }
-        log.info("服务器配置已刷新，共 {} 个分组", serverConfig.getServerGroups().size());
     }
 
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
-        if (serverConfig.getServersConfigFile() == null
-                || serverConfig.getServersConfigFile().trim().isEmpty()) {
-            return;
+        try {
+            reload();
+        } catch (RuntimeException e) {
+            log.error("服务器配置加载失败，保留现有配置", e);
         }
+    }
 
-        String fileName = serverConfig.getServersConfigFile().trim();
-        this.loadedFileName = fileName;
-        if (fileName.toLowerCase().endsWith(".csv")) {
-            loadFromCsv(fileName);
-        } else if (fileName.toLowerCase().endsWith(".xlsx") || fileName.toLowerCase().endsWith(".xls")) {
-            loadFromExcel(fileName);
-        } else {
-            loadFromYaml(fileName);
+    private void preserveIds(List<ServerGroup> groups) {
+        Map<List<String>, Deque<String>> ids = new HashMap<>();
+        for (ServerInfo server : collectAllServers()) {
+            if (server.getId() != null) {
+                ids.computeIfAbsent(identity(server), key -> new ArrayDeque<>()).add(server.getId());
+            }
         }
+        for (ServerGroup group : groups) {
+            for (ServerInfo server : group.getServers()) {
+                Deque<String> matching = ids.get(identity(server));
+                if (matching != null && !matching.isEmpty()) server.setId(matching.removeFirst());
+            }
+        }
+    }
+
+    private List<String> identity(ServerInfo server) {
+        return Arrays.asList(server.getGroupName(), server.getHost(), String.valueOf(server.getPort()),
+                server.getUsername());
     }
 
     private InputStream openInputStream(String fileName) throws IOException {
         // 1. 优先从 JAR 所在目录下的 config/ 读（生产环境）
-        Path jarDir = getJarDir();
-        Path external = jarDir.resolve("config").resolve(fileName).normalize();
+        Path external = getOutputFile(fileName);
         if (Files.exists(external)) {
             log.info("从外部配置文件加载: {}", external);
             return new FileInputStream(external.toFile());
@@ -123,13 +133,26 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
                 return p.getParent();
             }
         }
+        // A Linux service may start with a working directory outside the installation directory.
+        // For packaged execution, resolve config beside the actual JAR; IDE execution uses cwd.
+        try {
+            Path location = Paths.get(ExcelServerConfigLoader.class.getProtectionDomain()
+                    .getCodeSource().getLocation().toURI()).toAbsolutePath().normalize();
+            if (Files.isRegularFile(location) && location.toString().endsWith(".jar")) {
+                return location.getParent();
+            }
+        } catch (Exception e) {
+            log.debug("无法确定 JAR 目录，使用工作目录", e);
+        }
         return cwd;
     }
 
     private Charset detectCharset(String fileName) {
         byte[] data;
         try {
-            data = toByteArray(openInputStream(fileName));
+            try (InputStream input = openInputStream(fileName)) {
+                data = toByteArray(input);
+            }
         } catch (Exception e) {
             log.warn("无法读取文件 {}: {}", fileName, e.getMessage());
             return StandardCharsets.UTF_8;
@@ -197,7 +220,7 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
         return count > 10;
     }
 
-    private void loadFromCsv(String fileName) {
+    private List<ServerGroup> loadFromCsv(String fileName) {
         try {
             Charset detected = detectCharset(fileName);
             try (InputStream raw = openInputStream(fileName);
@@ -237,6 +260,7 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
 
                     ServerInfo info = new ServerInfo();
                     info.setId(UUID.randomUUID().toString());
+                    info.setGroupName(finalGroupName);
                     info.setName(finalServerName);
                     info.setHost(host);
                     info.setPort((int) Double.parseDouble(finalPort));
@@ -253,11 +277,12 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
                     rowsRead++;
                 }
 
-                serverConfig.getServerGroups().addAll(groupMap.values());
+
                 log.info("CSV 服务器配置加载完成，共 {} 个分组 {} 台服务器: {}", groupMap.size(), rowsRead, fileName);
+                return new ArrayList<>(groupMap.values());
             }
         } catch (Exception e) {
-            log.warn("加载 CSV 服务器配置失败 [{}]: {}", fileName, e.getMessage());
+            throw new IllegalStateException("加载服务器配置失败: " + fileName, e);
         }
     }
 
@@ -280,7 +305,7 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
         return fields.toArray(new String[0]);
     }
 
-    private void loadFromExcel(String fileName) {
+    private List<ServerGroup> loadFromExcel(String fileName) {
         // 使用字节数组方式打开，避免 Excel 中含特殊字符的超链接导致 URISyntaxException
         try (InputStream is = openInputStream(fileName)) {
             byte[] data = toByteArray(is);
@@ -291,8 +316,7 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
             Sheet sheet = workbook.getSheetAt(0);
             Row headerRow = sheet.getRow(0);
             if (headerRow == null) {
-                log.warn("Excel 文件表头行为空: {}", fileName);
-                return;
+                throw new IOException("Excel 文件表头行为空: " + fileName);
             }
 
             Map<String, Integer> headerMap = detectExcelHeader(headerRow);
@@ -350,12 +374,13 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
                 rowsRead++;
             }
 
-            serverConfig.getServerGroups().addAll(groupMap.values());
+
             log.info("Excel 服务器配置加载完成，共 {} 个分组 {} 台服务器: {}", groupMap.size(), rowsRead, fileName);
+            return new ArrayList<>(groupMap.values());
 
             } // 关闭内层 try (OPCPackage + Workbook)
         } catch (Exception e) {
-            log.warn("加载 Excel 服务器配置失败 [{}]: {}", fileName, e.getMessage());
+            throw new IllegalStateException("加载服务器配置失败: " + fileName, e);
         }
     }
 
@@ -389,11 +414,12 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
     private int getColUsername(Map<String, Integer> headerMap) { return getOrDefault(headerMap, 4, 4); }
     private int getColPassword(Map<String, Integer> headerMap) { return getOrDefault(headerMap, 5, 5); }
 
-    private void loadFromYaml(String fileName) {
+    private List<ServerGroup> loadFromYaml(String fileName) {
         try (InputStream is = openInputStream(fileName)) {
             org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
             Map<String, Object> yamlMap = yaml.load(is);
-            if (yamlMap == null) return;
+            if (yamlMap == null) return new ArrayList<>();
+            List<ServerGroup> groups = new ArrayList<>();
 
             Object groupsObj = yamlMap.get("server-groups");
             if (groupsObj instanceof List) {
@@ -407,6 +433,7 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
                         for (Map<String, Object> s : (List<Map<String, Object>>) serversObj) {
                             ServerInfo si = new ServerInfo();
                             si.setId(UUID.randomUUID().toString());
+                            si.setGroupName(sg.getName());
                             si.setName((String) s.get("name"));
                             si.setHost((String) s.get("host"));
                             si.setPort(s.get("port") == null ? 22 : ((Number) s.get("port")).intValue());
@@ -417,12 +444,13 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
                             sg.getServers().add(si);
                         }
                     }
-                    serverConfig.getServerGroups().add(sg);
+                    groups.add(sg);
                 }
             }
             log.info("YAML 服务器配置加载完成: {}", fileName);
+            return groups;
         } catch (Exception e) {
-            log.warn("加载 YAML 服务器配置失败 [{}]: {}", fileName, e.getMessage());
+            throw new IllegalStateException("加载服务器配置失败: " + fileName, e);
         }
     }
 
@@ -531,83 +559,47 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
     }
 
     private Path getOutputFile(String fileName) {
-        Path jarDir = getJarDir();
-        Path external = jarDir.resolve("config").resolve(fileName).normalize();
-        if (Files.exists(external) || Files.exists(external.getParent())) {
-            return external;
-        }
-        return Paths.get("src", "main", "resources", fileName).toAbsolutePath().normalize();
+        // Classpath resources are initial defaults only. All runtime writes and reads use this path.
+        return getJarDir().resolve("config").resolve(fileName).toAbsolutePath().normalize();
     }
 
-    public void saveServer(ServerInfo server, String groupName) {
-        String fileName = this.loadedFileName;
-        if (fileName == null) {
-            fileName = serversConfigFile;
+    public void persistServers(List<ServerGroup> groups, List<ServerInfo> ungrouped) {
+        String fileName = serverConfig.getServersConfigFile();
+        if (fileName == null || fileName.trim().isEmpty()) fileName = serversConfigFile;
+        if (fileName != null) fileName = fileName.trim();
+        if (fileName == null || (!fileName.toLowerCase(Locale.ROOT).endsWith(".xlsx")
+                && !fileName.toLowerCase(Locale.ROOT).endsWith(".xls"))) {
+            throw new IllegalStateException("当前服务器配置格式不支持保存，请使用 Excel 配置文件");
         }
-        if (fileName == null || (!fileName.toLowerCase().endsWith(".xlsx") && !fileName.toLowerCase().endsWith(".xls"))) {
-            log.warn("当前配置文件不支持写入Excel: {}", fileName);
-            return;
-        }
-
-        Path outputPath = getOutputFile(fileName);
-        log.info("写入服务器到 Excel: {} -> {}", server.getName(), outputPath);
-
+        Path output = getOutputFile(fileName.trim());
+        Path temporary = null;
         try {
-            List<ServerInfo> allServers = collectAllServers();
-            writeToExcel(outputPath, allServers);
-            log.info("服务器 {} 已保存到 {}", server.getName(), outputPath);
-        } catch (Exception e) {
-            log.error("保存服务器失败: {}", e.getMessage(), e);
-        }
-    }
-
-    public void updateServer(ServerInfo updated) {
-        String fileName = this.loadedFileName;
-        if (fileName == null) {
-            fileName = serversConfigFile;
-        }
-        if (fileName == null || (!fileName.toLowerCase().endsWith(".xlsx") && !fileName.toLowerCase().endsWith(".xls"))) {
-            log.warn("当前配置文件不支持写入Excel: {}", fileName);
-            return;
-        }
-
-        Path outputPath = getOutputFile(fileName);
-        log.info("更新服务器到 Excel: {} -> {}", updated.getName(), outputPath);
-
-        try {
-            List<ServerInfo> allServers = collectAllServers();
-            for (int i = 0; i < allServers.size(); i++) {
-                if (allServers.get(i).getId() != null && allServers.get(i).getId().equals(updated.getId())) {
-                    allServers.set(i, updated);
-                    break;
+            List<ServerInfo> all = new ArrayList<>();
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            for (ServerGroup group : groups) {
+                for (ServerInfo source : group.getServers()) {
+                    ServerInfo copy = mapper.convertValue(source, ServerInfo.class);
+                    copy.setGroupName(group.getName());
+                    all.add(copy);
                 }
             }
-            writeToExcel(outputPath, allServers);
-            log.info("服务器 {} 已更新到 {}", updated.getName(), outputPath);
-        } catch (Exception e) {
-            log.error("更新服务器失败: {}", e.getMessage(), e);
-        }
-    }
-
-    public void deleteServer(String serverId) {
-        String fileName = this.loadedFileName;
-        if (fileName == null) {
-            fileName = serversConfigFile;
-        }
-        if (fileName == null || (!fileName.toLowerCase().endsWith(".xlsx") && !fileName.toLowerCase().endsWith(".xls"))) {
-            log.warn("当前配置文件不支持写入Excel: {}", fileName);
-            return;
-        }
-
-        Path outputPath = getOutputFile(fileName);
-
-        try {
-            List<ServerInfo> allServers = collectAllServers();
-            allServers.removeIf(s -> serverId.equals(s.getId()));
-            writeToExcel(outputPath, allServers);
-            log.info("服务器 {} 已从 Excel 中删除", serverId);
-        } catch (Exception e) {
-            log.error("删除服务器失败: {}", e.getMessage(), e);
+            all.addAll(ungrouped);
+            Files.createDirectories(output.getParent());
+            temporary = Files.createTempFile(output.getParent(), "servers-", ".tmp");
+            writeToExcel(temporary, all);
+            try {
+                Files.move(temporary, output, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temporary, output, StandardCopyOption.REPLACE_EXISTING);
+            }
+            log.info("服务器配置已保存: {}", output);
+        } catch (IOException e) {
+            throw new IllegalStateException("保存服务器配置失败，请检查文件权限或文件是否被占用: " + output, e);
+        } finally {
+            if (temporary != null) {
+                try { Files.deleteIfExists(temporary); }
+                catch (IOException e) { log.warn("清理服务器配置临时文件失败: {}", temporary); }
+            }
         }
     }
 
@@ -691,9 +683,9 @@ public class ExcelServerConfigLoader implements ApplicationListener<ApplicationR
                 sheet.setColumnWidth(i, width + 2560);
             }
 
-            FileOutputStream fos = new FileOutputStream(path.toFile());
-            wb.write(fos);
-            fos.close();
+            try (OutputStream out = Files.newOutputStream(path)) {
+                wb.write(out);
+            }
         }
     }
 }

@@ -1377,7 +1377,7 @@
                 async confirmDangerousCommand() {
                     const command = this.dangerousCommandText;
                     this.showDangerousModal = false;
-                    const sendMode = this.pendingCommand?.sendMode || 'enter_only';
+                    const sendMode = (this.pendingCommand && this.pendingCommand.sendMode) || 'enter_only';
 
                     try {
                         // 用户确认，请求Token
@@ -1420,7 +1420,7 @@
                     this.showDangerousModal = false;
 
                     // 输入态危险命令{{ t('terminal.cancel') }}时发送 Ctrl+C；模板直发模式无需中断
-                    if (this.pendingCommand?.sendMode !== 'direct') {
+                    if (!this.pendingCommand || this.pendingCommand.sendMode !== 'direct') {
                         this.sendCommandToServer('\x03');
                     }
                     this.pendingCommand = null;
@@ -1719,11 +1719,11 @@
                         response => response,
                         async error => {
                             if (error.response && error.response.status === 401) {
-                                this.handleSessionExpired(error.response.data?.message, 3000);
+                                this.handleSessionExpired(error.response.data && error.response.data.message, 3000);
                                 return Promise.reject(error);
                             }
                             if (error.response && error.response.status === 403) {
-                                const errorMsg = error.response.data?.message || '';
+                                const errorMsg = (error.response.data && error.response.data.message) || '';
                                 // 如果是CSRF Token过期，尝试刷新Token
                                 if (errorMsg.includes('CSRF') || errorMsg.includes('Token')) {
                                     console.log('CSRF Token无效，重新获取...');
@@ -2268,7 +2268,7 @@
                     };
                 },
                 async extractSftpErrorPayload(error) {
-                    const data = error?.response?.data;
+                    const data = error && error.response && error.response.data;
                     if (!data) {
                         return null;
                     }
@@ -2310,10 +2310,10 @@
                                 return payload.message || `${fallbackPrefix}: ${error.message}`;
                         }
                     }
-                    const raw = error?.response?.data;
-                    if (error?.response?.status === 401) {
-                        this.handleSessionExpired(raw?.message, 0);
-                        return raw?.message || '登录已过期，请重新登录';
+                    const raw = error && error.response && error.response.data;
+                    if (error && error.response && error.response.status === 401) {
+                        this.handleSessionExpired(raw && raw.message, 0);
+                        return (raw && raw.message) || '登录已过期，请重新登录';
                     }
                     if (raw && typeof raw === 'object' && raw.message) {
                         return raw.message;
@@ -2347,7 +2347,7 @@
                         const res = await axios.post('/api/sftp/list', this.buildSftpPayload({ path: path }));
                         if (!Array.isArray(res.data)) {
                             throw {
-                                message: res.data?.message || 'Invalid SFTP list response',
+                                message: (res.data && res.data.message) || 'Invalid SFTP list response',
                                 response: {
                                     status: res.status,
                                     data: res.data
@@ -2366,7 +2366,7 @@
                     } catch (e) {
                         console.error('Failed to list files', e);
                         const payload = await this.extractSftpErrorPayload(e);
-                        const errorCode = payload?.errorCode || '';
+                        const errorCode = (payload && payload.errorCode) || '';
                         const errorMsg = await this.formatSftpError(e, '访问目录失败');
 
                         if (errorCode === 'PATH_NOT_FOUND' || errorCode === 'NOT_DIRECTORY') {
@@ -2485,7 +2485,7 @@
                     if (!this.isEditableFileName(file.name)) {
                         try {
                             const probe = await axios.post('/api/sftp/probe-text', this.buildSftpPayload({ path: path }));
-                            if (!probe.data?.editable) {
+                            if (!(probe.data && probe.data.editable)) {
                                 alert('该文件类型暂不支持在线编辑');
                                 return;
                             }
@@ -2501,7 +2501,7 @@
                     this.editingFileContent = '';
                     try {
                         const res = await axios.post('/api/sftp/read-text', this.buildSftpPayload({ path: path }));
-                        this.editingFileContent = res.data?.content || '';
+                        this.editingFileContent = (res.data && res.data.content) || '';
                         this.editingFileOriginalContent = this.editingFileContent; // 记录原始内容
                     } catch (e) {
                         alert(await this.formatSftpError(e, '读取文件失败'));
@@ -2622,7 +2622,7 @@
                             folderName: name
                         };
                         const stat = await this.fetchPathStat(path);
-                        if (stat?.directory) {
+                        if (stat && stat.directory) {
                             this.transferProgress.active = false;
                             alert('目标是目录，请使用“下载文件夹”');
                             return;
@@ -2662,7 +2662,7 @@
                             folderName: folderName
                         };
                         const stat = await this.fetchPathStat(folderPath);
-                        if (!stat?.directory) {
+                        if (!(stat && stat.directory)) {
                             this.transferProgress.active = false;
                             alert('目标不是目录，请使用“下载文件”');
                             return;
@@ -2878,7 +2878,7 @@
 
                         console.log(`SFTP用户已切换到: ${this.currentSftpUser}`);
                     } catch (e) {
-                        alert('切换用户失败，请检查用户名和密码: ' + (e.response?.data || e.message));
+                        alert('切换用户失败，请检查用户名和密码: ' + ((e.response && e.response.data) || e.message));
                     }
                 },
                 // 恢复到原始用户

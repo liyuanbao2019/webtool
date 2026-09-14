@@ -9,8 +9,6 @@ import com.li.jc.webtool.model.ServerInfo;
 import com.li.jc.webtool.model.ServerInfoDTO;
 import com.li.jc.webtool.config.ExcelServerConfigLoader;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.event.ContextRefreshedEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -21,7 +19,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 @RestController
@@ -34,41 +31,17 @@ public class ServerController {
     @Autowired(required = false)
     private ExcelServerConfigLoader excelServerConfigLoader;
 
-    private List<ServerInfo> serverList = new CopyOnWriteArrayList<>();
-
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    @EventListener(ContextRefreshedEvent.class)
-    public void init() {
-        if (initialized) return;
-        initialized = true;
-        doLoadServers();
+    @ModelAttribute
+    public void disableCaching(javax.servlet.http.HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
     }
 
-    private boolean initialized = false;
-
-    private void doLoadServers() {
-        if (serverConfig.getServerGroups() != null) {
-            for (ServerGroup group : serverConfig.getServerGroups()) {
-                if (group.getServers() != null) {
-                    for (ServerInfo server : group.getServers()) {
-                        assignIdIfAbsent(server);
-                        serverList.add(server);
-                    }
-                }
-            }
-        }
-        if (serverConfig.getServers() != null) {
-            for (ServerInfo server : serverConfig.getServers()) {
-                assignIdIfAbsent(server);
-                serverList.add(server);
-            }
-        }
-    }
-
-    private void rebuildServerList() {
-        serverList.clear();
-        doLoadServers();
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public java.util.Map<String, String> configurationError(IllegalStateException exception) {
+        return Collections.singletonMap("message", exception.getMessage());
     }
 
     private void assignIdIfAbsent(ServerInfo server) {
@@ -78,7 +51,7 @@ public class ServerController {
     }
 
     @GetMapping("/list")
-    public List<ServerGroupDTO> list() {
+    public synchronized List<ServerGroupDTO> list() {
         List<ServerGroupDTO> result = new ArrayList<>();
 
         if (serverConfig.getServerGroups() != null) {
@@ -123,7 +96,7 @@ public class ServerController {
     }
 
     @GetMapping("/groups")
-    public List<String> listGroups() {
+    public synchronized List<String> listGroups() {
         List<String> groups = new ArrayList<>();
         if (serverConfig.getServerGroups() != null) {
             for (ServerGroup g : serverConfig.getServerGroups()) {
@@ -136,252 +109,105 @@ public class ServerController {
     }
 
     @GetMapping("/{idOrHost}")
-    public ServerInfo getById(@PathVariable String idOrHost) {
-        // 1. 优先从最新 serverConfig 中按 ID 或 Host 查找，避免命中 serverList 旧缓存
-        if (serverConfig.getServerGroups() != null) {
-            for (ServerGroup group : serverConfig.getServerGroups()) {
-                if (group.getServers() != null) {
-                    for (ServerInfo s : group.getServers()) {
-                        if (idOrHost.equals(s.getId()) || idOrHost.equals(s.getHost())) {
-                            return s;
-                        }
-                    }
-                }
-            }
+    public synchronized ServerInfo getById(@PathVariable String idOrHost) {
+        List<ServerInfo> servers = allServers();
+        for (ServerInfo server : servers) {
+            if (idOrHost.equals(server.getId())) return server;
         }
-        if (serverConfig.getServers() != null) {
-            for (ServerInfo s : serverConfig.getServers()) {
-                if (idOrHost.equals(s.getId()) || idOrHost.equals(s.getHost())) {
-                    return s;
-                }
-            }
-        }
-        // 2. fallback: 从 serverList 中按 ID 或 Host 查找
-        for (ServerInfo s : serverList) {
-            if (idOrHost.equals(s.getId()) || idOrHost.equals(s.getHost())) {
-                return s;
-            }
-        }
-        // 3. fallback: 按 host 从 Excel 加载器中查找
-        if (excelServerConfigLoader != null) {
-            ServerInfo found = excelServerConfigLoader.findServerByHost(idOrHost);
-            if (found != null) {
-                return found;
-            }
+        for (ServerInfo server : servers) {
+            if (idOrHost.equals(server.getHost())) return server;
         }
         return null;
     }
 
     @PostMapping("/reload")
-    public void reload() {
-        if (excelServerConfigLoader != null) {
-            excelServerConfigLoader.reload();
-        }
-        rebuildServerList();
+    public synchronized void reload() {
+        if (excelServerConfigLoader != null) excelServerConfigLoader.reload();
     }
 
     @PostMapping("/add")
-    public ServerInfoDTO add(@Valid @RequestBody ServerInfo serverInfo) {
+    public synchronized ServerInfoDTO add(@Valid @RequestBody ServerInfo serverInfo) {
         serverInfo.setId(UUID.randomUUID().toString());
-
-        String groupName = serverInfo.getGroupName();
-        String defaultGroup = serverConfig.getDefaultGroupName() != null
-                ? serverConfig.getDefaultGroupName()
-                : "Default Group";
-        if (groupName == null || groupName.trim().isEmpty()) {
-            groupName = defaultGroup;
-            serverInfo.setGroupName(groupName);
-        }
-
-        boolean found = false;
-        if (serverConfig.getServerGroups() != null) {
-            for (ServerGroup g : serverConfig.getServerGroups()) {
-                if (groupName.equals(g.getName())) {
-                    g.getServers().add(serverInfo);
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (!found) {
-            ServerGroup newGroup = new ServerGroup();
-            newGroup.setName(groupName);
-            newGroup.setServers(new ArrayList<>());
-            newGroup.getServers().add(serverInfo);
-            if (serverConfig.getServerGroups() == null) {
-                serverConfig.setServerGroups(new ArrayList<>());
-            }
-            serverConfig.getServerGroups().add(newGroup);
-        }
-
-        serverList.add(serverInfo);
-
-        if (excelServerConfigLoader != null) {
-            excelServerConfigLoader.saveServer(serverInfo, groupName);
-            excelServerConfigLoader.reload();
-            rebuildServerList();
-        }
-
-        return toDTO(serverInfo);
+        return saveChange(serverInfo, null);
     }
 
     @PutMapping("/{id}")
-    public ServerInfoDTO update(@PathVariable String id, @Valid @RequestBody ServerInfo updated) {
+    public synchronized ServerInfoDTO update(@PathVariable String id, @Valid @RequestBody ServerInfo updated) {
+        requireServer(id);
         updated.setId(id);
+        return saveChange(updated, id);
+    }
 
-        String groupName = updated.getGroupName();
-        String defaultGroup = serverConfig.getDefaultGroupName() != null
-                ? serverConfig.getDefaultGroupName()
-                : "Default Group";
-        if (groupName == null || groupName.trim().isEmpty()) {
-            groupName = defaultGroup;
-            updated.setGroupName(groupName);
+    private ServerInfoDTO saveChange(ServerInfo server, String replacedId) {
+        if (isBlank(server.getGroupName())) {
+            server.setGroupName(serverConfig.getDefaultGroupName() != null
+                    ? serverConfig.getDefaultGroupName() : "Default Group");
         }
-
-        // 1. 从旧的分组或无分组列表中移除该服务器
-        boolean removed = false;
-        if (serverConfig.getServerGroups() != null) {
-            for (ServerGroup g : serverConfig.getServerGroups()) {
-                if (g.getServers() != null) {
-                    for (int i = 0; i < g.getServers().size(); i++) {
-                        if (id.equals(g.getServers().get(i).getId())) {
-                            g.getServers().remove(i);
-                            removed = true;
-                            break;
-                        }
-                    }
-                }
-                if (removed) break;
-            }
+        List<ServerGroup> groups = copyGroupsWithout(replacedId);
+        ServerGroup target = groups.stream().filter(g -> server.getGroupName().equals(g.getName()))
+                .findFirst().orElse(null);
+        if (target == null) {
+            target = new ServerGroup();
+            target.setName(server.getGroupName());
+            target.setServers(new ArrayList<>());
+            groups.add(target);
         }
-        if (!removed && serverConfig.getServers() != null) {
-            for (int i = 0; i < serverConfig.getServers().size(); i++) {
-                if (id.equals(serverConfig.getServers().get(i).getId())) {
-                    serverConfig.getServers().remove(i);
-                    break;
-                }
-            }
-        }
-
-        // 2. 将更新后的服务器对象加入到目标新分组中
-        boolean groupFound = false;
-        if (serverConfig.getServerGroups() != null) {
-            for (ServerGroup g : serverConfig.getServerGroups()) {
-                if (groupName.equals(g.getName())) {
-                    if (g.getServers() == null) {
-                        g.setServers(new ArrayList<>());
-                    }
-                    g.getServers().add(updated);
-                    groupFound = true;
-                    break;
-                }
-            }
-        }
-        if (!groupFound) {
-            ServerGroup newGroup = new ServerGroup();
-            newGroup.setName(groupName);
-            newGroup.setServers(new ArrayList<>());
-            newGroup.getServers().add(updated);
-            if (serverConfig.getServerGroups() == null) {
-                serverConfig.setServerGroups(new ArrayList<>());
-            }
-            serverConfig.getServerGroups().add(newGroup);
-        }
-
-        // 3. 清理掉已被移空的分组
-        if (serverConfig.getServerGroups() != null) {
-            serverConfig.getServerGroups().removeIf(g -> g.getServers() == null || g.getServers().isEmpty());
-        }
-
-        // 4. 更新单层集合 serverList
-        for (int i = 0; i < serverList.size(); i++) {
-            if (id.equals(serverList.get(i).getId())) {
-                serverList.set(i, updated);
-                break;
-            }
-        }
-
-        // 5. 保存更新至 Excel
-        if (excelServerConfigLoader != null) {
-            excelServerConfigLoader.updateServer(updated);
-            excelServerConfigLoader.reload();
-            rebuildServerList();
-        }
-
-        return toDTO(updated);
+        target.getServers().add(server);
+        publishConfiguration(groups, copyUngroupedWithout(replacedId));
+        return toDTO(server);
     }
 
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable String id) {
-        ServerInfo existing = findById(id);
-        if (existing == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Server not found");
-        }
+    public synchronized void delete(@PathVariable String id) {
+        requireServer(id);
+        publishConfiguration(copyGroupsWithout(id), copyUngroupedWithout(id));
+    }
 
-        boolean removed = removeServerFromConfig(id);
-        if (!removed) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Server not found");
-        }
-
-        serverList.removeIf(s -> id.equals(s.getId()));
-
-        if (serverConfig.getServerGroups() != null) {
-            serverConfig.getServerGroups().removeIf(g -> g.getServers() == null || g.getServers().isEmpty());
-        }
-
-        if (excelServerConfigLoader != null) {
-            excelServerConfigLoader.deleteServer(id);
-            excelServerConfigLoader.reload();
-            rebuildServerList();
+    private void requireServer(String id) {
+        if (allServers().stream().noneMatch(s -> id.equals(s.getId()))) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Server not found; refresh the server list");
         }
     }
 
-    private ServerInfo findById(String id) {
-        if (id == null || id.trim().isEmpty()) {
-            return null;
-        }
-        for (ServerInfo s : serverList) {
-            if (id.equals(s.getId())) {
-                return s;
+    private List<ServerGroup> copyGroupsWithout(String id) {
+        List<ServerGroup> groups = new ArrayList<>();
+        if (serverConfig.getServerGroups() != null) {
+            for (ServerGroup source : serverConfig.getServerGroups()) {
+                ServerGroup copy = new ServerGroup();
+                copy.setName(source.getName());
+                copy.setServers(source.getServers() == null ? new ArrayList<>() : source.getServers().stream()
+                        .filter(s -> id == null || !id.equals(s.getId())).collect(Collectors.toList()));
+                if (!copy.getServers().isEmpty()) groups.add(copy);
             }
         }
+        return groups;
+    }
+
+    private List<ServerInfo> copyUngroupedWithout(String id) {
+        return serverConfig.getServers() == null ? new ArrayList<>() : serverConfig.getServers().stream()
+                .filter(s -> id == null || !id.equals(s.getId())).collect(Collectors.toList());
+    }
+
+    private void publishConfiguration(List<ServerGroup> groups, List<ServerInfo> ungrouped) {
+        // Persist the candidate before publishing. A failed save leaves the live configuration intact.
+        if (excelServerConfigLoader != null) excelServerConfigLoader.persistServers(groups, ungrouped);
+        serverConfig.setServerGroups(groups);
+        serverConfig.setServers(ungrouped);
+    }
+
+    private List<ServerInfo> allServers() {
+        List<ServerInfo> servers = copyUngroupedWithout(null);
         if (serverConfig.getServerGroups() != null) {
             for (ServerGroup group : serverConfig.getServerGroups()) {
-                if (group.getServers() != null) {
-                    for (ServerInfo s : group.getServers()) {
-                        if (id.equals(s.getId())) {
-                            return s;
-                        }
-                    }
-                }
+                if (group.getServers() != null) servers.addAll(group.getServers());
             }
         }
-        if (serverConfig.getServers() != null) {
-            for (ServerInfo s : serverConfig.getServers()) {
-                if (id.equals(s.getId())) {
-                    return s;
-                }
-            }
-        }
-        return null;
-    }
-
-    private boolean removeServerFromConfig(String id) {
-        boolean removed = false;
-        if (serverConfig.getServerGroups() != null) {
-            for (ServerGroup g : serverConfig.getServerGroups()) {
-                if (g.getServers() != null) {
-                    removed = g.getServers().removeIf(s -> id.equals(s.getId())) || removed;
-                }
-            }
-        }
-        if (serverConfig.getServers() != null) {
-            removed = serverConfig.getServers().removeIf(s -> id.equals(s.getId())) || removed;
-        }
-        return removed;
+        servers.forEach(this::assignIdIfAbsent);
+        return servers;
     }
 
     private ServerInfoDTO toDTO(ServerInfo serverInfo) {
+        assignIdIfAbsent(serverInfo);
         try {
             String json = objectMapper.writeValueAsString(withAgentDefaults(serverInfo));
             String encrypted = com.li.jc.webtool.util.CryptoUtil.encrypt(json);

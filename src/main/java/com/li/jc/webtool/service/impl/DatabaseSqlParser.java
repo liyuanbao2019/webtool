@@ -31,7 +31,8 @@ class DatabaseSqlParser {
             List<com.alibaba.druid.sql.ast.SQLStatement> statements =
                     com.alibaba.druid.sql.SQLUtils.parseStatements(preprocessed, dbType);
             for (com.alibaba.druid.sql.ast.SQLStatement statement : statements) {
-                String sql = formatForJdbcExecution(statement.toString().trim());
+                // Use the dialect visitor: generic toString() can omit MySQL SHOW keywords.
+                String sql = formatForJdbcExecution(com.alibaba.druid.sql.SQLUtils.toSQLString(statement, dbType));
                 if (!sql.isEmpty() && !"/".equals(sql)) {
                     validSqls.add(sql);
                 }

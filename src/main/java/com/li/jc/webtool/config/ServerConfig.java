@@ -15,8 +15,8 @@ import java.util.Map;
 @Component
 @ConfigurationProperties(prefix = "app")
 public class ServerConfig {
-    private List<ServerInfo> servers = new ArrayList<>();
-    private List<ServerGroup> serverGroups = new ArrayList<>();
+    private volatile List<ServerInfo> servers = new ArrayList<>();
+    private volatile List<ServerGroup> serverGroups = new ArrayList<>();
     private AgentConfig agent = new AgentConfig();
     private boolean commonWebsitesEnabled = true;
     private List<CommonWebsite> commonWebsites = new ArrayList<>();

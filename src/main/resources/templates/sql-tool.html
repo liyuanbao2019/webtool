@@ -18,6 +18,7 @@
     <!-- Vue 3 & Axios -->
     <script src="/js/vue.global.prod.js"></script>
     <script src="/js/axios.min.js"></script>
+    <script src="/js/sql-tool-http.js"></script>
     <!-- CryptoJS for AES decryption -->
     <script src="/js/crypto-js.min.js"></script>
     <!-- CodeMirror 5 -->
@@ -3026,6 +3027,7 @@
             'sql.clearHistoryConfirm': 'Are you sure you want to clear history?',
             'sql.exporting': 'Exporting...',
             'sql.exportFailed': 'Export failed',
+            'sql.csrfRefreshFailed': 'Unable to refresh the security token. Please sign in again and retry.',
             'sql.fetchAllDataFailed': 'Failed to fetch all data: {0}',
             'sql.explainPlanFailed': 'Explain plan query failed: {0}',
             'sql.requestErrorNoArgs': 'Request error',
@@ -3335,6 +3337,7 @@
             'sql.clearHistoryConfirm': '确定清空历史记录吗?',
             'sql.exporting': '导出中...',
             'sql.exportFailed': '导出失败',
+            'sql.csrfRefreshFailed': '无法刷新安全令牌，请重新登录后再试',
             'sql.fetchAllDataFailed': '获取全量数据失败: {0}',
             'sql.explainPlanFailed': '执行计划查询失败: {0}',
             'sql.requestErrorNoArgs': '请求异常',
@@ -5324,21 +5327,18 @@
                         return Promise.reject(error);
                     });
 
-                    // 响应拦截器：如果Token过期，自动刷新
+                    // 响应拦截器：如果Token过期，自动刷新（包括 Blob 下载响应）
                     axios.interceptors.response.use(
                         response => response,
                         async error => {
-                            if (error.response && error.response.status === 403) {
-                                const errorMsg = error.response.data?.message || '';
-                                // 如果是CSRF Token过期，尝试刷新Token
-                                if (errorMsg.includes('CSRF') || errorMsg.includes('Token')) {
-                                    console.log('CSRF Token无效，重新获取...');
-                                    await this.getCsrfToken();
-                                    // 重试原请求
-                                    const config = error.config;
-                                    if (this.csrfToken) {
-                                        config.headers['X-CSRF-Token'] = this.csrfToken;
-                                    }
+                            const config = error.config;
+                            if (config && !config.__csrfRetried && await SqlToolHttp.isCsrfFailure(error)) {
+                                console.log('CSRF Token无效，重新获取...');
+                                config.__csrfRetried = true;
+                                const token = await this.getCsrfToken();
+                                if (token) {
+                                    config.headers = config.headers || {};
+                                    config.headers['X-CSRF-Token'] = token;
                                     return axios.request(config);
                                 }
                             }
@@ -5353,12 +5353,14 @@
                         if (res.data && res.data.success) {
                             this.csrfToken = res.data.token;
                             console.log('CSRF Token已获取');
+                            return this.csrfToken;
                         } else {
                             console.warn('CSRF Token获取失败');
                         }
                     } catch (e) {
                         console.error('获取CSRF Token异常:', e);
                     }
+                    return null;
                 },
                 resetDataSourceForm() {
                     this.editingDataSourceIndex = null;
@@ -5958,6 +5960,11 @@
                         : this.lastExecutedSql;
                     try {
                         this.showToast(this.t('sql.tip'), this.t('sql.exporting'), 'success');
+                        // 慢 SQL 可能在返回前已超过 CSRF 有效期，导出前主动换取新 Token。
+                        const token = await this.getCsrfToken();
+                        if (!token) {
+                            throw new Error(this.t('sql.csrfRefreshFailed'));
+                        }
                         const res = await axios.post('/api/oracle/export/' + format, {
                             datasourceIndex: this.lastDatasourceIdx,
                             sql: sqlForExport,
@@ -5976,7 +5983,8 @@
                         document.body.removeChild(link);
                         URL.revokeObjectURL(url);
                     } catch (e) {
-                        this.showToast(this.t('sql.exportFailed'), e.message || this.t('sql.fetchAllDataFailed', ''), 'error');
+                        const backendMessage = await SqlToolHttp.getResponseErrorMessage(e);
+                        this.showToast(this.t('sql.exportFailed'), backendMessage || e.message || this.t('sql.fetchAllDataFailed', ''), 'error');
                     }
                 },
                 extractDownloadFileName(disposition, format) {
