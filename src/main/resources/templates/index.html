@@ -738,18 +738,22 @@
                 </div>
             </section>
 
-            <section class="quick-links-panel" v-if="commonWebsites.length > 0">
+            <section class="quick-links-panel">
                 <div class="quick-links-title">
                     <i class="fas fa-star text-warning"></i>
                     {{ t('index.commonWebsites') }}
+                    <button class="btn btn-sm btn-outline-secondary ms-2" @click="openWebsiteManager">
+                        <i class="fas fa-cog me-1"></i>{{ t('websites.manage') }}
+                    </button>
                 </div>
-                <div class="quick-links-list">
+                <div class="quick-links-list" v-if="commonWebsites.length">
                     <a v-for="site in commonWebsites" :key="site.name + site.url" class="quick-link-item" href="#"
                         @click.prevent="openCommonWebsite(site)" :title="site.url">
                         <i :class="site.icon || 'fas fa-globe'"></i>
                         <span>{{ site.name }}</span>
                     </a>
                 </div>
+                <span v-else class="small text-muted">{{ t('websites.empty') }}</span>
             </section>
 
             <!-- Grid View -->
@@ -866,6 +870,60 @@
                 </button>
             </section>
         </main>
+
+        <div v-if="showWebsiteManager" class="modal d-block" style="background:rgba(0,0,0,.5);z-index:1060"
+            role="dialog" aria-modal="true" aria-labelledby="website-manager-title">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                <form class="modal-content" @submit.prevent="saveCommonWebsites">
+                    <div class="modal-header">
+                        <h5 id="website-manager-title" class="modal-title">{{ t('websites.manage') }}</h5>
+                        <button type="button" class="btn-close" :disabled="savingWebsites" @click="showWebsiteManager = false" :aria-label="t('modal.cancel')"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small text-muted">{{ t('websites.hint') }}</p>
+                        <div v-if="websiteError" class="alert alert-danger py-2" role="alert">{{ websiteError }}</div>
+                        <div v-if="websiteWarnings.length" class="alert alert-warning py-2" role="status">
+                            <div v-for="(warning, index) in websiteWarnings" :key="index">{{ warning }}</div>
+                        </div>
+                        <div v-if="loadingWebsites" class="text-muted py-3">{{ t('websites.loading') }}</div>
+                        <template v-else-if="websitesLoaded">
+                            <div class="form-check form-switch mb-3">
+                                <input id="websites-enabled" class="form-check-input" type="checkbox" v-model="websiteDraft.enabled" :disabled="savingWebsites">
+                                <label class="form-check-label" for="websites-enabled">{{ t('websites.enabled') }}</label>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle">
+                                    <thead><tr><th style="min-width:140px">{{ t('websites.name') }}</th><th style="min-width:260px">{{ t('websites.url') }}</th><th style="min-width:150px">{{ t('websites.icon') }}</th><th style="min-width:115px">{{ t('websites.actions') }}</th></tr></thead>
+                                    <tbody>
+                                        <tr v-for="(site, index) in websiteDraft.websites" :key="index">
+                                            <td><input class="form-control form-control-sm" v-model="site.name" required maxlength="100" :disabled="savingWebsites" :aria-label="t('websites.name')"></td>
+                                            <td><input class="form-control form-control-sm" v-model="site.url" required maxlength="2048" placeholder="https://example.com" :disabled="savingWebsites" :aria-label="t('websites.url')"></td>
+                                            <td><div class="d-flex align-items-center gap-2"><i :class="site.icon || 'fas fa-globe'" aria-hidden="true"></i>
+                                                <select class="form-select form-select-sm" v-model="site.icon" :disabled="savingWebsites" :aria-label="t('websites.icon')">
+                                                    <option v-if="!websiteIcons.some(option => option.value === site.icon)" :value="site.icon">{{ site.icon }}</option>
+                                                    <option v-for="option in websiteIcons" :value="option.value" :key="option.value">{{ t(option.label) }}</option>
+                                                </select></div></td>
+                                            <td><div class="d-flex gap-1">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" @click="moveWebsite(index, -1)" :disabled="savingWebsites || index === 0" :title="t('websites.up')" :aria-label="t('websites.up')"><i class="fas fa-arrow-up"></i></button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" @click="moveWebsite(index, 1)" :disabled="savingWebsites || index === websiteDraft.websites.length - 1" :title="t('websites.down')" :aria-label="t('websites.down')"><i class="fas fa-arrow-down"></i></button>
+                                                <button type="button" class="btn btn-outline-danger btn-sm" @click="websiteDraft.websites.splice(index, 1)" :disabled="savingWebsites" :title="t('websites.delete')" :aria-label="t('websites.delete')"><i class="fas fa-trash"></i></button>
+                                            </div></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p v-if="!websiteDraft.websites.length" class="small text-muted">{{ t('websites.empty') }}</p>
+                            <button type="button" class="btn btn-outline-primary btn-sm" @click="addWebsite" :disabled="savingWebsites || websiteDraft.websites.length >= 100"><i class="fas fa-plus me-1"></i>{{ t('websites.add') }}</button>
+                        </template>
+                        <button v-else type="button" class="btn btn-outline-secondary btn-sm" @click="openWebsiteManager">{{ t('websites.retry') }}</button>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" :disabled="savingWebsites" @click="showWebsiteManager = false">{{ t('modal.cancel') }}</button>
+                        <button type="submit" class="btn btn-primary" :disabled="savingWebsites || loadingWebsites || !websitesLoaded">{{ savingWebsites ? t('websites.saving') : t('modal.save') }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <footer class="workspace-footer">
             <div class="footer-left">
@@ -1005,6 +1063,29 @@
             'index.gridView': 'Grid View',
             'index.listView': 'List View',
             'index.commonWebsites': 'Common Websites',
+            'websites.manage': 'Manage websites',
+            'websites.hint': 'Changes are shared by all users and take effect after saving. Addresses without a scheme use HTTP.',
+            'websites.empty': 'No websites to display. Use Manage websites to configure them.',
+            'websites.loading': 'Loading websites…',
+            'websites.enabled': 'Show common website links',
+            'websites.name': 'Name',
+            'websites.url': 'Address',
+            'websites.icon': 'Icon',
+            'websites.actions': 'Actions',
+            'websites.up': 'Move up',
+            'websites.down': 'Move down',
+            'websites.delete': 'Remove',
+            'websites.add': 'Add website',
+            'websites.retry': 'Retry',
+            'websites.saving': 'Saving…',
+            'websites.loadFailed': 'Failed to load websites',
+            'websites.saveFailed': 'Failed to save websites',
+            'websites.globe': 'Website',
+            'websites.chart': 'Monitoring',
+            'websites.code': 'Development',
+            'websites.database': 'Database',
+            'websites.book': 'Documentation',
+            'websites.tools': 'Tools',
             'index.noServers': 'No servers found',
             'index.noServersSearch': 'No servers match your search.',
             'index.noServersEmpty': 'No servers available currently.',
@@ -1065,6 +1146,29 @@
             'index.gridView': '网格视图',
             'index.listView': '列表视图',
             'index.commonWebsites': '常用网站',
+            'websites.manage': '管理常用网站',
+            'websites.hint': '配置由所有用户共享，保存后立即生效。地址未填写协议时默认使用 HTTP。',
+            'websites.empty': '暂无可展示网站，可点击“管理常用网站”进行配置。',
+            'websites.loading': '正在加载网站配置…',
+            'websites.enabled': '显示常用网站链接',
+            'websites.name': '网站名称',
+            'websites.url': '网站地址',
+            'websites.icon': '图标',
+            'websites.actions': '操作',
+            'websites.up': '上移',
+            'websites.down': '下移',
+            'websites.delete': '移除',
+            'websites.add': '添加网站',
+            'websites.retry': '重新加载',
+            'websites.saving': '正在保存…',
+            'websites.loadFailed': '加载网站配置失败',
+            'websites.saveFailed': '保存网站配置失败',
+            'websites.globe': '通用网站',
+            'websites.chart': '监控图表',
+            'websites.code': '研发代码',
+            'websites.database': '数据库',
+            'websites.book': '文档知识',
+            'websites.tools': '工具平台',
             'index.noServers': '未找到服务器',
             'index.noServersSearch': '没有匹配当前搜索条件的服务器。',
             'index.noServersEmpty': '当前暂无可展示服务器。',
@@ -1108,6 +1212,22 @@
                     locale: currentLocale,
                     serverGroups: [],
                     commonWebsites: [],
+                    websiteLoadSequence: 0,
+                    showWebsiteManager: false,
+                    loadingWebsites: false,
+                    savingWebsites: false,
+                    websitesLoaded: false,
+                    websiteError: '',
+                    websiteWarnings: [],
+                    websiteDraft: { enabled: true, websites: [] },
+                    websiteIcons: [
+                        { value: 'fas fa-globe', label: 'websites.globe' },
+                        { value: 'fas fa-chart-line', label: 'websites.chart' },
+                        { value: 'fas fa-code', label: 'websites.code' },
+                        { value: 'fas fa-database', label: 'websites.database' },
+                        { value: 'fas fa-book', label: 'websites.book' },
+                        { value: 'fas fa-tools', label: 'websites.tools' }
+                    ],
                     searchQuery: '',
                     jumpUrl: '',
                     showModal: false,
@@ -1332,12 +1452,59 @@
                 },
                 loadCommonWebsites: function() {
                     var self = this;
-                    axios.get('/api/server/common-websites').then(function(res) {
+                    var sequence = ++this.websiteLoadSequence;
+                    return axios.get('/api/server/common-websites').then(function(res) {
+                        if (sequence !== self.websiteLoadSequence) return;
                         self.commonWebsites = Array.isArray(res.data) ? res.data : [];
                     }).catch(function(e) {
                         console.error('Failed to load common websites:', e);
-                        self.commonWebsites = [];
                     });
+                },
+                openWebsiteManager: function() {
+                    var self = this;
+                    if (this.savingWebsites || this.loadingWebsites) return;
+                    this.showWebsiteManager = true;
+                    this.loadingWebsites = true;
+                    this.websitesLoaded = false;
+                    this.websiteError = '';
+                    return axios.get('/api/server/common-websites/config').then(function(res) {
+                        self.websiteWarnings = res.data.warnings || [];
+                        self.websiteDraft = {
+                            enabled: res.data.enabled,
+                            websites: res.data.websites.map(function(site) { return Object.assign({}, site); })
+                        };
+                        self.websitesLoaded = true;
+                    }).catch(function(e) {
+                        self.websiteError = (e.response && e.response.data && e.response.data.message) || self.t('websites.loadFailed');
+                    }).then(function() { self.loadingWebsites = false; });
+                },
+                addWebsite: function() {
+                    if (this.savingWebsites || this.websiteDraft.websites.length >= 100) return;
+                    this.websiteDraft.websites.push({ name: '', url: '', icon: 'fas fa-globe' });
+                },
+                moveWebsite: function(index, direction) {
+                    var target = index + direction;
+                    if (this.savingWebsites || target < 0 || target >= this.websiteDraft.websites.length) return;
+                    var item = this.websiteDraft.websites.splice(index, 1)[0];
+                    this.websiteDraft.websites.splice(target, 0, item);
+                },
+                saveCommonWebsites: function() {
+                    var self = this;
+                    if (this.savingWebsites || this.loadingWebsites || !this.websitesLoaded) return;
+                    this.savingWebsites = true;
+                    this.websiteError = '';
+                    var settings = {
+                        enabled: this.websiteDraft.enabled,
+                        websites: this.websiteDraft.websites.map(function(site) { return Object.assign({}, site); })
+                    };
+                    return axios.put('/api/server/common-websites/config', settings).then(function(res) {
+                        ++self.websiteLoadSequence;
+                        self.websiteWarnings = [];
+                        self.commonWebsites = res.data.enabled ? res.data.websites : [];
+                        self.showWebsiteManager = false;
+                    }).catch(function(e) {
+                        self.websiteError = (e.response && e.response.data && e.response.data.message) || self.t('websites.saveFailed');
+                    }).then(function() { self.savingWebsites = false; });
                 },
                 loadMonitorData: function() {
                     var self = this;
@@ -1563,7 +1730,7 @@
                     if (!site || !site.url) return;
                     var url = site.url.trim();
                     if (!url.match(/^https?:\/\//i)) url = 'http://' + url;
-                    window.open(url, '_blank');
+                    window.open(url, '_blank', 'noopener,noreferrer');
                 },
                 logout: function() {
                     var self = this;

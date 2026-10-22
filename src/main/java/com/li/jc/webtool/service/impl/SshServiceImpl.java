@@ -13,6 +13,8 @@ import com.li.jc.webtool.service.SshScriptSecurityHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.channel.ChannelShell;
+import org.apache.sshd.client.channel.ChannelExec;
+import org.apache.sshd.client.channel.ClientChannelEvent;
 import org.apache.sshd.client.keyverifier.AcceptAllServerKeyVerifier;
 import org.apache.sshd.client.session.ClientSession;
 import org.apache.sshd.sftp.client.SftpClient;
@@ -26,6 +28,7 @@ import org.springframework.web.socket.WebSocketSession;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
@@ -404,6 +407,7 @@ public class SshServiceImpl implements SshService {
 
                 // 保存默认字符集到 WebSocketSession attributes，供 HTTP API（如脚本安全扫描）读取远程文件时使用
                 session.getAttributes().put("charset", sshConnection.charsetName);
+                session.getAttributes().put("SSH.TARGET.HOST", webSshData.getHost());
 
                 // 发送初始化命令（解决 Linux login profile 初始化过慢，导致自动启动命令在终端输入缓冲区被清空吞掉、从而使 alias
                 // vi=vim 等命令无效的问题）
@@ -1801,6 +1805,46 @@ public class SshServiceImpl implements SshService {
         try (SftpClient sftp = SftpClientFactory.instance().createSftpClient(connection.session)) {
             connection.updateActivity();
             return operation.apply(sftp);
+        }
+    }
+
+    @Override
+    public boolean isSshConnected(WebSocketSession session) {
+        if (session == null || !session.isOpen()) return false;
+        SshConnection connection = sshMap.get(session.getId());
+        return connection != null && connection.session != null && connection.session.isOpen();
+    }
+
+    @Override
+    public int executeScript(WebSocketSession session, String script, OutputStream output, long timeoutMillis)
+            throws Exception {
+        SshConnection connection = sshMap.get(session.getId());
+        if (!session.isOpen() || connection == null || connection.session == null || !connection.session.isOpen()) {
+            throw new IllegalStateException("SSH 连接已关闭，请重新连接服务器");
+        }
+        connection.updateActivity();
+        try (ChannelExec channel = connection.session.createExecChannel("bash -s")) {
+            channel.setIn(new ByteArrayInputStream(script.getBytes(StandardCharsets.UTF_8)));
+            channel.setOut(output);
+            channel.setErr(output);
+            channel.open().verify(Math.min(timeoutMillis, 15000L));
+            long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+            while (!channel.isClosed()) {
+                if (Thread.currentThread().isInterrupted()) {
+                    throw new InterruptedException("脚本任务已停止");
+                }
+                if (!session.isOpen()) {
+                    throw new IOException("终端连接已断开");
+                }
+                if (System.nanoTime() >= deadline) {
+                    throw new TimeoutException("脚本执行超时，已关闭执行通道");
+                }
+                channel.waitFor(java.util.EnumSet.of(ClientChannelEvent.CLOSED), 250L);
+                connection.updateActivity();
+            }
+            Integer status = channel.getExitStatus();
+            if (status == null) throw new IOException("服务器未返回脚本退出码");
+            return status;
         }
     }
 

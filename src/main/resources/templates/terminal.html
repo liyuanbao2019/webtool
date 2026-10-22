@@ -16,6 +16,7 @@
     <!-- Vue 3 & Axios -->
     <script src="/js/vue.global.prod.js"></script>
     <script src="/js/axios.min.js"></script>
+    <script src="/js/connected-scripts.js"></script>
     <!-- Custom CSS -->
     <link href="/css/style.css" rel="stylesheet">
     <!-- 防止 Thymeleaf 解析页面中的 ${} / 未挂载 Vue 时露出原始 {{ }} -->
@@ -108,6 +109,9 @@
                         </option>
                     </select>
                 </div>
+                <connected-script-runner :connected="connected" :session-id="webSocketSessionId"
+                    :username="serverInfo ? serverInfo.username : ''" :host="serverInfo ? serverInfo.host : ''"
+                    :is-agent-mode="isAgentMode" :locale="locale"></connected-script-runner>
                 <button class="btn btn-outline-primary btn-sm me-2" @click="openCommandTemplateModal" :title="t('terminal.commandTemplate')">
                     <i class="fas fa-list-check me-1"></i>{{ t('terminal.template') }}
                 </button>
@@ -885,6 +889,7 @@
         const { createApp } = Vue;
 
         createApp({
+            components: { ConnectedScriptRunner: window.ConnectedScriptRunner },
             data() {
                 return {
                     locale: localStorage.getItem('locale') || 'en',

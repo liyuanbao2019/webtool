@@ -2,6 +2,7 @@ package com.li.jc.webtool.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.li.jc.webtool.config.ServerConfig;
+import com.li.jc.webtool.service.CommonWebsiteService;
 import com.li.jc.webtool.model.CommonWebsite;
 import com.li.jc.webtool.model.ServerGroup;
 import com.li.jc.webtool.model.ServerGroupDTO;
@@ -17,7 +18,6 @@ import javax.validation.Valid;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -27,6 +27,9 @@ public class ServerController {
 
     @Autowired
     private ServerConfig serverConfig;
+
+    @Autowired
+    private CommonWebsiteService commonWebsiteService;
 
     @Autowired(required = false)
     private ExcelServerConfigLoader excelServerConfigLoader;
@@ -82,17 +85,7 @@ public class ServerController {
 
     @GetMapping("/common-websites")
     public List<CommonWebsite> commonWebsites() {
-        if (!serverConfig.isCommonWebsitesEnabled()) {
-            return Collections.emptyList();
-        }
-        if (serverConfig.getCommonWebsites() == null) {
-            return Collections.emptyList();
-        }
-        return serverConfig.getCommonWebsites().stream()
-                .filter(Objects::nonNull)
-                .filter(item -> item.getName() != null && !item.getName().trim().isEmpty())
-                .filter(item -> item.getUrl() != null && !item.getUrl().trim().isEmpty())
-                .collect(Collectors.toList());
+        return commonWebsiteService.visibleWebsites();
     }
 
     @GetMapping("/groups")

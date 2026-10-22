@@ -80,6 +80,7 @@ app:
   #         password: unused-in-agent-mode
   #         # app.agent.enabled=true 时，会自动使用 http://10.0.0.10:${app.agent.port} 调用 Agent
   common-websites-enabled: true
+  common-websites-config-file: ./data/common-websites.json
   common-websites:
       # icon 使用 FontAwesome class，可参考以下常用图标（按需复制到网站配置里）
       # 运维/系统: fas fa-server | fas fa-terminal | fas fa-shield-alt | fas fa-cogs

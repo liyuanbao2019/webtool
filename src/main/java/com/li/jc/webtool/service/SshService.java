@@ -4,6 +4,7 @@ import com.li.jc.webtool.dto.ScriptReadResult;
 import com.li.jc.webtool.model.WebSshData;
 import org.apache.sshd.sftp.client.SftpClient;
 import org.springframework.web.socket.WebSocketSession;
+import java.io.OutputStream;
 
 public interface SshService {
     @FunctionalInterface
@@ -33,6 +34,12 @@ public interface SshService {
 
     // 获取最大连接数（用于监控和连接限制检查）
     int getMaxConnections();
+
+    /** Execute in a separate channel of the connected SSH login (not the interactive su shell). */
+    int executeScript(WebSocketSession session, String script, OutputStream output, long timeoutMillis)
+            throws Exception;
+
+    boolean isSshConnected(WebSocketSession session);
 
     /**
      * 通过SFTP读取远程服务器上的脚本文件内容

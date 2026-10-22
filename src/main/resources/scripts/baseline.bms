@@ -1,0 +1,1674 @@
+%,#@,%topic_name=config
+%,#@,%so_type_id=11082
+%,#@,%so_type_code=OS_ANOLIS
+%,#@,%checkitem_count=55-0#
+%,#@,%so_information=DEVICE_NAME#%b1c4794e9f3d4548aa07641c4b4c43c1%edae8343c23c457fb1d626059a385e95%
+%,#@,%so_information=IP#%bd503336534449f898efb8aecf072180%193ebd3979474fbdb32a6126fe1502f4%
+%,#@,%so_command_definition=%edae8343c23c457fb1d626059a385e95%
+%,#@,%so_command_definition=%193ebd3979474fbdb32a6126fe1502f4%
+%,#@,%so_command_definition=%bd503336534449f898efb8aecf072180%
+%,#@,%so_command_definition=%b1c4794e9f3d4548aa07641c4b4c43c1%
+%,#@,%%edae8343c23c457fb1d626059a385e95%
+hostname | awk -F: '{print "hostname="$1}'|uniq
+%,#@,%%edae8343c23c457fb1d626059a385e95%
+%,#@,%%193ebd3979474fbdb32a6126fe1502f4%
+ip addr
+%,#@,%%193ebd3979474fbdb32a6126fe1502f4%
+%,#@,%%bd503336534449f898efb8aecf072180%
+ifconfig -a
+%,#@,%%bd503336534449f898efb8aecf072180%
+%,#@,%%b1c4794e9f3d4548aa07641c4b4c43c1%
+#20240104
+%,#@,%%b1c4794e9f3d4548aa07641c4b4c43c1%
+%,#@,%%,#@,%user_input_ip%,#@,%
+%,#@,%%,#@,%user_input_ip%,#@,%
+%,#@,%pk_checkitem=%f2e4a85a1c0a479a81211aefa82fa3fa%
+%,#@,%pk_checkitem=%500e559e0db143bd831ebcab9cceacbf%
+%,#@,%pk_checkitem=%4c835be1728c4006bae4f7c0fb2c8157%
+%,#@,%pk_checkitem=%bc5af5ed5e3f4dd5b8225b00cdb02a6b%
+%,#@,%pk_checkitem=%7cec392fc40a4157b5ce88a01bc26c70%
+%,#@,%pk_checkitem=%eb899ed446d3498eb58c31b0b131de81%
+%,#@,%pk_checkitem=%9a4848ba98034f3d8acf278c080b2beb%
+%,#@,%pk_checkitem=%300d1a7e5c624a2ca5ca93306b1c3ede%
+%,#@,%pk_checkitem=%e32f643f18254da4aa4ee31475a44bc9%
+%,#@,%pk_checkitem=%a167ca3ded344acb8afc1a6d6ac59acb%
+%,#@,%pk_checkitem=%461da6a270324d648ef4a9fa3391cff1%
+%,#@,%pk_checkitem=%a662b943382745339092f7f91a7acbf5%
+%,#@,%pk_checkitem=%a416928f8b4448a8a4a7b0d6dc2ae4bd%
+%,#@,%pk_checkitem=%8ebe7f9e0d2a490aa9b20b3e00c9b2e0%
+%,#@,%pk_checkitem=%c902130360c1485fa35baa3530d35e4a%
+%,#@,%pk_checkitem=%0d6888fb28724e988558400751e21971%
+%,#@,%pk_checkitem=%e41f58d23d6a4e8fad9e575bde43b239%
+%,#@,%pk_checkitem=%166d172a825d4dd5ac311d7c56fa3e3b%
+%,#@,%pk_checkitem=%80ad61f854ac4fff999fea71e9bb4e8d%
+%,#@,%pk_checkitem=%94f950d373704e7399d37614c992278c%
+%,#@,%pk_checkitem=%195dbc7a5ee4409683c9a748c02964ae%
+%,#@,%pk_checkitem=%b3a304fc411c4a2f9ecb2b6b6c3e25f4%
+%,#@,%pk_checkitem=%7f132f3690964b1897a2fd94a69e4f26%
+%,#@,%pk_checkitem=%6cec2f28a5674f01be8971e742a17979%
+%,#@,%pk_checkitem=%36a42c657e5b41d1be1b4ab0abb78659%
+%,#@,%pk_checkitem=%1be17932845a45ca9b8def74c5544f7c%
+%,#@,%pk_checkitem=%4feedb2e05d0429caedb0b313c04a791%
+%,#@,%pk_checkitem=%5df69ec292bd401f97b41480e8af1174%
+%,#@,%pk_checkitem=%e21847bf6ab34e2682dcf53ce7dac11f%
+%,#@,%pk_checkitem=%783e766067ac477fab9c5b5cf8c71e57%
+%,#@,%pk_checkitem=%9ee85aa994d4488b8e3119dec8c51ed7%
+%,#@,%pk_checkitem=%d13f366b2ef74d3389f0ae62f25eac47%
+%,#@,%pk_checkitem=%9e55c0ebc3274cd0a83bbe10d1462890%
+%,#@,%pk_checkitem=%e4b6a677d971477f81fd3b5ba48fe2dd%
+%,#@,%pk_checkitem=%bf6b74e1452543108d27d7095104a49d%
+%,#@,%pk_checkitem=%50e50acf9ff74c0c8ba1de4ef447f4fd%
+%,#@,%pk_checkitem=%f9f0d8f1f6f649918df1ca54e5dadc6b%
+%,#@,%pk_checkitem=%6bca3ac854624cc2934a362711f89dc3%
+%,#@,%pk_checkitem=%2d62eff0a8424591acfd9a2c23480e26%
+%,#@,%pk_checkitem=%44b4a785b52f49f69d0f04811f7992ff%
+%,#@,%pk_checkitem=%c17781a4a3d7412a9385279175068512%
+%,#@,%pk_checkitem=%deafb4d0c9d1471e8d2d669a64364231%
+%,#@,%pk_checkitem=%48a4b671dc174566baaa8da05d04f69e%
+%,#@,%pk_checkitem=%30cb825c42104a97b62b85a4ccf3b887%
+%,#@,%pk_checkitem=%b5fcf5088d83492ea886a7d23027d747%
+%,#@,%pk_checkitem=%21e9de40719f490fad605b14abf98b34%
+%,#@,%pk_checkitem=%25e0c60befc2483abcc525bafe983890%
+%,#@,%pk_checkitem=%f1a3a2a93c664d2cbea7115511037ee3%
+%,#@,%pk_checkitem=%d5c6a44bf4cf412c97c8492efd93e046%
+%,#@,%pk_checkitem=%a34e905e4464411996b61f3910be2cd2%
+%,#@,%pk_checkitem=%06f81623a07c4cb7b007d2025f101d39%24b7bdd41dcb41c7a7ac6258e738a67b%0e8181fee47d4cdfa48ad7009e26ca9a%
+%,#@,%pk_checkitem=%14b8f40c1e2b49b4bf1d2e878b9b1de0%
+%,#@,%pk_checkitem=%1220d768704044aab8bde10c42ccc162%
+%,#@,%%f2e4a85a1c0a479a81211aefa82fa3fa%
+#20260209
+chk_pwdlife() {
+  cat /etc/login.defs |awk '
+    /^ *PASS_MIN_DAYS/{if($2>0&&$2<=15){
+      print $0", check result=true"}else{print $0", check result=false"}}
+    /^ *PASS_MAX_DAYS/{if($2>0&&$2<=90){
+      print $0", check result=true"}else{print $0", check result=false"}}
+    /^ *PASS_WARN_AGE/{if($2>0&&$2<=15){
+      print $0", check result=true"}else{print $0", check result=false"}}'
+  local root_user=$(cat /etc/passwd|awk -F: '{if($3==0){print $1}}')
+  local current_days=$(($(date +%s) / 86400))
+  cat /etc/shadow |grep -E "^$root_user"|awk -F: -v today="$current_days" '{
+    last_change=$3
+    if($2 !~ /^[!*]/ && last_change > today){
+      print $1": Password last change date is in the future ("last_change" > "today"), check result=false"
+    }
+    if($2 !~ /^[!*]/){if($4<=0)print $1":"$4", PASS_MIN_DAYS check result=false"}
+    if($2 !~ /^[!*]/){if($5<0 || $5>90)print $1":"$5", PASS_MAX_DAYS check result=false"}
+    if($2 !~ /^[!*]/){if($6<=0)print $1":"$6", PASS_WARN_AGE check result=false"}
+  }END{
+    if(NR==0)print "Insufficient permissions, check result=false"
+  }'
+}
+chk_pwdlife;unset chk_pwdlife
+%,#@,%%f2e4a85a1c0a479a81211aefa82fa3fa%
+%,#@,%%500e559e0db143bd831ebcab9cceacbf%
+chk_ipforward() {
+  sysctl net.ipv4.conf.all.accept_redirects net.ipv4.conf.default.accept_redirects net.ipv6.conf.all.accept_redirects net.ipv6.conf.default.accept_redirects net.ipv4.conf.all.secure_redirects net.ipv4.conf.default.secure_redirects net.ipv4.conf.all.send_redirects net.ipv4.conf.default.send_redirects
+  sysctl -n net.ipv4.conf.all.accept_redirects net.ipv4.conf.default.accept_redirects net.ipv6.conf.all.accept_redirects net.ipv6.conf.default.accept_redirects net.ipv4.conf.all.secure_redirects net.ipv4.conf.default.secure_redirects net.ipv4.conf.all.send_redirects net.ipv4.conf.default.send_redirects |awk '{print "check result="$0}'
+}
+chk_ipforward;unset chk_ipforward
+%,#@,%%500e559e0db143bd831ebcab9cceacbf%
+%,#@,%%4c835be1728c4006bae4f7c0fb2c8157%
+#20251024
+chk_logfile() {
+  local syslog_cfg="/etc/rsyslog.conf"
+  local ng_cfg="/etc/syslog-ng/syslog-ng.conf"
+  if [ ! -f "$syslog_cfg" ];then
+    syslog_cfg="/etc/syslog.conf"
+  fi
+  if [ -f "$syslog_cfg" ];then
+    local log_files=$(cat $syslog_cfg 2>/dev/null|grep -Eo '/var/log/[A-Za-z0-9\.\-\/]+'|sort |uniq)
+  elif [ -f "$ng_cfg" ];then
+    local log_files=$(cat $ng_cfg 2>/dev/null|grep -Eo '/var/log/[A-Za-z0-9\.\-\/]+'|sort |uniq) 
+  fi
+  if [ -n "$log_files" ];then
+    echo "====>check log files from configuration file"
+    find -L $log_files -maxdepth 1 -type f -name "*.log" -type f -perm /137 -ls 2>/dev/null
+  else
+    echo "====>check log files from /var/log"
+    find -L /var/log -maxdepth 2 -type f -name "*.log" -type f -perm /137 -ls -quit 2>/dev/null
+  fi|awk 'BEIGIN{file_num=0}{file_num+=1;print $0}END{
+    if(file_num>1){print "The permissions of the log file are higher than 640. check_result=false"}
+    else{print "check_result=true"}
+  }'
+}
+chk_logfile;unset chk_logfile
+%,#@,%%4c835be1728c4006bae4f7c0fb2c8157%
+%,#@,%%bc5af5ed5e3f4dd5b8225b00cdb02a6b%
+#20250704
+chk_syslog() {
+  local syslog_conf=/etc/rsyslog.conf;
+  if [ ! -f  "$syslog_conf" ];then 
+    syslog_conf=/etc/syslog.conf;
+  fi
+  if [ -f "$syslog_conf" ];then
+    echo "===============>check $syslog_conf"
+    local include_cfg=$(cat $syslog_conf|awk '/^\$IncludeConfig/{print $2}')
+    local syslog_content=$(cat $syslog_conf $include_cfg 2>/dev/null|grep -Ev '^[[:space:]]*#|^$|@')
+    echo "$syslog_content"
+    echo "$syslog_content"|awk '{if($1 ~ "cron\\.\\*|\\*\\.\\*"){print $1", check_result=true"}}'
+  fi
+}
+
+chk_syslog_ng() {
+  local ng_cfg=/etc/syslog-ng/syslog-ng.conf 
+  if [ -f "$ng_cfg" ];then
+    echo "===============>check $ng_cfg"
+    local include_cfg=$(cat $ng_cfg |awk '/^@include/{if($2!~/^\"\//){print "/etc/syslog-ng/"$2}else{print $2}}'|sed 's/"//g')
+    local ng_content=$(cat $ng_cfg $include_cfg 2>/dev/null|grep -Ev '^[[:space:]]*#|^$')
+    echo "$ng_content"
+    echo "$ng_content"|awk '/^log.*filter\(f_cron/{print $0," check_result=true"}'
+  fi
+}
+chk_main() {
+  local is_actived=$(ps -ef |grep -E 'syslogd|syslog-ng'|grep -v grep|wc -l)
+  if [ ${is_actived:=0} -ne 0 ]; then
+    chk_syslog;chk_syslog_ng;unset chk_syslog chk_syslog_ng
+  else
+    echo "syslog service is not running, check_result=false"
+  fi
+}
+chk_main;unset chk_main
+%,#@,%%bc5af5ed5e3f4dd5b8225b00cdb02a6b%
+%,#@,%%7cec392fc40a4157b5ce88a01bc26c70%
+#20250814-lyl
+chk_anolisgt(){
+  [ "$LC_ALL" != "en_US.UTF-8" ] && export LC_ALL="en_US.UTF-8" 2>/dev/null
+  local release_string=$(timeout 20 /bin/rpm -q anolis-release 2>/dev/null |grep -Ev 'not installed|未安装')
+  local OS_TYPE=""
+  local OS_VERSION=""
+  if [ -n "$release_string" ];then
+    echo "====>check anolis rpm package info"
+    OS_TYPE=anolis
+    OS_VERSION=$(echo "$release_string" |grep -Ev 'not installed|未安装'|sed 's/.*-\([0-9.]\+\-[0-9.]\+\)\.an.*/\1/')
+  elif release_string=$(rpm -q bclinux-release 2>/dev/null|grep '\.el');then
+    echo "====>check bclinux rpm package info"
+    OS_TYPE=bclinux4anolis
+    OS_VERSION=$(echo "$release_string" |grep -Ev 'not installed|未安装'|sed 's/.*-\([0-9.]\+\-[0-9.]\+\)\.el.*/\1/')
+  else
+    release_string=$(grep -i ^Anolis /etc/anolis-release 2>/dev/null)
+    echo "====>check anolis-release file version info"
+    [ -n "$release_string" ] && OS_TYPE="anolis"
+    [ -n "$release_string" ] && OS_VERSION=$(cat /etc/anolis-release |sed 's/.* \([0-9.]\+\).*/\1/')
+    release_string=$(grep -i '^BigCloud Enterprise Linux release' /etc/bclinux-release 2>/dev/null)
+    echo "====>check bclinux-release file version info"
+    [ -n "$release_string" ] && OS_TYPE="bclinux4anolis"
+    [ -n "$release_string" ] && OS_VERSION=$(cat /etc/bclinux-release |sed 's/.* \([0-9.]\+\).*/\1/')
+  fi
+  echo lylos_type=$OS_TYPE","lylos_version=$OS_VERSION
+}
+chk_anolisgt;unset chk_anolisgt
+%,#@,%%7cec392fc40a4157b5ce88a01bc26c70%
+%,#@,%%eb899ed446d3498eb58c31b0b131de81%
+#20251120
+shared_users() {
+  local is_shared=$(cat /etc/passwd|grep -Ew "^test|^admin|^ceshi"|wc -l)
+  if [ $is_shared -eq 0 ]; then
+    if [ -f /etc/login.defs ]; then
+      local up_uidmin=$(cat /etc/login.defs |grep -Ev '^#|^$' |awk '($1=="UID_MIN"){print $2;exit}')
+      local up_uidmax=$(cat /etc/login.defs |grep -Ev '^#|^$' |awk '($1=="UID_MAX"){print $2;exit}')
+      local users_numbs=$(cat /etc/passwd|awk -F: '($3>='${up_uidmin:=1000}' && $3<='${up_uidmax:=60000}') {print $1":"$3":"$6}')
+    else
+      local users_numbs=$(cat /etc/passwd|grep -Ev "^(root|oracle|sybase|postgres|mysql|apache)"|grep -Ew 'bash|sh'|awk -F: '{print $1":"$3":"$6}')
+    fi
+    awk 'BEGIN{num=0}NF{num+=1;print}
+      END{print "The accounts are compliance, result="num}' <<< "$users_numbs"
+    for ff in $users_numbs;do
+      local home_dir=$(echo $ff|awk -F: '{print $3}')
+      stat -Lc %a $home_dir 2>/dev/null|awk -v homedir=$home_dir '{
+        if(substr($1,2,1)>5||substr($1,3,1)>0){
+          print homedir" privilege is: "$0" ,result=0"
+      }}'
+    done
+  else
+    echo "There are accounts such as test admin ceshi, result=0"
+  fi
+}
+shared_users;unset shared_users
+%,#@,%%eb899ed446d3498eb58c31b0b131de81%
+%,#@,%%9a4848ba98034f3d8acf278c080b2beb%
+#202501112
+if [[ "$(systemctl is-active cri-o containerd docker 2>/dev/null|sort -u|grep -w active)" == "active" ]];then
+  echo "host is container host, check result=true"
+elif [[ "$(systemctl is-active openstack-nova-compute openstack-nova-api openstack-glance-api openstack-glance-registry openstack-keystone openstack-cinder-api neutron-server neutron-openvswitch-agent 2>/dev/null|sort -u|grep -w active)" == "active" ]];then
+  echo "host is openstack cloud node, check result=true"
+else
+  sysctl net.ipv4.ip_forward net.ipv4.conf.all.forwarding net.ipv4.conf.default.forwarding net.ipv6.conf.all.forwarding net.ipv6.conf.default.forwarding|awk '{if($NF==0){print $0,"check result=true"}else{print $0,"check result=false"}}' 
+fi
+#anti-tampering code begin
+current_date=$(date +"%Y-%m-%d")
+if command -v md5sum >/dev/null 2>&1; then
+  md5_value=$(echo -n "$current_date" | md5sum | awk '{print $1}')
+elif command -v md5 >/dev/null 2>&1; then
+  md5_value=$(echo -n "$current_date" | md5 | awk '{print $1}')
+else
+  echo "algInfo=md5sumNoFound"
+fi
+echo "crrdazhi=$current_date"
+echo "crrdaMVa=$md5_value"
+address=
+for inf in $(cat /proc/net/dev|awk '{print $1}'|grep ":"|awk -F: '{print $1}'); do
+  ls /sys/devices/virtual/net | grep $inf > /dev/null
+  if [ $? -ne 0 ]; then
+    address=$address"$(echo $inf|xargs -i ip addr show dev {} | grep --color=never -oP 'link\/ether \K[^\s]+|inet[6]* \K[^\s]+')"
+  fi;
+done
+echo "address="$address
+pr_uuid=
+pu="/sys/class/dmi/id/product_uuid /sys/devices/virtual/dmi/id/product_uuid"
+for pu_file in $(echo $pu); do if [ -z $pr_uuid ]; then pr_uuid=$(cat $pu_file); else break; fi done
+if [ -n "$pr_uuid" ]; then echo "prdpuHn5p="$pr_uuid; else echo "prdpuHn5p=temp_id"; fi
+#anti-tampering code end
+%,#@,%%9a4848ba98034f3d8acf278c080b2beb%
+%,#@,%%300d1a7e5c624a2ca5ca93306b1c3ede%
+#20250911
+chk_account_files() {
+  ls -l /etc/passwd /etc/group /etc/shadow
+  ls -ld /etc/security
+  find /etc/passwd /etc/group \( -perm /133 -o -not -user root -o -not -group root \) -ls |awk '{print}END{print "check result="NR}'
+  find /etc/shadow \( -perm /377 -o -not -user root -o -not -group root \) -ls|awk '{print}END{print "check result="NR}'
+  find /etc/security -maxdepth 0 \( -perm /022 -o -not -user root -o -not -group root \) -ls|awk '{print}END{print "check result="NR}'
+}
+chk_account_files;unset chk_account_files
+%,#@,%%300d1a7e5c624a2ca5ca93306b1c3ede%
+%,#@,%%e32f643f18254da4aa4ee31475a44bc9%
+#20251121
+chk_ssh_config() {
+  local sshd_pid=$(ps -ef | awk '/bin\/sshd / && $3 == 1 {print $2}')
+  local sshd_bin=$(ls -l /proc/"$sshd_pid"/exe 2>/dev/null | awk '{print $NF}')
+  if [ ! -e "$sshd_bin" ] || [ ! -x "$sshd_bin" ]; then
+    sshd_bin=$(which sshd)
+  fi
+  ($sshd_bin -T || $sshd_bin -T -C user=john) >/dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    echo "=====>check in sshd command"
+    ($sshd_bin -T || $sshd_bin -T -C user=john) 2>/dev/null | grep -i permittunnel|awk '{if($2=="no"){
+    print $0,"check result=true"}
+    else{print $0,"check result=false"}}'   
+  else
+    echo "=====>check in sshd_config file"
+    cat /etc/ssh/sshd_config |awk 'BEGIN{IGNORECASE=1;num=0}
+      /^ *permittunnel/{
+        num+=1
+        if($2=="no"){print $0,"check result=true"}
+        else{print $0,"check result=false"}}
+      END{
+        if(NR==0){print "No permission or The /etc/ssh/sshd_config does not exist, check result=false"}
+        else if(num==0){print "The PermitTunnel is default, check result=true"}
+    }'
+  fi
+}
+chk_ssh_config;unset chk_ssh_config
+%,#@,%%e32f643f18254da4aa4ee31475a44bc9%
+%,#@,%%a167ca3ded344acb8afc1a6d6ac59acb%
+#20251118
+chk_pam_faillock() {
+  local chk_filename=$1
+  if [ ! -f "$chk_filename" ];then 
+    chk_filename=$chk_filename"-local"
+  fi
+  if [ -f "$chk_filename" ];then
+    echo "======================>check $chk_filename <======================"
+    cat $chk_filename |awk '/^auth[[:space:]]+.*pam_(faillock|tally2).so.*deny.*/{print}'|sed 's/[[:space:]]/\n/g' |awk -F'[ =]+' '
+    BEGIN{unlock_time=0;even_deny_root=0}
+    /^[[:space:]]*unlock_time/{unlock_time+=1
+      if($NF>=900){
+        print $0,"check_result=true"
+      }else{
+        print $0,"check_result=false"}}
+    /^[[:space:]]*even_deny_root/{even_deny_root+=1;print $0,"check_result=true"}
+    END{
+      if(unlock_time==0){print "The unlock_time parameter is not configured, check_result=false"}
+      if(even_deny_root==0){print "The even_deny_root parameter is not configured, check_result=false"}
+    }'
+  else
+    echo "$chk_filename does not exist. check_result=false"
+  fi 
+}
+chk_main(){
+  local fl_conf="/etc/security/faillock.conf"
+  if [ -f "$fl_conf" ] && [ $(cat "$fl_conf"|grep -Ev '^#|^$'|grep -E 'deny|unlock_time'|wc -l) -ne 0 ];then
+    echo "======================>check $fl_conf <======================"
+    cat "$fl_conf" |sed 's/[[:space:]]*$//'|awk -F'[ =]+' '
+    BEGIN{unlock_time=0;even_deny_root=0}
+    /^[[:space:]]*unlock_time/{unlock_time+=1
+      if($NF>=900){
+        print $0,"check_result=true"
+      }else{
+        print $0,"check_result=false"}}
+    /^[[:space:]]*even_deny_root/{even_deny_root+=1;print $0,"check_result=true"}
+    END{
+      if(unlock_time==0){print "The unlock_time parameter is not configured, check_result=false"}
+      if(even_deny_root==0){print "The even_deny_root parameter is not configured, check_result=false"}
+    }'
+  else
+    chk_pam_faillock "/etc/pam.d/system-auth"
+    chk_pam_faillock "/etc/pam.d/password-auth" 
+  fi
+}
+chk_main;unset chk_pam_faillock chk_main
+%,#@,%%a167ca3ded344acb8afc1a6d6ac59acb%
+%,#@,%%461da6a270324d648ef4a9fa3391cff1%
+grep -Ev '^[[:space:]]*#|^$' /etc/pam.d/su|awk 'BEGIN{is_cfg=0}
+/pam_wheel.so/{
+  is_cfg=1;print $0
+  for(i=1;i<=NF;i++){
+    if($i=="deny"){is_cfg=0
+    print "The deny entry needs to be removed from the configuration line. check_result=false"
+  }}
+}END{
+  if(is_cfg==0){
+    print "The pam_wheel.so does not meet the requirements. check_result=false"
+  }else{
+    print "The pam_wheel.so does meet the requirements. check_result=true"
+  }
+}'
+%,#@,%%461da6a270324d648ef4a9fa3391cff1%
+%,#@,%%a662b943382745339092f7f91a7acbf5%
+#20260305
+vsftp_dir() {
+  echo "================>check vsftpd"
+  local FTPCONF=""
+  for FTPCONF in $(ps -ef |awk '/vsftpd \//{if($3==1)print $NF}'|awk '{print $0}END{if(NR==0)print "/etc/vsftpd/vsftpd.conf"}');do
+    if [ ! -f "${FTPCONF:="/etc/vsftpd/vsftpd.conf"}" ];then
+      FTPCONF="/etc/vsftpd.conf";   
+    fi
+    if "$REAL_RPM" -q vsftpd >/dev/null; then
+      if [ -f "$FTPCONF" ]; then
+        cat "$FTPCONF"|grep -E -v "^#|^$"|grep -i chroot
+        local is_enable=$(cat "$FTPCONF"|grep -v "^#" |grep -ic "chroot_local_user=YES")
+        local is_disable=$(cat "$FTPCONF"|grep -v "^#" |grep -ic "chroot_list_enable=YES")
+        if [ "$is_enable" -eq 1 ] && [ "$is_disable" -eq 0 ];then
+          echo "vsftpd is running.$FTPCONF is recommended.FTP check result=true.";
+        else  
+          echo "vsftpd is running.$FTPCONF is not recommended.FTP check result=false.";
+        fi
+      else
+        echo "vsftpd server is installed, but vsftpd.conf is not exist, result=false"
+      fi
+    else
+      echo "vsftpd server is not installed, result=true"
+    fi
+  done
+}
+pureftp_dir() {
+  echo "================>check pure-ftpd"
+  if "$REAL_RPM" -q 'pure-ftpd' >/dev/null; then
+    if [ -f /etc/pure-ftpd/pure-ftpd.conf ]; then
+      cat /etc/pure-ftpd/pure-ftpd.conf|grep -E -v "^#|^$"
+      local ChrootEveryone=$(cat /etc/pure-ftpd/pure-ftpd.conf|grep -v "^#"|grep -i "ChrootEveryone"|grep -ic "yes");
+      local AllowUserFXP=$(cat /etc/pure-ftpd/pure-ftpd.conf|grep -v "^#"|grep -i "AllowUserFXP"|grep -ic "no");
+      local AllowAnonymousFXP=$(cat /etc/pure-ftpd/pure-ftpd.conf|grep -v "^#"|grep -i "AllowAnonymousFXP"|grep -ic "no");
+      local PUREFTPD_NO=$((ChrootEveryone + AllowUserFXP + AllowAnonymousFXP));
+      if [ "$PUREFTPD_NO" -eq 3 ];then
+        echo "pure-ftpd is running.pure-ftpd.conf is recommended.FTP check result=true."
+      else
+        echo "pure-ftpd is running.pure-ftpd.conf is not recommended.FTP check result=false."
+      fi
+    else
+      echo "pure-ftpd server is installed, but pure-ftpd.conf is not exist, result=false"
+    fi
+  else
+    echo "pure-ftpd server is not installed, result=true"
+  fi
+}
+proftp_dir() {
+  echo "================>check proftp"
+  local FTPCONF="/etc/proftpd/proftpd.conf"
+  if [ ! -f "$FTPCONF" ];
+    then FTPCONF="/etc/proftpd.conf";
+  fi
+  if "$REAL_RPM" -q proftpd >/dev/null; then
+    if [ -f "$FTPCONF" ]; then
+      cat "$FTPCONF" | grep -E -v "^#|^$"
+      if [ "$(cat "$FTPCONF"|grep -v "^#" |grep -ic "DefaultRoot")" -eq 1 ];
+         then  echo "proftpd is running.$FTPCONF is recommended.FTP check result=true.";
+         else  echo "proftpd is running.$FTPCONF is not recommended.FTP check result=false.";
+      fi
+    else
+      echo "proftpd server is installed, but proftpd.conf is not exist, result=false"
+    fi
+  else
+    echo "proftpd server is not installed, result=true"
+  fi
+}
+check_main() {
+  type -a rpm 2>/dev/null
+  REAL_RPM=$(type -P rpm 2>/dev/null)
+  if [ -z "$REAL_RPM" ] || [ ! -x "$REAL_RPM" ]; then
+    if [ -x "/usr/bin/rpm" ]; then
+      REAL_RPM="/usr/bin/rpm"
+    elif [ -x "/bin/rpm" ]; then
+      REAL_RPM="/bin/rpm"
+    fi
+  fi
+  if [ -n "$REAL_RPM" ] && [ -x "$REAL_RPM" ]; then
+    vsftp_dir;pureftp_dir;proftp_dir
+    unset vsftp_dir pureftp_dir proftp_dir
+  else
+    echo "rpm command not available or not executable, result=false"
+  fi
+}
+check_main;unset check_main
+%,#@,%%a662b943382745339092f7f91a7acbf5%
+%,#@,%%a416928f8b4448a8a4a7b0d6dc2ae4bd%
+sysctl net.ipv4.tcp_syncookies|awk '{if($NF==1){print $0,"check result=true"}else{print $0,"check result=false"}}'
+%,#@,%%a416928f8b4448a8a4a7b0d6dc2ae4bd%
+%,#@,%%8ebe7f9e0d2a490aa9b20b3e00c9b2e0%
+#20260724
+chk_files_motd() {
+  if [ -f "$1" ]; then
+    echo "============>$1"
+    awk 'NF{
+      if ($0~/Authorized (users|uses) only\.[ \t]*All (activity|activities) may be monitored and reported/){
+        print $0", result=true"
+      } else {
+        print $0", result=false"
+      }}
+      END{if(NR==0){print "The file is empty, result=false"}}' "$1"
+  else
+    echo "$1 is not exist, result=true"
+  fi
+}
+chk_banner() {
+  chk_files_motd /etc/issue
+  chk_files_motd /etc/motd
+  chk_files_motd /etc/issue.net
+  local sshd_pid sshd_bin
+  sshd_pid=$(ps -ef | awk '/bin\/sshd / && $3 == 1 {print $2}')
+  sshd_bin=$(ls -l /proc/"$sshd_pid"/exe 2>/dev/null | awk '{print $NF}')
+  if [[ ! -e "$sshd_bin" || ! -x "$sshd_bin" ]]; then
+    sshd_bin=$(which sshd)
+  fi
+  local ssh_banner_file
+  ssh_banner_file=""
+  ("$sshd_bin" -T || "$sshd_bin" -T -C user=john) &>/dev/null
+  if [ $? -eq 0 ]; then
+    echo "=====>check in sshd command"
+    ssh_banner_file=$( ("$sshd_bin" -T || "$sshd_bin" -T -C user=john) 2>/dev/null | awk '/^[ \t]*[Bb]anner/{print $2}')
+  else
+    echo "=====>check in sshd_config file"
+    ssh_banner_file=$(awk '/^[ \t]*[Bb]anner/{print $2}' /etc/ssh/sshd_config 2>/dev/null)
+  fi
+  if [ -f "${ssh_banner_file:=none}" ]; then
+    chk_files_motd "$ssh_banner_file"
+  else
+    echo "banner is $ssh_banner_file or not exist, result=false"
+  fi
+}
+chk_banner;unset -f chk_files_motd chk_banner
+%,#@,%%8ebe7f9e0d2a490aa9b20b3e00c9b2e0%
+%,#@,%%c902130360c1485fa35baa3530d35e4a%
+#20251120
+list_sys_services() {
+  [ "$LC_ALL" != "en_US.UTF-8" ] && export LC_ALL="en_US.UTF-8"
+  echo "==========>check chkconfig"
+  command -v chkconfig && chkconfig --list |grep -E -e "\b(daytime|time|echo|discard|chargen|telnet)\b" -e "\b(sendmail|ntalk|ident|printer)\b" -e "\b(bootps|tftp|kshell|klogin)\b" -e "\b(lpd|nfs|nfs.lock|ypbind)\b"|awk '
+    BEGIN{num=0}/:on/{num+=1;print $0}END{if(num>0){print "result=false"}else{print "result=true"}}'
+  echo "==========>check systemctl"
+  command -v systemctl && systemctl list-units --type=service --type=socket|awk '/active/{print $1}'|grep -E -e "\b(daytime|time|echo|discard|chargen|telnet)\b" -e "\b(sendmail|ntalk|ident|printer)\b" -e "\b(bootps|tftp|kshell|klogin)\b" -e "\b(lpd|nfs|nfs.lock|ypbind)\b"|awk '
+    BEGIN{num=0}{num+=1;print $0}END{if(num>0){print "result=false"}else{print "result=true"}}'
+  echo "==========>check port"
+  if command -v netstat >/dev/null 2>&1;then
+    netstat -anp|grep -E '^tcp|^udp' |awk '
+    BEGIN{num=0} /:(139|445)\s+/{num+=1;print $0}
+    END{if(num>0){print "result=false"}else{print "result=true"}}'
+  else
+    command -v ss >/dev/null 2>&1 && ss -tlnp |awk '
+    BEGIN{num=0} /:(139|445)\s+/{num+=1;print $0}
+    END{if(num>0){print "result=false"}else{print "result=true"}}'
+  fi
+}
+list_sys_services;unset list_sys_services
+%,#@,%%c902130360c1485fa35baa3530d35e4a%
+%,#@,%%0d6888fb28724e988558400751e21971%
+#20251020
+chk_pathevn() {
+  if [ ! `echo $PATH |grep -E ':\.|\.:'` ];then
+    echo "The PATH environment variable does not contains . or .., check result=true";
+  else
+    echo "The PATH environment variable contains . or .., check result=false";
+  fi
+  local dirs=$(echo $PATH|awk -F: '{for(i=1;i<=NF;i++)print $i}')
+  stat -Lc "%N %a" $dirs 2>/dev/null|awk '$NF==777{print $0,"check result=false"}'
+}
+chk_pathevn;unset chk_pathevn
+%,#@,%%0d6888fb28724e988558400751e21971%
+%,#@,%%e41f58d23d6a4e8fad9e575bde43b239%
+sysctl net.ipv4.icmp_echo_ignore_broadcasts|awk '{if($NF==1){print $0,"check result=true"}else{print $0,"check result=false"}}'
+%,#@,%%e41f58d23d6a4e8fad9e575bde43b239%
+%,#@,%%166d172a825d4dd5ac311d7c56fa3e3b%
+awk -F: 'BEGIN{n=0} ($2 == "" ) {n+=1; print $1 " does not have a password "} END{print "result="n}' /etc/shadow
+%,#@,%%166d172a825d4dd5ac311d7c56fa3e3b%
+%,#@,%%80ad61f854ac4fff999fea71e9bb4e8d%
+#20250610
+chk_ssh() {
+  [ "$LC_ALL" != "en_US.UTF-8" ] && export LC_ALL="en_US.UTF-8"
+  rpm -q telnet-server
+  local is_installed=$(rpm -q telnet-server|grep -E -v 'is not installed|未安装'|wc -l)
+  local ssh_status=$(ps -ef| grep -E 'sshd|dropbear'| grep -v grep| wc -l)
+  if [ "$is_installed" -eq 0 ]; then
+    echo "telnet-server is not installed, result=true"
+  else
+    echo "telnet-server is installed, result=false"
+  fi
+  if [ "$ssh_status" -ne 0 ];then
+    echo "sshd is running, result=true"
+  else
+    echo "sshd is not running, result=false"
+  fi
+}
+chk_ssh;unset chk_ssh
+%,#@,%%80ad61f854ac4fff999fea71e9bb4e8d%
+%,#@,%%94f950d373704e7399d37614c992278c%
+#20251105
+chk_remember() {
+  local pam_file=$1
+  if [ ! -f "$pam_file" ];then 
+    pam_file=$pam_file"-local"
+  fi
+  if [ -f "$pam_file" ];then
+    echo "===>check file: $pam_file"
+    cat "$pam_file" |awk '
+    /^password[[:space:]]*(required|sufficient|requisite)[[:space:]]*pam_pwhistory.*enforce_for_root/{
+      for(i=1;i<=NF;i++){
+        if($i~/remember/){num+=1;print "===>The remember configured by pam_pwhistory is: check_result_"$i}
+      }}
+    /^password[[:space:]]*(required|sufficient|requisite)[[:space:]]*pam_unix.*/{
+      for(i=1;i<=NF;i++){
+        if($i~/remember/){num+=1;print "===>The remember configured of pam_unix is: check_result_"$i}
+      }
+    }END{
+      if(num==0)print "===>The remember has not been configured. check_result_remember=0"
+    }'
+  else
+    echo "$pam_file was not found. check_result=false"
+  fi
+}
+chk_main() {
+  local rmber=$(cat /etc/security/pwhistory.conf 2>/dev/null|grep -E '^[[:space:]]*remember')
+  if [ -n "$rmber" ];then
+    echo "===>check file: /etc/security/pwhistory.conf"
+    echo "$rmber"|awk -F'[= ]+' '/remember/{print "remember="$NF}'
+  else
+    chk_remember /etc/pam.d/system-auth
+    chk_remember /etc/pam.d/password-auth
+  fi
+}
+chk_main;unset chk_remember chk_main
+%,#@,%%94f950d373704e7399d37614c992278c%
+%,#@,%%195dbc7a5ee4409683c9a748c02964ae%
+#20260429
+awk 'BEGIN {
+  min_rotate["weekly"] = 26
+  min_rotate["monthly"] = 6
+  min_rotate["daily"] = 180
+}
+!/^#/ && NF {
+  if ($0 ~ /\/var\/log\/wtmp \{/) {
+    in_wtmp = 1
+    current_rotate = 6
+  }
+  if ($0 ~ /}/) in_wtmp = 0
+  if ($1 in min_rotate) {
+    period = $1
+    required = min_rotate[period]
+    if (in_wtmp && period == "monthly") required = 6
+    
+    print FILENAME ":" $0 " ,check_result=true"
+    current_rotate = required
+  }
+  else if ($1 == "rotate") {
+    if ($2 >= current_rotate) {
+      print FILENAME ":" $0 " ,check_result=true"
+    } else {
+      print FILENAME ":" $0 " ,check_result=false (requires at least " current_rotate " for " period ")"
+    }
+  }
+  else if ($0 ~ /include \/etc\/logrotate\.d/) {
+    print FILENAME ":" $0 " ,check_result=true"
+  }
+}' /etc/logrotate.conf /etc/logrotate.d/wtmp 2>/dev/null
+%,#@,%%195dbc7a5ee4409683c9a748c02964ae%
+%,#@,%%b3a304fc411c4a2f9ecb2b6b6c3e25f4%
+#20250911
+chk_minclass() {
+  local pam_file=$1
+  if [ ! -f "$pam_file" ];then 
+    pam_file=$pam_file"-local"
+  fi
+  if [ -f "$pam_file" ];then
+    local _tmp=$(cat $pam_file|grep -v "#")
+    local DCREDIT=`echo "$_tmp"|grep -m 1 -w "dcredit"|sed 's/^.*dcredit[[:space:]]*=[[:space:]]*//g'|sed 's/[[:space:]].*$//g'`
+    local LCREDIT=`echo "$_tmp"|grep -m 1 -w "lcredit"|sed 's/^.*lcredit[[:space:]]*=[[:space:]]*//g'|sed 's/[[:space:]].*$//g'`
+    local UCREDIT=`echo "$_tmp"|grep -m 1 -w "ucredit"|sed 's/^.*ucredit[[:space:]]*=[[:space:]]*//g'|sed 's/[[:space:]].*$//g'`
+    local OCREDIT=`echo "$_tmp"|grep -m 1 -w "ocredit"|sed 's/^.*ocredit[[:space:]]*=[[:space:]]*//g'|sed 's/[[:space:]].*$//g'`
+    local MINCLASS=`echo "$_tmp"|grep -m 1 -w "minclass"|sed 's/^.*minclass[[:space:]]*=[[:space:]]*//g'|sed 's/[[:space:]].*$//g'`
+    local MINLEN=`echo "$_tmp"|grep -m 1 "minlen"|sed 's/^.*minlen[[:space:]]*=[[:space:]]*//g'|sed 's/[[:space:]].*$//g'`
+    local ENFORCE=`echo "$_tmp"|grep enforce_for_root|wc -l`
+    local COUNT2=0
+    for NO in $DCREDIT $LCREDIT $UCREDIT $OCREDIT;do
+      if [ "${NO:-0}" -lt 0 ];then
+        COUNT2=`expr $COUNT2 + 1`
+      fi
+    done
+    [ ${MINCLASS:=0} -ge 3 -o "$COUNT2" -ge 3 ] && is_minclass=4
+    [ ${MINLEN:=0} -ge 8 ] && is_length=8
+    [ ${ENFORCE:=0} -ge 1 ] && is_enforce=1
+  else
+    echo "$1 file is not found."
+  fi
+}
+chk_main() {
+  is_minclass=0
+  is_length=0
+  is_enforce=0
+  [ -f /lib64/security/pam_pwquality.so ] && chk_minclass "/etc/security/pwquality.conf"
+  [ -f /lib64/security/pam_cracklib.so -o -f /lib64/security/pam_pwquality.so ] && chk_minclass "/etc/pam.d/password-auth"
+  [ -f /lib64/security/pam_cracklib.so -o -f /lib64/security/pam_pwquality.so ] && chk_minclass "/etc/pam.d/system-auth"
+  if [ $is_minclass -eq 4 ] && [ $is_length -eq 8 ] && [ $is_enforce -eq 1 ];then
+    echo "The complexity of the password meets the requirements. check_result=true"
+  else
+    echo "Minimum character types: $is_minclass"
+    echo "Minimum password length: $is_length"
+    echo "Whether to force root: $is_enforce"
+    echo "The complexity of the password does not meet the requirements. check_result=false"
+  fi
+}
+chk_main;unset is_minclass is_length is_enforce chk_minclass chk_main
+%,#@,%%b3a304fc411c4a2f9ecb2b6b6c3e25f4%
+%,#@,%%7f132f3690964b1897a2fd94a69e4f26%
+#20250918
+if [[ "$(systemctl is-active cri-o containerd docker 2>/dev/null|sort -u|grep -w active)" == "active" ]];then
+  echo "host is container host, check result=true"
+elif [[ "$(systemctl is-active openstack-nova-compute openstack-nova-api openstack-glance-api openstack-glance-registry openstack-keystone openstack-cinder-api neutron-server neutron-openvswitch-agent 2>/dev/null|sort -u|grep -w active)" == "active" ]];then
+  echo "host is openstack cloud node, check result=true"
+else
+  sysctl net.ipv4.conf.all.rp_filter net.ipv4.conf.default.rp_filter|awk '{if($NF==1){print $0,"check result=true"}else{print $0,"check result=false"}}'  
+fi
+%,#@,%%7f132f3690964b1897a2fd94a69e4f26%
+%,#@,%%6cec2f28a5674f01be8971e742a17979%
+#20250702
+check_snmpd() {
+  local snmpd_status=`ps -ef|awk '/\/usr\/sbin\/snmpd /{print}'|wc -l`
+  if [ "$snmpd_status" -ge 1 ];then
+    local snmpd_conf=/etc/snmp/snmpd.conf
+    if [ ! -f "$snmpd_conf" ];then  
+      snmpd_conf=/etc/snmpd.conf
+    fi
+    if [ `cat "$snmpd_conf" 2>/dev/null|grep -Ev "^#"|egrep "public|private"|wc -l` -ne 0 ];then
+      echo "SNMPD is running. SNMP check result:false";fi;
+    cat $snmpd_conf|awk '/^group/{
+      if($3=="v1"||$3=="v2c"){print $0 "SNMP check result:false"}}'
+  else
+    echo "SNMPD is not running.SNMP check result:true";
+  fi
+}
+check_snmpd;unset check_snmpd
+%,#@,%%6cec2f28a5674f01be8971e742a17979%
+%,#@,%%36a42c657e5b41d1be1b4ab0abb78659%
+#20250518
+chk_user_role() {
+  local UP_GIDMIN=$(cat /etc/login.defs|awk '/^ *GID_MIN/{print $2}')
+  local UP_GIDMAX=$(cat /etc/login.defs|awk '/^ *GID_MAX/{print $2}')
+
+  cat /etc/shadow | awk -F: -v gidmin=$UP_GIDMIN -v gidmax=$UP_GIDMAX '
+    BEGIN {
+    num=0
+    split("oracle sybase postgres test ceshi admin", tmp, " ")
+    for(i in tmp){
+      db_array[tmp[i]]=1
+    }
+    while ((getline line < "/etc/passwd") > 0) {
+      split(line, passwd_fields, ":")
+      user = passwd_fields[1]
+      uid = passwd_fields[3]
+      gid = passwd_fields[4]
+      home = passwd_fields[6]
+      shell = passwd_fields[7]
+      if(shell ~/bin\/.*sh$/ && gid>=gidmin && gid<=gidmax && !(user in db_array)){
+        passwd[user] = user ":" uid ":" gid ":" home ":" shell
+      }
+    }
+    close("/etc/passwd")
+    }{
+      split($0, shadow_fields, ":")
+      user = shadow_fields[1]
+      is_locked= shadow_fields[2]
+      if (is_locked!~/[!\*]+/ && user in passwd) {
+        print passwd[user]
+        num+=1
+      }
+    }END{
+      print "The number of users that meet the requirements: result="num
+  }'
+}
+chk_user_role;unset chk_user_role
+%,#@,%%36a42c657e5b41d1be1b4ab0abb78659%
+%,#@,%%1be17932845a45ca9b8def74c5544f7c%
+#20260824
+chk_ssh_max() {
+  local sshd_pid sshd_bin
+  sshd_pid=$(ps -ef | awk '/bin\/sshd / && $3 == 1 {print $2}')
+  sshd_bin=$(ls -l /proc/"$sshd_pid"/exe 2>/dev/null | awk '{print $NF}')
+  if [ ! -e "$sshd_bin" ] || [ ! -x "$sshd_bin" ]; then
+    sshd_bin=$(which sshd)
+  fi
+  if ("$sshd_bin" -T || "$sshd_bin" -T -C user=john) &>/dev/null; then
+    echo "=====>check in sshd command"
+    ("$sshd_bin" -T || "$sshd_bin" -T -C user=john) 2>/dev/null | awk '/^[Mm]ax[Ss]tartups/{
+      print $0, ($2 != "" ? "check result:true" : "check result:false")
+    }'
+  else
+    echo "=====>check in sshd_config file"
+    cat /etc/ssh/sshd_config | awk '
+      BEGIN{num=0}
+      /^[ \t]*[Mm]ax[Ss]tartups/{
+        num+=1
+        print $0, ($2 != "" ? "check result:true" : "check result:false")
+      }END{
+        if(NR==0){print "No permission or The /etc/ssh/sshd_config does not exist, check result:false"}
+        else if(num==0){print "The MaxStartups is default(10:30:100), check result:true"}
+    }'
+  fi
+}
+chk_ssh_max; unset -f chk_ssh_max
+%,#@,%%1be17932845a45ca9b8def74c5544f7c%
+%,#@,%%4feedb2e05d0429caedb0b313c04a791%
+#20251120
+chk_sshd_cipher() {
+  local sshd_pid=$(ps -ef | awk '/bin\/sshd / && $3 == 1 {print $2}')
+  local sshd_bin=$(ls -l /proc/"$sshd_pid"/exe 2>/dev/null | awk '{print $NF}')
+  if [ ! -e "$sshd_bin" ] || [ ! -x "$sshd_bin" ]; then
+      sshd_bin=$(which sshd)
+  fi
+  $sshd_bin -T -C user=john 2>/dev/null | grep -E -i '^[[:space:]]*(Ciphers|KexAlgorithms|MACs)'
+  if [ $? -ne 0 ];then
+    ssh -V
+    $sshd_bin -T 2>/dev/null | grep -E -i '^[[:space:]]*(Ciphers|KexAlgorithms|MACs)'
+    if [ $? -ne 0 ];then
+      cat /etc/ssh/sshd_config| grep -Ev '^[[:space:]]*#|^$'|grep -E -i 'Ciphers|KexAlgorithms|MACs'
+    fi
+  fi
+}
+chk_sshd_cipher; unset chk_sshd_cipher
+%,#@,%%4feedb2e05d0429caedb0b313c04a791%
+%,#@,%%5df69ec292bd401f97b41480e8af1174%
+#20251016
+chk_timesync() {
+  if command -v chronyc >/dev/null 2>&1; then
+    chronyc tracking 2>/dev/null | awk '
+    /Leap.*Normal/ {
+      print $0, "\nchrony synchronization normal, check result=true" }'
+  fi
+  if command -v timedatectl >/dev/null 2>&1 && [ "$(ps -ef | grep timesyncd | grep -v grep | wc -l)" -ne 0 ]; then
+    timedatectl timesync-status 2>/dev/null | awk '
+    /Leap.*normal/ {
+      print $0, "\ntimesyncd synchronization normal, check result=true" }'
+  fi
+
+  if command -v ntpq >/dev/null 2>&1; then
+    ntpq -np 2>/dev/null | awk '{if($2!~/LOCL/ && $5~/[0-9]$/ && $5<$6){
+      print $0,"\nntpdate using ntpd service, check result=true";exit}
+    else if($2!~/LOCL/ && $5="-"){
+      print $0,"\nntpdate using ntpd service, check result=true";exit}
+    }'
+  fi
+
+  if command -v ntpdate >/dev/null 2>&1; then
+    ntpdate $(crontab -l 2>/dev/null | grep -oP '(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9A-Fa-f]{1,4}):+[\da-zA-Z\:]+') 2>/dev/null | awk '
+    /(adjust|step) time server.*offset/ {
+      print $0, "\nntpdate using cron job, check result=true" }'
+  fi
+}
+chk_timesync;unset chk_timesync
+%,#@,%%5df69ec292bd401f97b41480e8af1174%
+%,#@,%%e21847bf6ab34e2682dcf53ce7dac11f%
+#20260126
+unused_users() {
+  local unlock_users=$(cat /etc/shadow | awk -F: '
+  BEGIN {
+    while ((getline line < "/etc/passwd") > 0) {
+        split(line, passwd_fields, ":")
+        user = passwd_fields[1]
+        shell = passwd_fields[7]
+        if(shell ~/bin\/.*sh$/ && user !~/^( *root)$/){
+          passwd[user] = user ":" shell
+        }
+    }
+    close("/etc/passwd")
+  }
+  {
+    split($0, shadow_fields, ":")
+    user = shadow_fields[1]
+    is_locked= shadow_fields[2]
+    if (is_locked!~/[!\*]+/ && user in passwd) {
+        print user
+    }
+  }')
+  if [ -f /etc/login.defs ]; then
+    local up_uidmin=$(cat /etc/login.defs |grep -Ev '^#|^$' |grep "^UID_MIN"|awk '($1=="UID_MIN"){print $2}')
+  fi
+  local init_num=0
+  for uu in $unlock_users;do
+    if [ "$(id -u "$uu")" -lt "${up_uidmin:=1000}" ] || [ "$(echo "$uu"|grep -Ec -e '^(test.*|ceshi.*|admin.*)' -e '^(adm|apache|at|avahi|bin|daemon|dbus)$' -e '^(distcache|ftp|games|gdm|gopher|haldaemon)$' -e '^(halt|irc|ldap|listen|lp|mail|mailnull|man)$' -e '^(mysql|named|news|nfsnobody|noaccess|nobody)$' -e '^(nobody4|nscd|ntp|operator|pcap|pop|postfix)$' -e '^(postgres|rpc|rpcuser|rpm|sabayon|shutdown)$' -e '^(smmsp|snort|squid|sync|uucp|vcsa)$' -e '^(webalizer|webservd|wwwrun|xfs)$')" -eq 1 ]; then
+      ((init_num++));echo "Non-compliant users: $uu";id "$uu"
+    fi
+  done
+  if [ "$(id -u)" -eq 0 ];then
+    echo "The number of Non-compliant users, result="${init_num:=0}
+  else
+    echo "Insufficient permissions, check failed, result=10"
+  fi
+  echo "The UID_MIN in the login.defs file: $up_uidmin"
+}
+unused_users;unset unused_users
+%,#@,%%e21847bf6ab34e2682dcf53ce7dac11f%
+%,#@,%%783e766067ac477fab9c5b5cf8c71e57%
+awk -F: 'BEGIN{num=0}($3==0){num+=1;system("id "$1)}END{print "The number of users with UID of 0, result="num}' /etc/passwd
+%,#@,%%783e766067ac477fab9c5b5cf8c71e57%
+%,#@,%%9ee85aa994d4488b8e3119dec8c51ed7%
+#20260827
+chk_syslog() {
+  local syslog_conf=/etc/rsyslog.conf
+  if [ ! -f "$syslog_conf" ]; then
+    syslog_conf=/etc/syslog.conf
+  fi
+  if [ -f "$syslog_conf" ]; then
+    echo "==============>check $syslog_conf"
+    local include_cfg syslog_content
+    include_cfg=$(awk '
+      match($0, /include\(file="([^"]+)"/, a) {
+      path = a[1]
+      if (substr(path, length(path)) == "/") path = path "*"
+      print path
+      next
+     }
+     /^\$IncludeConfig/ {
+      path = $2
+      if (substr(path, length(path)) == "/") path = path "*"
+      print path
+     }' "$syslog_conf")
+    syslog_content=$(cat "$syslog_conf" ${include_cfg:=$(awk -F'"' '/^include/{print $2}' "$syslog_conf")} 2>/dev/null | grep -Ev '^[[:space:]]*#|^$')
+    echo "$syslog_content" | awk -F@ '/^.*\..*[[:space:]]*@/{print "check_result=true remote_log result=" $NF}'
+    echo "$syslog_content" | awk '/:omrelp:/{if(match($0,/:omrelp:(.+)/,m)){host=m[1]; sub(/:[0-9]+$/,"",host); print "check_result=true remote_log result=" host}}'
+    echo "$syslog_content" | tr '\n' ' ' | awk '{
+      s=$0
+      while ((idx = index(s, "action(")) > 0) {
+        s = substr(s, idx)
+        depth = 0
+        endp = 0
+        for (i = 1; i <= length(s); i++) {
+          ch = substr(s, i, 1)
+          if (ch == "(") depth++
+          if (ch == ")") { depth--; if (depth == 0) { endp = i; break } }
+        }
+        if (endp > 0) {
+          block = substr(s, 1, endp)
+          if (block ~ /"omfwd"/ && match(block, /[Tt]arget="([^"]+)"/, a))
+            {print "check_result=true remote_log result=" a[1]}
+          s = substr(s, endp + 1)
+        } else break
+      }
+    }'
+    echo "$syslog_content" | tr '\n' ' ' | awk '{
+      while (match($0, /if[[:space:]]+[^{]*then[[:space:]]*\{[^}]*\}/)) {
+        block = substr($0, RSTART, RLENGTH)
+        if (block ~ /"omfwd"/ && match(block, /[Tt]arget="([^"]+)"/, a))
+          {print "check_result=true remote_log result=" a[1] " (conditional)"}
+        $0 = substr($0, RSTART + RLENGTH)
+      }
+    }' | sort -u
+  fi
+}
+chk_syslog_ng() {
+  local ng_cfg=/etc/syslog-ng/syslog-ng.conf
+  if [ -f "$ng_cfg" ]; then
+    echo "==============>check $ng_cfg"
+    local include_cfg ng_content
+    include_cfg=$(awk '/^@include/{print ($2!~/^"\// ? "/etc/syslog-ng/"$2 : $2)}' "$ng_cfg" | sed 's/"//g')
+    ng_content=$(cat "$ng_cfg" $include_cfg 2>/dev/null | sed 's/^[[:space:]]*//g' | grep -Ev '^[[:space:]]*#|^$' | awk -F'[( ]+' '
+      /^destination.*(tcp|udp)/{
+        gsub(/"/, "", $5)
+        print $2":"$5
+      }')
+    for data in $ng_content; do
+      local d_loghost ip_addr=""
+      d_loghost=$(awk -F: '{print $1}' <<< "$data")
+      if grep -q ':' <<< "$data"; then
+        ip_addr=$(sed 's/^[^:]*://' <<< "$data")
+      fi
+      cat "$ng_cfg" $include_cfg 2>/dev/null | awk -v ipadd="$ip_addr" -v host="$d_loghost" '
+        /log.*destination\(/{if($0 ~ host && (ipadd ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ || ipadd ~ /^[0-9a-fA-F:]+$/)){print "check_result=true remote_log result=" ipadd}}'
+    done
+  fi
+}
+chk_main() {
+  if [ "$(ps -ef | grep -cE '[s]yslogd|[s]yslog-ng')" -gt 0 ]; then
+    chk_syslog
+    chk_syslog_ng
+    unset -f chk_syslog chk_syslog_ng
+  else
+    echo "syslog service is not running, check_result=false"
+  fi
+}
+chk_main;unset -f chk_main
+%,#@,%%9ee85aa994d4488b8e3119dec8c51ed7%
+%,#@,%%d13f366b2ef74d3389f0ae62f25eac47%
+#20251017
+check_autofs() {
+  local autofs_status=0
+  if command -v systemctl 2>/dev/null; then
+    systemctl show "autofs.service" | grep -i unitfilestate
+    autofs_status=`systemctl list-units |grep autofs |grep -i running | wc -l`
+  fi
+  if [ "$autofs_status" -eq 0 ] && command -v chkconfig 2>/dev/null; then
+    chkconfig --list autofs 2>/dev/null
+    autofs_status=`chkconfig --list autofs 2>/dev/null|grep -i on|wc -l`
+  fi
+  if [ "$autofs_status" != "0" ];then
+    echo "The AutoFS is enable,check result=false";
+  else 
+    echo "The AutoFS is disabled,check result=true";
+  fi
+}
+check_autofs;unset check_autofs
+%,#@,%%d13f366b2ef74d3389f0ae62f25eac47%
+%,#@,%%9e55c0ebc3274cd0a83bbe10d1462890%
+#20260826
+chk_ssh_banner() {
+  local sshd_pid sshd_bin ssh_banner_file
+  sshd_pid=$(ps -ef | awk '/bin\/sshd / && $3 == 1 {print $2; exit}')
+  sshd_bin=$(ls -l /proc/"$sshd_pid"/exe 2>/dev/null | awk '{print $NF}')
+  if [[ ! -e "$sshd_bin" || ! -x "$sshd_bin" ]]; then
+    sshd_bin=$(command -v sshd)
+  fi
+  ssh_banner_file=$( ("$sshd_bin" -T || "$sshd_bin" -T -C user=john) 2>/dev/null | awk '/^[[:space:]]*[Bb]anner/{print $2}')
+  if [ -z "$ssh_banner_file" ]; then
+    echo "==============>check in sshd_config file"
+    ssh_banner_file=$(awk '/^[[:space:]]*[Bb]anner/{print $2}' /etc/ssh/sshd_config 2>/dev/null | tail -n 1)
+  fi
+  if [ -f "${ssh_banner_file:=none}" ]; then
+    awk 'NF{print $0", result=" ($0~/Authorized (users|uses) only\.[[:space:]]*All (activity|activities) may be monitored and reported/ ? "true" : "false")}
+    END{if(NR==0){print "The file is empty, result=false"}}' "$ssh_banner_file"
+  else
+    echo "$ssh_banner_file file is not exist, result=false"
+  fi
+}
+chk_ssh_banner;unset -f chk_ssh_banner
+%,#@,%%9e55c0ebc3274cd0a83bbe10d1462890%
+%,#@,%%e4b6a677d971477f81fd3b5ba48fe2dd%
+#20260305
+vsftp_droot() {
+  echo "====================>check vsftpd"
+  local FTPCONF
+  for FTPCONF in $(ps -ef |awk '/vsftpd \//{if($3==1)print $NF}'|awk '{print $0}
+  END{if(NR==0)print "/etc/vsftpd/vsftpd.conf"}');do
+    if [ ! -f "${FTPCONF:=/etc/vsftpd/vsftpd.conf}" ];then
+      FTPCONF="/etc/vsftpd.conf";   
+    fi
+    if "$REAL_RPM" -q 'vsftpd'; then
+      if [ -f "$FTPCONF" ]; then
+        if [ -f "/etc/pam.d/vsftpd" ]; then
+          cat /etc/pam.d/vsftpd |grep pam_listfile 
+          local is_enable_pam=$(cat "$FTPCONF" |grep -Ec '^pam_service_name=\S+')
+          local pam_userfile=$(cat /etc/pam.d/vsftpd |grep -E '^auth\s+required\s+pam_listfile\.so'|sed 's|.*file=||g'|awk '{print $1}')
+          local pam_sense=$(cat /etc/pam.d/vsftpd |grep -E '^auth\s+required\s+pam_listfile\.so' |sed 's|.*sense=||g'|awk '{print $1}')
+          if [[ $is_enable_pam -ne 0 && -n "$pam_userfile" && -n "$pam_sense" ]]; then
+            if [[ "$pam_sense" = "deny" && "$(cat "$pam_userfile" |grep -c root)" -ne 0 ]]; then
+              echo "result=true"
+            elif [[ "$pam_sense" = "allow" && "$(cat "$pam_userfile" |grep -c root)" -eq 0 ]]; then
+              echo "result=true"
+            fi
+          else
+            local userlist_enable=$(cat "$FTPCONF" |grep -E '^userlist_enable' |awk -F= 'END{if($2==""){print "NO"}else{print $2}}')
+            local userlist_deny=$(cat "$FTPCONF" |grep -E '^userlist_deny' |awk -F= 'END{if($2==""){print "YES"}else{print $2}}')
+            local userlist_file=$(cat "$FTPCONF" |grep -E '^userlist_file' |awk -F= 'END{if($2==""){print "/etc/vsftpd/user_list"}else{print $2}}')
+            if [ -f "$userlist_file" ]; then
+              local hav_root=$(cat "$userlist_file" |grep -Ec '^root$')
+              if [[ $userlist_enable = "YES" && $userlist_deny = "YES" ]]; then
+                [ "$hav_root" -ne 0 ] && echo "result=true"
+              elif [[ $userlist_enable = "YES" && $userlist_deny = "NO" ]]; then
+                [ "$hav_root" -eq 0 ] && echo "result=true"
+              fi
+            fi
+          fi  
+        fi
+      else
+        echo "vsftpd server is installed, but vsftpd.conf is not exist, result=false"
+      fi
+    else
+      echo "vsftpd server is not installed, result=true"
+    fi
+  done     
+}
+pureftp_droot() {
+  echo "====================>check pure-ftpd"
+  if "$REAL_RPM" -q 'pure-ftpd'; then
+    if [ -f "/etc/pure-ftpd/pure-ftpd.conf" ]; then
+      if [ -f "/etc/pam.d/pure-ftpd" ];then
+        cat /etc/pam.d/pure-ftpd|grep pam_listfile
+        local pure_pam_userfile=$(cat /etc/pam.d/pure-ftpd |grep -E '^auth\s+required\s+pam_listfile\.so' |sed 's|.*file=||g'|awk '{print $1}')
+        local pure_pam_sense=$(cat /etc/pam.d/pure-ftpd |grep -E '^auth\s+required\s+pam_listfile\.so'|sed 's|.*sense=||g'|awk '{print $1}')
+        if [[ -n "$pure_pam_userfile" && -n "$pure_pam_sense" ]]; then
+          if [[ "$pure_pam_sense" = "deny" ]]; then
+            if [ "$(cat "$pure_pam_userfile" |grep -Ec '^root$')" -ne 0 ]; then
+              echo "result=true"
+            else
+              cat /etc/pure-ftpd/pure-ftpd.conf |grep -E '^MinUID' |awk 'END{if($2>0){print "result=true"}else{print "result=false"}}'
+            fi
+          elif [[ "$pure_pam_sense" = "allow" ]]; then
+            if [ "$(cat "$pure_pam_userfile" |grep -Ec '^root$')" -eq 0 ]; then
+              echo "result=true"
+            else
+              cat /etc/pure-ftpd/pure-ftpd.conf |grep -E '^MinUID' |awk 'END{if($2>0){print "result=true"}else{print "result=false"}}'
+            fi
+          fi
+        else
+          cat /etc/pure-ftpd/pure-ftpd.conf |grep -E '^MinUID' |awk 'END{if($2>0){print "result=true"}else{print "result=false"}}'
+        fi
+      fi
+    else
+      echo "pure-ftpd server is installed, but pure-ftpd.conf is not exist, result=false"
+    fi
+  else
+    echo "pure-ftpd server is not installed, result=true"
+  fi
+}
+proftp_droot() {
+  echo "====================>check proftpd"
+  local FTPCONF="/etc/proftpd/proftpd.conf"
+  if [ ! -f "$FTPCONF" ];then
+    FTPCONF="/etc/proftpd.conf";
+  fi
+  if "$REAL_RPM" -q 'proftpd'; then
+    if [ -f "$FTPCONF" ]; then
+      cat "$FTPCONF" |awk '/^ *UseFtpUsers *off/{print $1,"check result=false"}' 
+      if [ -f /etc/pam.d/proftpd ]; then
+        cat /etc/pam.d/proftpd|grep pam_listfile
+        local pam_userfile=$(cat /etc/pam.d/proftpd |grep -E '^auth\s+required\s+pam_listfile\.so'|sed 's|.*file=||g'|awk '{print $1}')
+        local pam_sense=$(cat /etc/pam.d/proftpd |grep -E '^auth\s+required\s+pam_listfile\.so'|sed 's|.*sense=||g'|awk '{print $1}')
+        if [[ "$pam_sense" = "deny" && "$(cat "$pam_userfile" |grep -Ec ^root)" -ne 0 ]]; then
+          echo "result=true"
+        elif [[ "$pam_sense" = "allow" && "$(cat "$pam_userfile" |grep -Ec ^root)" -eq 0 ]]; then
+          echo "result=true"
+        else
+          echo "result=false"
+        fi
+      fi
+    else
+      echo "proftpd server is installed, but proftpd.conf is not exist, result=false"
+    fi
+  else
+    echo "proftpd server is not installed, result=true"
+  fi
+}
+check_main() {
+  type -a rpm 2>/dev/null
+  REAL_RPM=$(type -P rpm 2>/dev/null)
+  if [ -z "$REAL_RPM" ] || [ ! -x "$REAL_RPM" ]; then
+    if [ -x "/usr/bin/rpm" ]; then
+      REAL_RPM="/usr/bin/rpm"
+    elif [ -x "/bin/rpm" ]; then
+      REAL_RPM="/bin/rpm"
+    fi
+  fi
+  if [ -n "$REAL_RPM" ] && [ -x "$REAL_RPM" ]; then
+    vsftp_droot;pureftp_droot;proftp_droot
+    unset vsftp_droot pureftp_droot proftp_droot
+  else
+    echo "rpm command not available or not executable, cannot check ftp installation status, result=false"
+  fi
+}
+check_main;unset check_main
+%,#@,%%e4b6a677d971477f81fd3b5ba48fe2dd%
+%,#@,%%bf6b74e1452543108d27d7095104a49d%
+#20250912
+chk_sshd_protocol() {
+  local sshd_pid=$(ps -ef | awk '/bin\/sshd / && $3 == 1 {print $2}')
+  local sshd_bin=$(ls -l /proc/"$sshd_pid"/exe 2>/dev/null | awk '{print $NF}')
+  if [ ! -e "$sshd_bin" ] || [ ! -x "$sshd_bin" ]; then
+    sshd_bin=$(which sshd)
+  fi
+  ($sshd_bin -T || $sshd_bin -T -C user=john) >/dev/null 2>&1
+  if [ $? -eq 0 ]; then
+  echo "=====>check in sshd command"
+  ($sshd_bin -T || $sshd_bin -T -C user=john) 2>/dev/null|grep -i Protocol|awk '{if($2=="2"){print $0,"check result:true"}
+      else{print $0,"check result:false"}
+      }END{if(NR==0){print "The Protocol is default(The default is 2), check result:true"}
+    }'
+  else
+    echo "=====>check in sshd_config file"
+    cat /etc/ssh/sshd_config|awk 'BEGIN{IGNORECASE=1;num=0}
+    /^ *Protocol/{
+      num+=1
+      if($2=="2"){
+        print $0,"check result:true"
+      }else{print $0,"check result:false"}
+    }END{
+      if(NR==0){print "No permission or The /etc/ssh/sshd_config does not exist, check result:false"}
+      if(num==0){print "The Protocol is default(The default is 2,1), check result:false"}
+    }'
+  fi
+}
+chk_sshd_protocol; unset chk_sshd_protocol
+%,#@,%%bf6b74e1452543108d27d7095104a49d%
+%,#@,%%50e50acf9ff74c0c8ba1de4ef447f4fd%
+#20260518
+chk_snmp() {
+  local check_result="true"
+  
+  if [ "$(ps -ef | awk '/\/usr\/sbin\/snmpd /{print}' | wc -l)" == "1" ]; then
+    echo "===>SNMPD service is running"
+    local snmpd_conf
+    snmpd_conf=/etc/snmp/snmpd.conf
+    if [ ! -f "$snmpd_conf" ]; then
+      snmpd_conf="/etc/snmpd.conf"
+    fi
+    if [ ! -f "$snmpd_conf" ]; then
+      echo "===>SNMPD configuration file not found"
+    else
+      echo "=====>Checking SNMPD configuration file: ${snmpd_conf}"
+      local snmp_context
+      snmp_context=$(cat "$snmpd_conf" | grep -E -v '^#|^$' | grep -E 'public$|public[[:space:]]|private$|private[[:space:]]|rwcommunity|rocommunity')
+      if [ -z "$snmp_context" ]; then
+        echo "=====>SNMPD configuration is secure."
+      else
+        echo "=====>SNMPD configuration contains insecure settings:"
+	echo "$snmp_context"
+        check_result="false"
+      fi
+    fi
+  else
+    echo "===>SNMPD service is not running"
+  fi
+  
+  echo "===>SNMP check result:${check_result}"
+}
+chk_snmp;unset -f chk_snmp
+%,#@,%%50e50acf9ff74c0c8ba1de4ef447f4fd%
+%,#@,%%f9f0d8f1f6f649918df1ca54e5dadc6b%
+#20251114
+chk_umask() {
+  echo "The umask in profile is :"$(grep -E -v '^#|^$' /etc/profile|grep -i "umask"|tail -1)
+  echo "The umask command output : umask="$(bash --login -c 'umask' 2>/dev/null|grep --color=never -E '^[0-9]{3,4}$')
+  echo "The umask in login.defs is : LOGIN_"$(cat /etc/login.defs|grep -v '^#'|grep -i umask)
+}
+chk_umask;unset chk_umask
+%,#@,%%f9f0d8f1f6f649918df1ca54e5dadc6b%
+%,#@,%%6bca3ac854624cc2934a362711f89dc3%
+#20260324
+chk_sshd_agent() {
+  local sshd_pid sshd_bin tmp_value
+  sshd_pid=$(ps -ef | awk '/bin\/sshd / && $3 == 1 {print $2}')
+  sshd_bin=$(readlink -f "/proc/$sshd_pid/exe" 2>/dev/null)
+  if [ ! -e "$sshd_bin" ] || [ ! -x "$sshd_bin" ]; then
+    sshd_bin=$(which sshd)
+  fi
+  tmp_value=$( ($sshd_bin -T || $sshd_bin -T -C user=john) 2>/dev/null | grep -i AllowAgentForwarding)
+  if [ -n "$tmp_value" ]; then
+    echo "=====>check in sshd command"
+    echo "$tmp_value"|awk '{if($2=="no"){
+      print $0,"check result=true"}
+    else{print $0,"check result=false"}}'   
+  else
+    echo "=====>check in sshd_config file"
+    cat /etc/ssh/sshd_config |awk '
+      BEGIN{IGNORECASE=1;num=0}
+      /^ *AllowAgentForwarding/{
+        num+=1
+        if($2=="no"){print $0,"check result=true"}
+        else{print $0,"check result=false"}}
+      END{
+        if(NR==0){print "No permission or The /etc/ssh/sshd_config does not exist, check result=false"}
+        if(num==0){print "The AllowAgentForwarding is default, check result=false"}
+    }'
+  fi
+}
+chk_sshd_agent; unset chk_sshd_agent
+%,#@,%%6bca3ac854624cc2934a362711f89dc3%
+%,#@,%%2d62eff0a8424591acfd9a2c23480e26%
+#20251121
+chk_pam(){
+  local pam_file=$1
+  if [ ! -f "$pam_file" ];then 
+    pam_file=$pam_file"-local"
+  fi
+  if [ -f "$pam_file" ];then
+    echo "======================>"$pam_file"<======================"
+    cat $pam_file|grep --color=never -E '^[[:space:]]*auth[[:space:]]+\S+[[:space:]]+pam_(faillock|tally2)\.so'
+  else
+    echo "$pam_file file is not found. check_result=false"
+  fi
+}
+chk_deny(){
+  local fl_conf="/etc/security/faillock.conf"
+  if [ -f "$fl_conf" ] && [ $(cat "$fl_conf"|grep -Ev '^#|^$'|grep deny|wc -l) -ne 0 ];then
+    echo "======================>check $fl_conf <======================"
+    cat $fl_conf |awk '!/^[[:space:]]*#/'
+  else
+    chk_pam /etc/pam.d/system-auth
+    chk_pam /etc/pam.d/password-auth
+  fi
+}
+chk_deny;unset chk_pam chk_deny
+%,#@,%%2d62eff0a8424591acfd9a2c23480e26%
+%,#@,%%44b4a785b52f49f69d0f04811f7992ff%
+#20251107
+chk_chk() {
+  local chk_point=$1
+  local en_ctrl=0
+  local lib_link=$(readlink /usr/lib/systemd/system/$chk_point.target)
+  local t_status=$(systemctl is-enabled $chk_point.target 2>/dev/null)
+  local etc_link=$(readlink /etc/systemd/system/$chk_point.target)
+  [ "$lib_link" = "reboot.target" ] && en_ctrl=1 || en_ctrl=0
+  ([ "$t_status" = "" ] || [ "$t_status" = "masked" ]) && en_ctrl=0 || en_ctrl=1
+  ([ "$t_status" = "" ] || [ "$etc_link" = "/dev/null" ]) && en_ctrl=0 || en_ctrl=1
+  echo $en_ctrl
+}
+check_ctrlaltdel() {
+  local en_ctrl=0
+  en_ctrl=$(chk_chk "ctrl-alt-del")
+  [ ! $en_ctrl ] && en_ctrl=$(chk_chk "ctrl-alt-delete")
+  if [ $en_ctrl -eq 1 ];then
+    echo "ctrl-alt-del.target needs to be masked, ctrlaltdel check_result=false"
+  else
+    local system_configfile=$(rpm -ql systemd|grep 'system.conf$')
+    [ -f ${system_configfile:="/etc/systemd/system.conf"} ] && awk -F= '
+    BEGIN{num=0}
+    /^ *CtrlAltDelBurstAction/{
+      num+=1
+      if($2=="none"){
+        print FILENAME":"$0,"ctrlaltdel check_result=true"
+      }else{
+        print FILENAME":"$0,"ctrlaltdel check_result=false"
+      }
+    }END{
+      if(num==0){
+        print "CtrlAltDelBurstAction is the default value (reboot-force). ctrlaltdel check_result=false"
+      }
+    }' "$system_configfile"
+  fi
+  if [ -s /etc/init/control-alt-delete.conf ];then
+    cat /etc/init/control-alt-delete.conf|grep -Ev '^ *#|^$'|awk '
+    BEGIN{num=0}
+    /exec \/sbin\/shutdown/{
+      num+=1
+    }END{
+      if(num==0){
+        print "exec /sbin/shutdown does not exist in the control-alt-delete.conf file. ctrlaltdel check_result=true"
+      }else{
+        print "exec /sbin/shutdown exists in the control-alt-delete.conf file. ctrlaltdel check_result=false"
+      }
+    }'
+  else
+    echo "control-alt-delete.conf does not exist, ctrlaltdel check_result=true"
+  fi
+  if [ -s /etc/inittab ];then
+    cat /etc/inittab|grep -v "^#"|awk '
+    BEGIN{num=0}
+    /ctrlaltdel/ && /shutdown/{
+      num+=1
+    }END{
+      if(num==0){
+        print "ca::ctrlaltdel:/sbin/shutdown does not exist in the /etc/inittab file. ctrlaltdel check_result=true"
+      }else{
+        print "ca::ctrlaltdel:/sbin/shutdown exists in the /etc/inittab file. ctrlaltdel check_result=false"
+      }
+    }'
+  fi
+}
+check_ctrlaltdel;unset check_ctrlaltdel
+%,#@,%%44b4a785b52f49f69d0f04811f7992ff%
+%,#@,%%c17781a4a3d7412a9385279175068512%
+#20260305
+vsftp_anonymous() {
+  echo "======================> check vsftpd"
+  local FTPCONF
+  for FTPCONF in $(ps -ef |awk '/vsftpd \//{if($3==1)print $NF}'|awk '{print $0}END{if(NR==0)print "/etc/vsftpd/vsftpd.conf"}');do
+    if [ ! -f "${FTPCONF:=/etc/vsftpd/vsftpd.conf}" ];
+        then FTPCONF="/etc/vsftpd.conf";   
+    fi
+    if "$REAL_RPM" -q 'vsftpd'; then
+      if [ -f "$FTPCONF" ]; then
+        cat "$FTPCONF" |grep '^[[:space:]]*anonymous_enable' |awk -F= '{
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2);
+        if(toupper($2)=="NO"){print $0" ,result=true"}else{print $0" ,result=false"}}'
+      else
+        echo "vsftpd server is installed, but vsftpd.conf is not exist, result=false"
+      fi
+    else
+      echo "vsftpd server is not installed, result=true"
+    fi
+  done
+}
+pureftp_anonymous() {
+  echo "======================> check pure-ftpd"
+  if "$REAL_RPM" -q 'pure-ftpd'; then
+    if [ -f "/etc/pure-ftpd/pure-ftpd.conf" ]; then
+      cat /etc/pure-ftpd/pure-ftpd.conf |grep '^NoAnonymous' |awk '{if($2=="yes"){
+        print $0" ,result=true"}else{print $0" ,result=false"}}'
+    else
+      echo "pure-ftpd server is installed, but pure-ftpd.conf is not exist, result=false"
+    fi
+  else
+    echo "pure-ftpd server is not installed, result=true"
+  fi
+}
+proftp_anonymous() {
+  echo "======================> check proftpd"
+  local FTPCONF="/etc/proftpd/proftpd.conf"
+  if [ ! -f "$FTPCONF" ];
+      then FTPCONF="/etc/proftpd.conf";
+  fi
+  if "$REAL_RPM" -q 'proftpd'; then
+    if [ -f "$FTPCONF" ]; then
+      local include_files
+      include_files=$(cat "$FTPCONF" |awk '/^ *Include/{print $2}')
+      cat "$FTPCONF" $include_files 2>/dev/null|awk '/^ *UserAlias/{print}'
+      local user_aliases
+      user_aliases=$(cat "$FTPCONF" $include_files 2>/dev/null|awk '/^ *UserAlias/{print $NF}')
+      if [ -n "$user_aliases" ]; then
+        echo "$user_aliases"|xargs getent passwd|awk -F: '{if($NF=="/sbin/nologin" || $NF=="/usr/sbin/nologin" || $NF=="/bin/false"){print "check result=true"}else{print "check result=false"}}'
+      fi
+    else
+      echo "proftpd server is installed, but proftpd.conf is not exist, result=false"
+    fi
+  else
+    echo "proftpd server is not installed, result=true"
+  fi
+}
+check_main() {
+  type -a rpm 2>/dev/null
+  REAL_RPM=$(type -P rpm 2>/dev/null)
+  if [ -z "$REAL_RPM" ] || [ ! -x "$REAL_RPM" ]; then
+    if [ -x "/usr/bin/rpm" ]; then
+      REAL_RPM="/usr/bin/rpm"
+    elif [ -x "/bin/rpm" ]; then
+      REAL_RPM="/bin/rpm"
+    fi
+  fi
+  if [ -n "$REAL_RPM" ] && [ -x "$REAL_RPM" ]; then
+    vsftp_anonymous;pureftp_anonymous;proftp_anonymous
+    unset vsftp_anonymous pureftp_anonymous proftp_anonymous
+  else
+    echo "rpm command not available or not executable, cannot check ftp installation status, result=false"
+  fi
+}
+check_main;unset check_main
+%,#@,%%c17781a4a3d7412a9385279175068512%
+%,#@,%%deafb4d0c9d1471e8d2d669a64364231%
+sysctl net.ipv4.icmp_ignore_bogus_error_responses|awk '{if($NF==1){print $0,"check result=true"}else{print $0,"check result=false"}}'
+%,#@,%%deafb4d0c9d1471e8d2d669a64364231%
+%,#@,%%48a4b671dc174566baaa8da05d04f69e%
+cat /etc/security/limits.conf /etc/security/limits.d/* 2>/dev/null|grep -E -v '^#|^$'|grep nofile
+echo "soft    nofile "$(ulimit -Sn)
+echo "hard    nofile "$(ulimit -Hn)
+echo "soft    stack "$(ulimit -s)
+%,#@,%%48a4b671dc174566baaa8da05d04f69e%
+%,#@,%%30cb825c42104a97b62b85a4ccf3b887%
+#20260305
+vsftp_banner() {
+  echo "=============================check vsftpd"
+  local FTPCONF
+  for FTPCONF in $(ps -ef |awk '/vsftpd \//{if($3==1)print $NF}'|awk '{print $0}END{if(NR==0)print "/etc/vsftpd/vsftpd.conf"}');do
+    if [ ! -f "${FTPCONF:=/etc/vsftpd/vsftpd.conf}" ];then
+      FTPCONF="/etc/vsftpd.conf";   
+    fi
+    if "$REAL_RPM" -q vsftpd 2>/dev/null; then
+      if [ -f "$FTPCONF" ]; then
+        if [ "$(cat "$FTPCONF" |grep -Ec '^ftpd_banner')" -ne 0 ]; then
+          cat "$FTPCONF" |grep '^ftpd_banner' |awk -F= 'END{
+            if($2 ~ /Authorized users only. ?All (activity|activities) may be monitored and reported/){
+              print $0" ,result=true"}else{print $0" ,result=false"}}'
+        elif [ "$(cat "$FTPCONF" |grep -Ec '^banner_file')" -ne 0 ]; then
+          local banner_file=$(cat "$FTPCONF" |grep '^banner_file'|awk -F= 'END{if($2!=""){print $2}}')
+          if [ -f "$banner_file" ];then
+            cat "$banner_file" |awk -F= 'END{
+            if($0 ~ /Authorized users only. ?All (activity|activities) may be monitored and reported/){
+              print $0" ,result=true"}else{print $0" ,result=false"}}'
+          else
+            echo "banner_file is empty, result=false"
+          fi
+        else
+          echo "Do not config ftpd_banner or banner_file, result=false"
+        fi
+      else
+        echo "vsftpd server is installed, but vsftpd.conf is not exist, result=false"
+      fi
+    else
+      echo "vsftpd server is not installed, result=true"
+    fi
+  done
+}
+pureftp_banner() {
+  echo "=============================check pure-ftpd"
+  if "$REAL_RPM" -q 'pure-ftpd' 2>/dev/null; then
+    if [ -f "/etc/pure-ftpd/pure-ftpd.conf" ]; then
+      local banner_file=$(cat /etc/pure-ftpd/pure-ftpd.conf |grep '^FortunesFile' |awk '{if($2!=""){print $2}}')
+      if [ -f "$banner_file" ];then
+        cat "$banner_file" |awk -F= 'END{
+            if($0 ~ /Authorized users only. ?All (activity|activities) may be monitored and reported/){
+              print $0" ,result=true"}else{print $0" ,result=false"}}'
+      else
+        echo "Do not config FortunesFile, result=false"
+      fi
+    else
+      echo "pure-ftpd server is installed, but pure-ftpd.conf is not exist, result=false"
+    fi
+  else
+    echo "pure-ftpd server is not installed, result=true"
+  fi
+}
+proftp_banner() {
+  echo "=============================check proftpd"
+  local FTPCONF="/etc/proftpd/proftpd.conf"
+  if [ ! -f "$FTPCONF" ];
+    then FTPCONF="/etc/proftpd.conf";
+  fi
+  if "$REAL_RPM" -q proftpd 2>/dev/null; then
+    if [ -f "$FTPCONF" ]; then
+      cat "$FTPCONF" |grep -E '^[[:space:]]*ServerIdent'|head -n 1
+      local banner=$(cat "$FTPCONF" 2>/dev/null|grep -E '^[[:space:]]*ServerIdent'|head -n 1|awk '/^[[:space:]]*ServerIdent[[:space:]]+(on[[:space:]]+[^[:space:]]+|off)/'|wc -l)
+      if [ "$banner" -ne 0 ];then echo "result=true"; else echo "result=false"; fi
+    else
+      echo "proftpd server is installed, but proftpd.conf is not exist, result=false"
+    fi
+  else
+    echo "proftpd server is not installed, result=true"
+  fi
+}
+check_main() {
+  type -a rpm 2>/dev/null
+  REAL_RPM=$(type -P rpm 2>/dev/null)
+  if [ -z "$REAL_RPM" ] || [ ! -x "$REAL_RPM" ]; then
+    if [ -x "/usr/bin/rpm" ]; then
+      REAL_RPM="/usr/bin/rpm"
+    elif [ -x "/bin/rpm" ]; then
+      REAL_RPM="/bin/rpm"
+    fi
+  fi
+  if [ -n "$REAL_RPM" ] && [ -x "$REAL_RPM" ]; then
+    vsftp_banner;pureftp_banner;proftp_banner
+    unset vsftp_banner pureftp_banner proftp_banner
+  else
+    echo "rpm command not available or not executable, result=false"
+  fi
+}
+check_main;unset check_main
+%,#@,%%30cb825c42104a97b62b85a4ccf3b887%
+%,#@,%%b5fcf5088d83492ea886a7d23027d747%
+#20251121
+check_vul_file() {
+  [ "$LC_ALL" != "en_US.UTF-8" ] && export LC_ALL="en_US.UTF-8"
+  local vul_file_numbs=0
+  for home_dir in `grep -E -v 'nologin|shutdown' /etc/passwd |grep sh|cut -d":" -f6`;do
+    if [ -e $home_dir/.netrc ];then
+      echo "$home_dir/.netrc";vul_file_numbs=`expr $vul_file_numbs + 1` ; 
+    fi
+    if [ -e $home_dir/.rhosts ];then
+      echo "$home_dir/.rhosts";vul_file_numbs=`expr $vul_file_numbs + 1` ; 
+    fi
+  done
+  if [ -e /etc/hosts.equiv ];then
+    echo "/etc/hosts.equiv";vul_file_numbs=`expr $vul_file_numbs + 1` ; 
+  fi
+  if [ $(id -u) -eq 0 ];then
+    echo "The number of dangerous files, result="$vul_file_numbs
+  else
+    echo "Insufficient permissions, check failed, result=10"
+  fi
+}
+check_vul_file;unset check_vul_file
+%,#@,%%b5fcf5088d83492ea886a7d23027d747%
+%,#@,%%21e9de40719f490fad605b14abf98b34%
+find /usr/bin/chage /usr/bin/gpasswd /usr/bin/wall /usr/bin/chfn /usr/bin/chsh /usr/bin/newgrp /usr/bin/write /usr/sbin/usernetctl /usr/sbin/traceroute /bin/mount /bin/umount /bin/ping /sbin/netreport -xdev -type f -perm /6000 -executable 2>/dev/null |awk '{print}END{print "check result="NR}'
+%,#@,%%21e9de40719f490fad605b14abf98b34%
+%,#@,%%25e0c60befc2483abcc525bafe983890%
+#20251121
+if [ $(id -u) -eq 0 ];then
+  sshd_pid=$(ps -ef | awk '/bin\/sshd / && $3 == 1 {print $2}')
+  sshd_bin=$(ls -l /proc/"$sshd_pid"/exe 2>/dev/null | awk '{print $NF}')
+  if [ ! -e "$sshd_bin" ] || [ ! -x "$sshd_bin" ]; then
+      sshd_bin=$(which sshd)
+  fi
+ ($sshd_bin -T || $sshd_bin -T -C user=john) 2>/dev/null | grep -i gatewayports  
+else
+  printf "%s\n%s\n" "Insufficient permissions, check failed: " "gatewayports yes"
+fi
+unset sshd_pid sshd_bin
+%,#@,%%25e0c60befc2483abcc525bafe983890%
+%,#@,%%f1a3a2a93c664d2cbea7115511037ee3%
+#20251114
+chk_tmout() {
+if [ -f /etc/profile ]; then
+  cat /etc/profile |awk -F= 'BEGIN{num=0}
+  /^export *TMOUT=|^TMOUT=/{
+  if($2>0 && $2<=300){num+=1;print $0" ,result=true"}else{print "TMOUT is not available, result=false"}}
+  END{if(num==0){print "The TMOUT has not been configured. result=false"}}'
+fi
+echo $TMOUT|awk '{if($0>0 && $0<=300)print "The TMOUT is: "$0,"result=true";else print "The TMOUT is: "$0,"result=false"}'
+if [ -f /etc/csh.cshrc ]; then
+  cat /etc/csh.cshrc |awk -F= '/^set *autologout=/{
+  if($2>0 && $2<=300){print $0" ,result=true"}else{print "autologout is not available, result=false"}}'
+fi
+}
+chk_tmout;unset chk_tmout
+%,#@,%%f1a3a2a93c664d2cbea7115511037ee3%
+%,#@,%%d5c6a44bf4cf412c97c8492efd93e046%
+#20251120
+list_sys_services() {
+  [ "$LC_ALL" != "en_US.UTF-8" ] && export LC_ALL="en_US.UTF-8"
+  if command -v chkconfig >/dev/null 2>&1;then
+    chkconfig --list |grep -E -e "^\b(lp|rpc|snmpdx)\b" -e "^\b(keyserv|nscdVolmgt)\b" -e "^\b(uucp|dmi|sendmail|autoinstall)\b"|awk '
+    BEGIN{num=0} /:on/{num+=1;print $0}END{if(num>0){print "result=false"}else{print "result=true"}}'
+  fi
+  if command -v systemctl >/dev/null 2>&1;then
+    systemctl list-unit-files --type service --type socket|grep -E -e "^\b(squid|named|ncpfs|portmap)\b" -e "^\b(ypserv|yppasswdd|ypbind|smbc)\b" -e "^\b(xfsc|qpopper|cyrus|rexec|rlogin)\b" -e "^\b(rsh\b|telnet|smtp|imap)\b"|awk '
+    BEGIN{num=0} /enabled/{num+=1;print $0}END{if(num>0){print "result=false"}else{print "result=true"}}'
+  fi
+}
+list_sys_services;unset list_sys_services
+%,#@,%%d5c6a44bf4cf412c97c8492efd93e046%
+%,#@,%%a34e905e4464411996b61f3910be2cd2%
+#20260305
+chk_soft() {
+  local soft_list=$("$REAL_RPM" -qa | grep -E -e "\b(tcpdump|wireshark|ethereal)\b" -e "^\b(gdb|strace|dexdump|cpp|gcc)\b")
+  echo "$soft_list"
+  echo "result=$(echo "$soft_list" |grep -Evc "^#|^$")"
+}
+check_main() {
+  type -a rpm 2>/dev/null
+  REAL_RPM=$(type -P rpm 2>/dev/null)
+  if [ -z "$REAL_RPM" ] || [ ! -x "$REAL_RPM" ]; then
+    if [ -x "/usr/bin/rpm" ]; then
+      REAL_RPM="/usr/bin/rpm"
+    elif [ -x "/bin/rpm" ]; then
+      REAL_RPM="/bin/rpm"
+    fi
+  fi
+  if [ -n "$REAL_RPM" ] && [ -x "$REAL_RPM" ]; then
+    chk_soft
+    unset chk_soft
+  else
+    echo "rpm command not available or not executable, result=1"
+  fi
+}
+check_main;unset check_main
+%,#@,%%a34e905e4464411996b61f3910be2cd2%
+%,#@,%%06f81623a07c4cb7b007d2025f101d39%24b7bdd41dcb41c7a7ac6258e738a67b%0e8181fee47d4cdfa48ad7009e26ca9a%
+#20250917
+chk_syslog() {
+  local SYSLOGCONF="/etc/rsyslog.conf"
+  if [ ! -f  "$SYSLOGCONF" ];then
+    SYSLOGCONF="/etc/syslog.conf"
+  fi
+  if [ -f "$SYSLOGCONF" ];then
+    local include_files=$(cat $SYSLOGCONF|awk '/^\$IncludeConfig/{if($2~"/$"){print $2"*"}else{print $2}}')
+    cat $SYSLOGCONF ${include_files:=$(cat $SYSLOGCONF|awk -F'"' '/^include/{print $2}')} 2>/dev/null |grep -E -v '^[[:space:]]*#|^$|@'|awk '{
+     if($1 ~ "auth\\.\\*|authpriv\\.\\*|\\*\\.\\*"){print $1", result=true"}}'
+  fi
+}
+chk_syslog_ng() {
+  local FILE_NG=/etc/syslog-ng/syslog-ng.conf 
+  [ -f "$FILE_NG" ] && cat $FILE_NG $(cat $FILE_NG|awk '/^@include/{if($2!~/^\"\//){print "/etc/syslog-ng/"$2}else{print $2}}' |sed 's/"//g') 2>/dev/null|grep -Ev '^[[:space:]]*#|^$'|awk '
+  /^log.*filter\((f_messages|f_default)/{print $0," result=true"}'
+}
+is_actived=$(ps -ef |grep -E 'syslogd|syslog-ng'|grep -v grep|wc -l)
+if [ ${is_actived:=0} -ne 0 ]; then
+  chk_syslog;chk_syslog_ng;unset chk_syslog chk_syslog_ng
+else
+  echo "syslog service is not running, check result=false"
+fi
+%,#@,%%06f81623a07c4cb7b007d2025f101d39%24b7bdd41dcb41c7a7ac6258e738a67b%0e8181fee47d4cdfa48ad7009e26ca9a%
+%,#@,%%14b8f40c1e2b49b4bf1d2e878b9b1de0%
+#20260724
+chk_ssh_root() {
+  local sshd_pid sshd_bin
+  sshd_pid=$(ps -ef | awk '/bin\/sshd / && $3 == 1 {print $2}')
+  sshd_bin=$(ls -l /proc/"$sshd_pid"/exe 2>/dev/null | awk '{print $NF}')
+  if [[ ! -e "$sshd_bin" || ! -x "$sshd_bin" ]]; then
+    sshd_bin=$(which sshd)
+  fi
+  ("$sshd_bin" -T || "$sshd_bin" -T -C user=john) &>/dev/null
+  if [ $? -eq 0 ]; then
+    echo "=====>check in sshd command"
+    ("$sshd_bin" -T || "$sshd_bin" -T -C user=john) 2>/dev/null | awk '/^[ \t]*[Pp]ermit[Rr]oot[Ll]ogin/{
+        if($2=="no"){
+          print $0,"check result:true"
+        }else{
+          print $0,"check result:false"
+        }
+    }'
+  else
+    echo "=====>check in sshd_config file"
+    awk '/^[ \t]*[Pp]ermit[Rr]oot[Ll]ogin/{
+      if($2=="no"){print $0,"check result:true"}
+      else{print $0,"check result:false"}
+    }END{
+      if(NR==0){print "No permission or The /etc/ssh/sshd_config does not exist, check result:false"}
+    }' /etc/ssh/sshd_config
+  fi
+}
+chk_ssh_root;unset -f chk_ssh_root
+#anti-tampering code begin
+addr=
+for inf in $(cat /proc/net/dev|awk '{print $1}'|grep ":"|awk -F: '{print $1}'); do
+  ls /sys/devices/virtual/net | grep -w "$inf" > /dev/null
+  if [ $? -ne 0 ]; then
+    addr=$addr"$(ip addr show dev $inf | grep --color=never -oP 'link\/ether \K[^\s]+|inet[6]* \K[^\s]+')"
+  fi;
+done
+
+pr_uuid=
+pu="/sys/class/dmi/id/product_uuid /sys/devices/virtual/dmi/id/product_uuid"
+for pu_file in $(echo $pu); do if [ -z $pr_uuid ]; then pr_uuid=$(cat $pu_file); else break; fi done
+if [ -z "$pr_uuid" ]; then pr_uuid="temp_id"; fi
+s=$(dd if=/dev/urandom bs=1 count=16 | base64)
+c=$s$addr$pr_uuid;h=`echo -n $c|md5sum|awk '{print $1}'`
+echo "saadpr7j="$s$h
+#anti-tampering code end
+%,#@,%%14b8f40c1e2b49b4bf1d2e878b9b1de0%
+%,#@,%%1220d768704044aab8bde10c42ccc162%
+sysctl net.ipv4.conf.all.accept_source_route net.ipv4.conf.default.accept_source_route net.ipv6.conf.all.accept_source_route  net.ipv6.conf.default.accept_source_route|awk '{if($NF==0){print $0,"check result=true"}else{print $0,"check result=false"}}'
+%,#@,%%1220d768704044aab8bde10c42ccc162%

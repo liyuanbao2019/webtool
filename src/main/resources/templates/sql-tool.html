@@ -19,6 +19,8 @@
     <script src="/js/vue.global.prod.js"></script>
     <script src="/js/axios.min.js"></script>
     <script src="/js/sql-tool-http.js"></script>
+    <script src="/js/saved-sql.js"></script>
+    <script src="/js/sql-tab-storage.js"></script>
     <!-- CryptoJS for AES decryption -->
     <script src="/js/crypto-js.min.js"></script>
     <!-- CodeMirror 5 -->
@@ -1226,7 +1228,7 @@
                                 <i class="fas fa-clock me-1"></i>{{ t('sql.executionTime') }} {{ lastExecutionTime }}ms
                             </span>
                         </div>
-                        <div class="d-flex gap-2">
+                        <div class="d-flex flex-wrap justify-content-end gap-2">
                             <button class="btn btn-primary btn-sm px-4" @click="executeSql"
                                 :disabled="!sql.trim() || loading">
                                 <i class="fas fa-play me-1" v-if="!loading"></i>
@@ -1270,6 +1272,13 @@
 
 
 
+                            <button class="btn btn-outline-success btn-sm" @click="beginSaveScript()" :disabled="!sql.trim() || scriptBusy">
+                                <i class="fas fa-save me-1"></i>{{ t('sql.save') }}
+                            </button>
+                            <button class="btn btn-outline-success btn-sm" @click="beginSaveScript(true)" :disabled="!sql.trim() || scriptBusy">{{ t('sql.scriptSaveAs') }}</button>
+                            <button class="btn btn-outline-primary btn-sm" @click="openScriptLibrary" :disabled="scriptBusy">
+                                <i class="fas fa-folder-open me-1"></i>{{ t('sql.myScripts') }}
+                            </button>
                             <button class="btn btn-outline-primary btn-sm px-3" @click="openSqlTemplateModal">
                                 <i class="fas fa-list-check me-1"></i>
                                 {{ t('sql.template') }}
@@ -1408,7 +1417,9 @@
 
                     <div class="table-container">
                         <!-- 表格视图 -->
-                        <table class="table table-hover result-table"
+                        <table ref="resultTable" :key="'result-table-' + resultTableVersion"
+                            class="table table-hover result-table"
+                            v-memo="[currentResult, resultSort, JSON.stringify(resultFilters), pagination.currentPage, pagination.pageSize, resultTableVersion]"
                             v-if="currentResult && currentResult.success && currentResult.columns && !textViewMode">
                             <thead>
                                 <tr>
@@ -1427,7 +1438,7 @@
                                             :title="t('sql.clearFilters')"><i class="fas fa-times"></i></button></th>
                                     <th v-for="col in currentResult.columns" :key="'filter_' + col">
                                         <input class="form-control form-control-sm" v-model="resultFilters[col]"
-                                            @click.stop @input="pagination.currentPage = 1"
+                                            @click.stop @input="pagination.currentPage = 1; clearResultCellSelection()"
                                             :placeholder="t('sql.filterColumn')">
                                     </th>
                                 </tr>
@@ -1437,15 +1448,12 @@
                                     <td class="text-muted">{{ (pagination.currentPage - 1) * pagination.pageSize + idx +
                                         1 }}</td>
                                     <td v-for="(col, colIdx) in currentResult.columns" :key="col" :title="row[col]"
-                                        :class="[{ 'editable-cell': canEditResultCell(col), 'edited-cell': isEditedCell(row, col), 'editing-cell': isEditingCell(row, col) }, { 'selected-result-cell': isResultCellSelected(idx, colIdx) }]"
+                                        :data-result-row="idx" :data-result-col="colIdx"
+                                        :class="{ 'editable-cell': canEditResultCell(col), 'edited-cell': isEditedCell(row, col) }"
                                         @mousedown="startResultCellSelection($event, idx, colIdx)"
                                         @mouseenter="extendResultCellSelection(idx, colIdx)"
-                                        @dblclick="startCellEdit(row, col)">
-                                        <input v-if="isEditingCell(row, col)" class="result-cell-editor"
-                                            :ref="'cellEditor_' + editKey(row, col)" v-model="editingCell.value"
-                                            @keydown.enter.prevent="finishCellEdit(true)"
-                                            @keydown.esc.prevent="finishCellEdit(false)" @blur="finishCellEdit(true)">
-                                        <span v-else>{{ formatCellValue(displayCellValue(row, col)) }}</span>
+                                        @dblclick="startCellEdit($event, row, col)">
+                                        <span class="result-cell-value">{{ formatCellValue(displayCellValue(row, col)) }}</span>
                                     </td>
                                 </tr>
                             </tbody>
@@ -1535,6 +1543,62 @@
 
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div v-if="scriptLibraryOpen" class="modal d-block" style="background: rgba(0,0,0,0.5)" role="dialog" aria-modal="true" :aria-label="t('sql.myScripts')" @click.self="!scriptBusy && (scriptLibraryOpen = false)">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">{{ t('sql.myScripts') }}</h5>
+                        <button class="btn-close" :aria-label="t('sql.close')" :disabled="scriptBusy" @click="scriptLibraryOpen = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small text-muted">{{ t('sql.scriptAccountHint') }}</p>
+                        <div class="d-flex gap-2 mb-3">
+                            <input class="form-control" v-model="scriptSearch" :placeholder="t('sql.scriptSearch')" :aria-label="t('sql.scriptSearch')">
+                            <label class="btn btn-outline-primary text-nowrap mb-0" :class="{ disabled: scriptBusy }">
+                                {{ t('sql.scriptImport') }}
+                                <input type="file" accept=".sql,text/plain" class="d-none" :disabled="scriptBusy" @change="importSqlFile">
+                            </label>
+                        </div>
+                        <div v-if="scriptError" class="alert alert-danger" role="alert">{{ scriptError }}</div>
+                        <p v-if="scriptBusy" class="text-muted">{{ t('sql.processing') }}</p>
+                        <p v-else-if="!filteredSavedScripts.length" class="text-muted">{{ t('sql.scriptEmpty') }}</p>
+                        <div v-for="script in filteredSavedScripts" :key="script.id" class="d-flex align-items-center gap-2 border-bottom py-2">
+                            <div class="flex-grow-1" style="min-width:0">
+                                <div class="text-break fw-bold">{{ script.name }}</div>
+                                <small class="text-muted">{{ new Date(script.updatedAt).toLocaleString() }}</small>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary text-nowrap" :disabled="scriptBusy" @click="openSavedScript(script)">{{ t('sql.scriptOpen') }}</button>
+                            <button class="btn btn-sm btn-outline-secondary text-nowrap" :disabled="scriptBusy" @click="renameSavedScript(script)">{{ t('sql.scriptRenameButton') }}</button>
+                            <button class="btn btn-sm btn-outline-danger text-nowrap" :disabled="scriptBusy" @click="deleteSavedScript(script)">{{ t('sql.delete') }}</button>
+                        </div>
+                    </div>
+                    <div class="modal-footer"><button class="btn btn-light" :disabled="scriptBusy" @click="scriptLibraryOpen = false">{{ t('sql.close') }}</button></div>
+                </div>
+            </div>
+        </div>
+        <div v-if="scriptSaveOpen" class="modal d-block" style="background: rgba(0,0,0,0.5)" role="dialog" aria-modal="true" :aria-label="t('sql.scriptSaveTitle')" @click.self="!scriptBusy && (scriptSaveOpen = false)">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                <form class="modal-content" @submit.prevent="saveScriptDraft">
+                    <div class="modal-header">
+                        <h5 class="modal-title">{{ t('sql.scriptSaveTitle') }}</h5>
+                        <button type="button" class="btn-close" :aria-label="t('sql.close')" :disabled="scriptBusy" @click="scriptSaveOpen = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div v-if="scriptError" class="alert alert-danger" role="alert">{{ scriptError }}</div>
+                        <label for="savedScriptName" class="form-label">{{ t('sql.scriptName') }}</label>
+                        <input id="savedScriptName" class="form-control mb-3" v-model="scriptDraft.name" maxlength="100" required :disabled="scriptBusy">
+                        <label for="savedScriptSql" class="form-label">SQL</label>
+                        <textarea id="savedScriptSql" class="form-control font-monospace" rows="12" v-model="scriptDraft.sql" required :disabled="scriptBusy" spellcheck="false"></textarea>
+                        <p class="small text-muted mt-2 mb-0">{{ scriptDraft.id ? t('sql.scriptOverwriteHint') : t('sql.scriptAccountHint') }}</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" :disabled="scriptBusy" @click="scriptSaveOpen = false">{{ t('sql.close') }}</button>
+                        <button type="submit" class="btn btn-success" :disabled="scriptBusy || !scriptDraft.name.trim() || !scriptDraft.sql.trim()">{{ scriptBusy ? t('sql.saving') : t('sql.save') }}</button>
+                    </div>
+                </form>
             </div>
         </div>
 
@@ -2747,6 +2811,23 @@
         const { createApp } = Vue;
 
         var enSqlTexts = {
+            'sql.myScripts': "My scripts",
+            'sql.scriptSaveAs': "Save as",
+            'sql.scriptSaveTitle': "Save SQL script",
+            'sql.scriptName': "Script name",
+            'sql.scriptAccountHint': "Scripts are stored on the server for your signed-in account. Up to 200 scripts, 1 MB each.",
+            'sql.scriptOverwriteHint': "This replaces the saved script. Use Save as to create a copy.",
+            'sql.scriptSearch': "Search script names",
+            'sql.scriptEmpty': "No matching scripts. Save SQL from the editor or import a .sql file.",
+            'sql.scriptImport': "Import .sql",
+            'sql.scriptOpen': "Open in new tab",
+            'sql.scriptRenameButton': "Rename",
+            'sql.scriptRename': "Enter a new script name",
+            'sql.scriptDeleteConfirm': "Delete script \"{0}\"? This cannot be undone.",
+            'sql.scriptSaved': "SQL script saved",
+            'sql.scriptFailed': "Script operation failed",
+            'sql.scriptTooLarge': "SQL files must not exceed 1 MB.",
+
             'sql.maxTabs': 'Maximum of {0} tabs supported',
             'sql.renameTab': 'Enter new tab name',
             'sql.query': 'Query',
@@ -3057,6 +3138,23 @@
         };
 
         var zhSqlTexts = {
+            'sql.myScripts': "我的脚本",
+            'sql.scriptSaveAs': "另存为",
+            'sql.scriptSaveTitle': "保存 SQL 脚本",
+            'sql.scriptName': "脚本名称",
+            'sql.scriptAccountHint': "脚本保存在服务端，仅当前登录账号可管理。最多 200 个脚本，每个不超过 1 MB。",
+            'sql.scriptOverwriteHint': "保存将更新原脚本；如需保留原脚本，请关闭后选择“另存为”。",
+            'sql.scriptSearch': "搜索脚本名称",
+            'sql.scriptEmpty': "暂无匹配脚本，可从编辑器保存 SQL 或导入 .sql 文件。",
+            'sql.scriptImport': "导入 .sql",
+            'sql.scriptOpen': "新标签打开",
+            'sql.scriptRenameButton': "重命名",
+            'sql.scriptRename': "请输入新的脚本名称",
+            'sql.scriptDeleteConfirm': "确定删除脚本“{0}”吗？删除后无法恢复。",
+            'sql.scriptSaved': "SQL 脚本已保存",
+            'sql.scriptFailed': "脚本操作失败",
+            'sql.scriptTooLarge': "SQL 文件不能超过 1 MB。",
+
             'sql.maxTabs': '最多支持 {0} 个标签页',
             'sql.renameTab': '请输入新的标签页名称',
             'sql.query': '查询',
@@ -3381,6 +3479,7 @@
         var sqlAllTexts = { 'en': enSqlTexts, 'zh_CN': zhSqlTexts };
 
         createApp({
+            mixins: [SavedSqlMixin],
             data() {
                 return {
                     locale: localStorage.getItem('locale') || 'en',
@@ -3413,7 +3512,8 @@
                     activeResultTabIndex: 0,
                     lastExecutionTime: null,
                     resultEdits: {},
-                    editingCell: null,
+                    // markRaw 使输入期间的 DOM 编辑会话不触发整个根组件重新渲染。
+                    editingCell: Vue.markRaw({ active: false }),
                     committingEdits: false,
                     history: [],
                     showSidebar: true,
@@ -3421,13 +3521,15 @@
                     csrfToken: null,  // CSRF Token
                     pagination: {
                         currentPage: 1,
-                        pageSize: 10,
-                        pageSizeOptions: [10, 20, 50, 100]
+                        pageSize: 50,
+                        pageSizeOptions: [50, 100, 200, 500, 1000]
                     },
                     textViewMode: false,  // 文本视图模式（Tab分隔，便于复制）
                     resultFilters: {},
                     resultSort: { column: null, direction: null },
-                    resultCellSelection: { anchor: null, focus: null, active: false },
+                    resultCellSelection: Vue.markRaw({ anchor: null, focus: null, active: false }),
+                    selectedCellCountValue: 0,
+                    resultTableVersion: 0,
                     resultSelectionMouseUpHandler: null,
                     // 服务端分页状态
                     totalCount: -1,      // 总行数（-1 表示无/未知）
@@ -3571,7 +3673,7 @@
                     tableTriggers: [],
                     loadingTableTriggers: false,
                     // Resize
-                    inputAreaHeight: 400,
+                    inputAreaHeight: 200,
                     isResizing: false,
                     startResizeY: 0,
                     startResizeHeight: 0,
@@ -3581,7 +3683,6 @@
                     pendingSql: '',
                     generatingToken: false,
                     pendingDatasourceIdx: null,
-                    tabsPersistTimer: null,
                     documentClickHandler: null,
                     keydownHandler: null,
                     beforeUnloadHandler: null,
@@ -3735,6 +3836,12 @@
                 resultEditable() {
                     return !!(this.resultEditMetadata && this.resultEditMetadata.editable);
                 },
+                editableResultColumnSet() {
+                    const columns = this.resultEditMetadata && this.resultEditMetadata.editableColumns;
+                    return new Set(Array.isArray(columns)
+                        ? columns.map(column => String(column).toLowerCase())
+                        : []);
+                },
                 pendingEditCount() {
                     return Object.keys(this.resultEdits || {}).length;
                 },
@@ -3794,10 +3901,7 @@
                     return Object.values(this.resultFilters || {}).some(value => String(value || '').trim());
                 },
                 selectedCellCount() {
-                    const selection = this.resultCellSelection || {};
-                    if (!selection.anchor || !selection.focus) return 0;
-                    return (Math.abs(selection.anchor.row - selection.focus.row) + 1)
-                        * (Math.abs(selection.anchor.col - selection.focus.col) + 1);
+                    return this.selectedCellCountValue;
                 },
                 paginatedRows() {
                     if (!this.currentResult || !this.currentResult.rows) return [];
@@ -3968,12 +4072,10 @@
                 }
             },
             beforeUnmount() {
+                this.finishCellEdit(false);
                 this.stopQueryTracking();
                 this.syncCurrentTabState();
-                this.persistTabsState();
-                if (this.tabsPersistTimer) {
-                    clearInterval(this.tabsPersistTimer);
-                }
+                this.flushTabsState();
                 if (this.documentClickHandler) {
                     document.removeEventListener('click', this.documentClickHandler);
                 }
@@ -4066,7 +4168,7 @@
 
                 this.beforeUnloadHandler = () => {
                     this.syncCurrentTabState();
-                    this.persistTabsState();
+                    this.flushTabsState();
                 };
                 window.addEventListener('beforeunload', this.beforeUnloadHandler);
                 this.resultSelectionMouseUpHandler = () => {
@@ -4074,10 +4176,6 @@
                 };
                 window.addEventListener('mouseup', this.resultSelectionMouseUpHandler);
 
-                this.tabsPersistTimer = setInterval(() => {
-                    this.syncCurrentTabState();
-                    this.persistTabsState();
-                }, 5000);
             },
             methods: {
                 t: function (key) {
@@ -4103,8 +4201,8 @@
                 createDefaultPagination() {
                     return {
                         currentPage: 1,
-                        pageSize: 10,
-                        pageSizeOptions: [10, 20, 50, 100]
+                        pageSize: 50,
+                        pageSizeOptions: [50, 100, 200, 500, 1000]
                     };
                 },
                 createTab(title) {
@@ -4136,30 +4234,46 @@
                 },
                 applyTabState(tab) {
                     if (!tab) return;
+                    this.finishCellEdit(false);
+                    this.clearResultCellSelection();
                     this.sql = tab.sql || '';
                     this.loading = !!tab.loading;
                     this.result = tab.result || null;
                     this.lastExecutionTime = tab.lastExecutionTime || null;
                     this.resultEdits = {};
-                    this.editingCell = null;
+                    const pageSizeOptions = [50, 100, 200, 500, 1000];
+                    const savedPageSize = Number(tab.pagination?.pageSize);
                     this.pagination = {
                         currentPage: tab.pagination?.currentPage || 1,
-                        pageSize: tab.pagination?.pageSize || 10,
-                        pageSizeOptions: [10, 20, 50, 100]
+                        pageSize: pageSizeOptions.includes(savedPageSize) ? savedPageSize : pageSizeOptions[0],
+                        pageSizeOptions
                     };
                     if (this.editor && this.editor.getValue() !== this.sql) {
                         this.editor.setValue(this.sql);
                     }
                 },
+                getTabsWriter() {
+                    if (!this.tabsWriter) {
+                        this.tabsWriter = Vue.markRaw(SqlTabStorage.createWriter({
+                            storage: localStorage,
+                            getSnapshot: () => SqlTabStorage.snapshot(this.tabs, this.activeTabId),
+                            setTimeout: (fn, delay) => setTimeout(fn, delay),
+                            clearTimeout: timer => clearTimeout(timer),
+                            onError: error => console.warn('Unable to cache SQL editor drafts:', error)
+                        }));
+                    }
+                    return this.tabsWriter;
+                },
                 persistTabsState() {
-                    if (!this.tabs || this.tabs.length === 0) return;
-                    localStorage.setItem('sql_editor_tabs', JSON.stringify(this.tabs));
-                    localStorage.setItem('sql_editor_active_tab', this.activeTabId || '');
+                    this.getTabsWriter().schedule();
+                },
+                flushTabsState() {
+                    this.getTabsWriter().flush();
                 },
                 switchResultTab(idx) {
+                    this.finishCellEdit(false);
                     this.activeResultTabIndex = idx;
                     this.resultEdits = {};
-                    this.editingCell = null;
                     this.clearResultEnhancements();
                 },
                 initTabs() {
@@ -4174,18 +4288,22 @@
                                     title: tab.title || `${this.t('sql.tabTitle')} ${idx + 1}`,
                                     sql: tab.sql || '',
                                     loading: false,
-                                    result: tab.result || null,
-                                    lastExecutionTime: tab.lastExecutionTime || null,
+                                    // Legacy caches may contain large results; restore editor drafts only.
+                                    result: null,
+                                    lastExecutionTime: null,
                                     pagination: {
                                         currentPage: tab.pagination?.currentPage || 1,
-                                        pageSize: tab.pagination?.pageSize || 10,
-                                        pageSizeOptions: [10, 20, 50, 100]
+                                        pageSize: [50, 100, 200, 500, 1000].includes(Number(tab.pagination?.pageSize))
+                                            ? Number(tab.pagination.pageSize)
+                                            : 50,
+                                        pageSizeOptions: [50, 100, 200, 500, 1000]
                                     }
                                 }));
                                 this.activeTabId = this.tabs.some(t => t.id === savedActiveTab)
                                     ? savedActiveTab
                                     : this.tabs[0].id;
                                 this.applyTabState(this.getActiveTab());
+                                this.persistTabsState();
                                 return;
                             }
                         } catch (e) {
@@ -5302,6 +5420,7 @@
                 },
                 changePage(page) {
                     if (page < 1 || page > this.totalPages) return;
+                    this.clearResultCellSelection();
                     if (this.needsServerPagingRefetch) {
                         // 服务端分页：重新请求后端（含批量中多条 SELECT 同页码分页）
                         this.pagination.currentPage = page;
@@ -5569,6 +5688,8 @@
                 },
 
                 async executeSqlInternal(sql, datasourceIdx, token = null, page = null, pageSize = null) {
+                    this.finishCellEdit(false);
+                    this.clearResultCellSelection();
                     const queryId = this.createQueryId();
                     this.startQueryTracking(queryId);
                     this.loading = true;
@@ -5576,7 +5697,6 @@
                     this.activeResultTabIndex = 0;
                     this.lastExecutionTime = null;
                     this.resultEdits = {};
-                    this.editingCell = null;
                     // 仅在全新执行（非翻页）时重置页码和分页状态
                     if (page === null) {
                         this.pagination.currentPage = 1;
@@ -5778,21 +5898,41 @@
                     this.clearResultCellSelection();
                 },
                 clearResultCellSelection() {
-                    this.resultCellSelection = { anchor: null, focus: null, active: false };
+                    const selection = this.resultCellSelection;
+                    selection.anchor = null;
+                    selection.focus = null;
+                    selection.active = false;
+                    this.selectedCellCountValue = 0;
+                    this.updateResultCellSelectionDom();
                 },
                 startResultCellSelection(event, row, col) {
                     if (event.button !== 0
                         || event.target.closest('.result-cell-editor')) return;
-                    this.resultCellSelection = {
-                        anchor: { row, col },
-                        focus: { row, col },
-                        active: true
-                    };
+                    const selection = this.resultCellSelection;
+                    selection.anchor = { row, col };
+                    selection.focus = { row, col };
+                    selection.active = true;
+                    this.selectedCellCountValue = 1;
+                    this.$nextTick(() => this.updateResultCellSelectionDom());
                     event.preventDefault();
                 },
                 extendResultCellSelection(row, col) {
                     if (!this.resultCellSelection.active) return;
                     this.resultCellSelection.focus = { row, col };
+                    const selection = this.resultCellSelection;
+                    this.selectedCellCountValue = (Math.abs(selection.anchor.row - row) + 1)
+                        * (Math.abs(selection.anchor.col - col) + 1);
+                    this.$nextTick(() => this.updateResultCellSelectionDom());
+                },
+                updateResultCellSelectionDom() {
+                    const table = this.$refs.resultTable;
+                    if (!table) return;
+                    const cells = table.querySelectorAll('td[data-result-row][data-result-col]');
+                    cells.forEach(cell => {
+                        const row = Number(cell.dataset.resultRow);
+                        const col = Number(cell.dataset.resultCol);
+                        cell.classList.toggle('selected-result-cell', this.isResultCellSelected(row, col));
+                    });
                 },
                 isResultCellSelected(row, col) {
                     const selection = this.resultCellSelection || {};
@@ -5829,8 +5969,8 @@
                 },
                 canEditResultCell(col) {
                     const meta = this.resultEditMetadata;
-                    return !!(meta && meta.editable && Array.isArray(meta.editableColumns)
-                        && meta.editableColumns.some(item => String(item).toLowerCase() === String(col).toLowerCase()));
+                    return !!(meta && meta.editable
+                        && this.editableResultColumnSet.has(String(col).toLowerCase()));
                 },
                 editKey(row, col) {
                     const meta = this.resultEditMetadata || {};
@@ -5845,49 +5985,92 @@
                 isEditedCell(row, col) {
                     return !!this.resultEdits[this.editKey(row, col)];
                 },
-                isEditingCell(row, col) {
-                    return !!(this.editingCell && this.editingCell.key === this.editKey(row, col));
-                },
-                startCellEdit(row, col) {
+                startCellEdit(event, row, col) {
                     if (!this.canEditResultCell(col) || this.committingEdits) return;
+                    this.finishCellEdit(true);
+                    this.clearResultCellSelection();
                     const key = this.editKey(row, col);
                     const currentValue = this.displayCellValue(row, col);
-                    this.editingCell = {
+                    const cell = event.currentTarget;
+                    const valueElement = cell.querySelector('.result-cell-value');
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'result-cell-editor';
+                    input.value = currentValue === null || currentValue === undefined ? '' : String(currentValue);
+
+                    Object.assign(this.editingCell, {
+                        active: true,
                         key,
                         row,
                         col,
                         originalValue: row[col],
-                        value: currentValue === null || currentValue === undefined ? '' : String(currentValue)
-                    };
-                    this.$nextTick(() => {
-                        const refs = this.$refs['cellEditor_' + key];
-                        const input = Array.isArray(refs) ? refs[0] : refs;
-                        if (input) {
-                            input.focus();
-                            input.select();
+                        cell,
+                        valueElement,
+                        input
+                    });
+                    cell.classList.add('editing-cell');
+                    if (valueElement) valueElement.style.display = 'none';
+                    cell.appendChild(input);
+
+                    input.addEventListener('keydown', keyEvent => {
+                        if (keyEvent.key === 'Enter') {
+                            keyEvent.preventDefault();
+                            this.finishCellEdit(true);
+                        } else if (keyEvent.key === 'Escape') {
+                            keyEvent.preventDefault();
+                            this.finishCellEdit(false);
                         }
                     });
+                    input.addEventListener('blur', () => this.finishCellEdit(true), { once: true });
+                    input.focus();
+                    input.select();
+                    event.stopPropagation();
                 },
                 finishCellEdit(save) {
-                    if (!this.editingCell) return;
+                    if (!this.editingCell || !this.editingCell.active) return;
                     const editing = this.editingCell;
-                    this.editingCell = null;
+                    const key = editing.key;
+                    const row = editing.row;
+                    const col = editing.col;
+                    const originalValue = editing.originalValue;
+                    const cell = editing.cell;
+                    const valueElement = editing.valueElement;
+                    const editedText = editing.input ? editing.input.value : '';
+                    editing.active = false;
+                    if (editing.input && editing.input.parentNode) {
+                        editing.input.parentNode.removeChild(editing.input);
+                    }
+                    if (valueElement) valueElement.style.display = '';
+                    if (cell) cell.classList.remove('editing-cell');
+                    Object.assign(editing, {
+                        key: null,
+                        row: null,
+                        col: null,
+                        originalValue: null,
+                        cell: null,
+                        valueElement: null,
+                        input: null
+                    });
                     if (!save) return;
 
-                    const newValue = this.coerceEditedValue(editing.value, editing.originalValue);
-                    if (this.valuesEqual(newValue, editing.originalValue)) {
-                        delete this.resultEdits[editing.key];
+                    const newValue = this.coerceEditedValue(editedText, originalValue);
+                    if (this.valuesEqual(newValue, originalValue)) {
+                        delete this.resultEdits[key];
+                        if (valueElement) valueElement.textContent = this.formatCellValue(originalValue);
+                        if (cell) cell.classList.remove('edited-cell');
                         return;
                     }
                     const meta = this.resultEditMetadata;
-                    this.resultEdits[editing.key] = {
-                        columnName: editing.col,
+                    this.resultEdits[key] = {
+                        columnName: col,
                         newValue,
-                        originalValue: editing.originalValue,
+                        originalValue,
                         primaryKeyValues: {
-                            [meta.primaryKeyColumn]: editing.row[meta.primaryKeyColumn]
+                            [meta.primaryKeyColumn]: row[meta.primaryKeyColumn]
                         }
                     };
+                    if (valueElement) valueElement.textContent = this.formatCellValue(newValue);
+                    if (cell) cell.classList.add('edited-cell');
                 },
                 coerceEditedValue(value, originalValue) {
                     if (value === '<null>' || value === '\\N') return null;
@@ -5908,8 +6091,9 @@
                     return String(a) === String(b);
                 },
                 rollbackResultEdits() {
+                    this.finishCellEdit(false);
                     this.resultEdits = {};
-                    this.editingCell = null;
+                    this.resultTableVersion++;
                     this.showToast(this.t('sql.tip'), this.t('sql.editsRolledBack'), 'success');
                 },
                 async commitResultEdits() {
@@ -5929,8 +6113,9 @@
                             edits
                         });
                         if (res.data && res.data.success) {
+                            this.finishCellEdit(false);
                             this.resultEdits = {};
-                            this.editingCell = null;
+                            this.resultTableVersion++;
                             this.showToast(this.t('sql.success'), this.t('sql.editsCommitted'), 'success');
                             if (this.lastExecutedSql) {
                                 await this.executeSqlInternal(this.lastExecutedSql, this.lastDatasourceIdx, null,
