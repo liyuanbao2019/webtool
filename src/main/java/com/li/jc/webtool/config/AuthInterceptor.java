@@ -36,6 +36,16 @@ public class AuthInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
+        if (request.getRequestURI().equals("/system-settings") || request.getRequestURI().startsWith("/api/system-settings")) {
+            HttpSession settingsSession = request.getSession(false);
+            Object settingsUser = settingsSession == null ? null : settingsSession.getAttribute(SESSION_USER_KEY);
+            if (settingsUser == null || !securityConfig.getSqlCheck().getAdminUsers().contains(settingsUser.toString())) {
+                response.setStatus(settingsUser == null ? 401 : 403);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"message\":\"系统设置仅限已登录管理员访问\"}");
+                return false;
+            }
+        }
         // 如果未启用认证，直接放行
         if (!authConfig.isEnabled()) {
             return true;

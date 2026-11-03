@@ -21,6 +21,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import javax.annotation.PreDestroy;
 import javax.servlet.http.HttpSession;
+import java.io.IOException;
+import java.io.Reader;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -1269,12 +1271,22 @@ public class DatabaseServiceImpl implements DatabaseService {
         switch (columnType) {
             case Types.CLOB:
             case Types.NCLOB:
-                Clob clob = rs.getClob(columnIndex);
+                Clob clob = columnType == Types.NCLOB ? rs.getNClob(columnIndex) : rs.getClob(columnIndex);
                 if (clob != null) {
-                    // 限制 CLOB 读取长度，防止 OOM
-                    long len = clob.length();
-                    // 默认读取前2000字符，足够预览
-                    return clob.getSubString(1, (int) Math.min(len, 2000));
+                    // 查询和导出共用此转换，必须完整读取，不能把预览截断写入结果集。
+                    try (Reader reader = clob.getCharacterStream()) {
+                        StringBuilder text = new StringBuilder();
+                        char[] buffer = new char[8192];
+                        int count;
+                        while ((count = reader.read(buffer)) != -1) {
+                            text.append(buffer, 0, count);
+                        }
+                        return text.toString();
+                    } catch (IOException e) {
+                        throw new SQLException("Failed to read complete CLOB value at column " + columnIndex, e);
+                    } finally {
+                        clob.free();
+                    }
                 }
                 return null;
             case Types.BLOB:

@@ -1,6 +1,5 @@
 package com.li.jc.webtool.service;
 
-import com.li.jc.webtool.config.SshSecurityConfig;
 import com.li.jc.webtool.dto.ScriptScanResult;
 import com.li.jc.webtool.dto.ScriptScanResult.DangerousOperation;
 import org.slf4j.Logger;
@@ -62,7 +61,7 @@ public class ScriptSecurityService {
      * 【高危】关闭/重启系统
      */
     private static final Pattern PATTERN_SHUTDOWN = Pattern.compile(
-            "(?i)\\b(shutdown|reboot|halt|poweroff|init\\s+[016])\\b"
+            "(?i)\\b(shutdown|reboot|halt|poweroff|init\\s+['\"]?[016])\\b"
     );
 
     /**
@@ -204,7 +203,8 @@ public class ScriptSecurityService {
      * 【中危】kill -9 强制终止进程
      */
     private static final Pattern PATTERN_KILL_DANGEROUS = Pattern.compile(
-            "(?i)\\bkill\\s+(-9|-SIGKILL|-SIGTERM)?\\s*\\d|\\bkillall\\s+(-9|-SIGKILL)"
+            "(?i)\\bkill\\s+(?:(?:-9|-15|-SIGKILL|-SIGTERM|-KILL|-TERM)\\s+|(?=[\"'$0-9]))[^\\n]+"
+                    + "|\\bkillall\\s+(?:-9|-SIGKILL|-KILL)\\s+[^\\n]+"
     );
 
     // ============================================================
@@ -218,42 +218,41 @@ public class ScriptSecurityService {
             "(?i)--.*;(?:DROP|DELETE|TRUNCATE|UPDATE|INSERT|ALTER|CREATE|GRANT|REVOKE)"
     );
 
-    // ============================================================
-    // 辅助变量：用于 scanScript 方法的扫描结果收集
-    // ============================================================
-    private Pattern riskPattern;
-    private String riskType;
-    private String riskSubType;
-    private String riskLevel;
-    private String riskDescription;
-    private String riskSuggestion;
+    /** Immutable, per-call rule state: Spring services may be scanned concurrently. */
+    private static final class Rule {
+        final Pattern pattern;
+        final String type, subType, level, description, suggestion;
 
-    /**
-     * 设置当前扫描规则（供内部规则方法调用）
-     */
-    private void setRule(String pattern, String type, String subType, String level, String desc, String sugg) {
-        this.riskPattern = Pattern.compile(pattern);
-        this.riskType = type;
-        this.riskSubType = subType;
-        this.riskLevel = level;
-        this.riskDescription = desc;
-        this.riskSuggestion = sugg;
+        Rule(String pattern, String type, String subType, String level, String description, String suggestion) {
+            this.pattern = Pattern.compile(pattern);
+            this.type = type;
+            this.subType = subType;
+            this.level = level;
+            this.description = description;
+            this.suggestion = suggestion;
+        }
     }
 
-    /**
-     * 当前规则下扫描全部匹配（同一规则在脚本中出现多次时分别计数）
-     *
-     * @param contentHash 用于跨 {@link #scanAllRules} 重复调用时区分不同来源串（如命令行与脚本内容二次扫描）
-     */
-    private List<DangerousOperation> matchRuleAll(String content, int contentHash) {
+    private List<DangerousOperation> matchRuleAll(ShellCommandScanner.Command command, Rule rule) {
         List<DangerousOperation> list = new ArrayList<>();
-        Matcher m = riskPattern.matcher(content);
+        if (rule.subType.equals("kill_dangerous") && command.isProcessProbe()) return list;
+        boolean sql = TYPE_DB.equals(rule.type) && !rule.subType.equals("db_exec")
+                && !rule.subType.equals("db_pipe");
+        if (sql && !Arrays.asList("mysql", "psql", "sqlplus", "oracle", "DROP", "TRUNCATE", "DELETE", "UPDATE")
+                .contains(command.name) && !Arrays.asList("drop", "truncate", "delete", "update").contains(command.name)) {
+            return list;
+        }
+        boolean pipeline = Arrays.asList("db_pipe", "remote_exec", "pipe_shell", "tee_dangerous").contains(rule.subType);
+        String content = pipeline ? command.pipelineText() : command.text;
+        Matcher m = rule.pattern.matcher(content);
         while (m.find()) {
-            String matched = m.group();
-            String sanitized = sanitizeMatch(matched);
-            DangerousOperation op = new DangerousOperation(riskType, riskSubType, sanitized, riskDescription,
-                    riskLevel, riskSuggestion);
-            op.setDedupeKey(riskType + ":" + riskSubType + ":" + contentHash + ":" + m.start() + ":" + m.end());
+            boolean redirection = rule.subType.equals("overwrite_system") || rule.subType.equals("heredoc_overwrite");
+            // Command rules may only match the executable word, never its data arguments.
+            if (!sql && !redirection && (m.start() != 0 || m.end() < command.name.length())) continue;
+            if (redirection && command.isQuoted(m.start())) continue;
+            DangerousOperation op = new DangerousOperation(rule.type, rule.subType, sanitizeMatch(m.group()),
+                    rule.description, rule.level, rule.suggestion);
+            op.setDedupeKey(command.key + ":" + rule.type + ":" + rule.subType + ":" + m.start());
             list.add(op);
         }
         return list;
@@ -286,41 +285,10 @@ public class ScriptSecurityService {
         }
 
         List<DangerousOperation> operations = new ArrayList<>();
-        // 按「规则 + 匹配位置」去重，避免同类型只记一条；同一内容二次扫描时用 contentHash 区分
         Set<String> seenDedupeKeys = new HashSet<>();
-
-        // ========== 第1步：检测脚本执行触发器 ==========
-        // 判断是否是脚本执行命令（sh/bash/zsh/./ + 脚本）
         String trimmed = command.trim();
-        boolean isScriptExec = trimmed.matches("(?i)^(sh|bash|zsh|dash|ksh|\\.)\\s+.*");
-
-        // ========== 第2步：提取待扫描内容 ==========
-        String contentToScan;
-        String scriptExecType = detectScriptExecType(trimmed);
-
-        if (isScriptExec) {
-            // 对于脚本执行命令，深度扫描内容
-            contentToScan = extractScriptContent(trimmed, scriptExecType);
-        } else {
-            // 非脚本执行命令，只做命令本身的模式匹配
-            contentToScan = trimmed;
-        }
-
-        if (contentToScan.isEmpty()) {
-            return ScriptScanResult.safe();
-        }
-
-        // ========== 第3步：执行多规则扫描 ==========
-        scanAllRules(contentToScan, operations, seenDedupeKeys, contentToScan.hashCode());
-
-        // ========== 第3.5步：补充扫描（针对脚本文件场景）==========
-        // 对于脚本文件 (sh script.sh / ./script.sh)，extractScriptContent 只返回文件名/参数，
-        // 脚本内容里的危险操作无法扫描到。
-        // 因此这里额外扫描原始命令本身，确保命令中任何危险操作都能被检测。
-        // 同时也防止通过脚本文件名注入危险参数（如 ./test.sh "rm -rf /"）绕过检测。
-        if (isScriptExec) {
-            scanAllRules(trimmed, operations, seenDedupeKeys, trimmed.hashCode());
-        }
+        // Parse the original source once. Nested shell payloads are visited by the lexer.
+        scanAllRules(trimmed, operations, seenDedupeKeys);
 
         // ========== 第4步：组装结果 ==========
         if (operations.isEmpty()) {
@@ -343,7 +311,7 @@ public class ScriptSecurityService {
         }
 
         log.info("脚本安全扫描结果: riskLevel={}, operations={}, needConfirm={}, commandPreview={}",
-                maxRiskLevel, operations.size(),
+                maxRiskLevel, operations.size(), needConfirm,
                 trimmed.length() > 60 ? trimmed.substring(0, 60) + "..." : trimmed);
 
         return result;
@@ -366,7 +334,7 @@ public class ScriptSecurityService {
         Set<String> seenDedupeKeys = new HashSet<>();
 
         // 深度扫描脚本内容
-        scanAllRules(content, operations, seenDedupeKeys, content.hashCode());
+        scanAllRules(content, operations, seenDedupeKeys);
 
         if (operations.isEmpty()) {
             return ScriptScanResult.safe();
@@ -391,49 +359,38 @@ public class ScriptSecurityService {
     /**
      * 动态扫描配置化危险命令
      * 根据 application.yml 中 audit.ssh.dangerous-commands 列表，在脚本内容中匹配所有出现，
-     * 并针对常见危险参数组合（如 rm -rf, rmdir -rf, dd of= 等）生成高危提示。
+     * 根据实际执行命令及参数生成风险提示，普通 rmdir 空目录清理为低危。
      * 与 SSH 终端执行命令使用同一配置列表，保证行为完全一致。
      */
-    private void scanDangerousCommandsFromConfig(String content, List<DangerousOperation> operations,
-            Set<String> seenDedupeKeys, int contentHash) {
-        if (securityConfig == null || securityConfig.getDangerousCommands() == null
-                || securityConfig.getDangerousCommands().isEmpty()) {
-            return;
-        }
-
-        for (String dangerousCmd : securityConfig.getDangerousCommands()) {
-            if (dangerousCmd == null || dangerousCmd.trim().isEmpty()) {
-                continue;
+    private void scanDangerousCommandsFromConfig(ShellCommandScanner.Command command,
+            List<DangerousOperation> operations, Set<String> seenDedupeKeys) {
+        if (securityConfig == null || securityConfig.getDangerousCommands() == null) return;
+        for (String configured : securityConfig.getDangerousCommands()) {
+            if (configured == null || !configured.trim().equalsIgnoreCase(command.name)) continue;
+            String cmd = configured.trim().toLowerCase(Locale.ROOT);
+            // The built-in rule covers these commands even when absent from the config.
+            // Report each invocation once, rather than once for each rule source.
+            if (PATTERN_SHUTDOWN.matcher(command.text).lookingAt()) continue;
+            String level = RISK_HIGH;
+            String subType = cmd + "_config";
+            String description = buildDangerousCmdDescription(cmd, command.text);
+            String suggestion = buildDangerousCmdSuggestion(cmd);
+            if (cmd.equals("rmdir")) {
+                boolean parents = command.hasParentDirectoryOption();
+                level = parents ? RISK_MEDIUM : RISK_LOW;
+                subType = parents ? "rmdir_parents" : "rmdir_empty";
+                description = parents ? "删除目标空目录及其父空目录（rmdir -p）"
+                        : "删除空目录（rmdir），不会递归删除目录中的文件";
+                suggestion = parents ? "请确认父空目录是否也需要删除" : "请确认目标空目录是否可以删除";
             }
-            String cmd = dangerousCmd.trim();
-            Pattern cmdPattern = buildDangerousCommandPattern(cmd);
-            Matcher m = cmdPattern.matcher(content);
-            while (m.find()) {
-                String matched = m.group();
-                String dedupeKey = TYPE_FILE + ":" + cmd + "_config:" + contentHash + ":" + m.start() + ":" + m.end();
-                if (seenDedupeKeys.contains(dedupeKey)) {
-                    continue;
-                }
-                seenDedupeKeys.add(dedupeKey);
-                DangerousOperation op = new DangerousOperation(TYPE_FILE, cmd + "_config",
-                        sanitizeMatch(matched), buildDangerousCmdDescription(cmd, matched),
-                        RISK_HIGH, buildDangerousCmdSuggestion(cmd));
+            String dedupeKey = command.key + ":config:" + cmd;
+            if (seenDedupeKeys.add(dedupeKey)) {
+                DangerousOperation op = new DangerousOperation(TYPE_FILE, subType, sanitizeMatch(command.text),
+                        description, level, suggestion);
                 op.setDedupeKey(dedupeKey);
                 operations.add(op);
             }
         }
-    }
-
-    /**
-     * 为单个危险命令构建匹配正则。
-     * 策略：匹配 "命令" + 至少一个空白 + 后续内容（覆盖 rm -rf xxx, rm -rf, rmdir -p 等所有用法）。
-     */
-    private Pattern buildDangerousCommandPattern(String cmd) {
-        // 转义命令名中的特殊正则字符
-        String escaped = cmd.replaceAll("([\\\\\\^\\$\\.\\|\\?\\*\\+\\(\\)\\[\\]\\{\\}])", "\\\\$1");
-        // DOTALL 模式：.* 匹配包括换行符在内的所有字符，每行独立匹配
-        // 匹配: cmd + 行内后续内容（捕获完整行，如 "rm -rf 111"）
-        return Pattern.compile("(?i)(?<![\\w/])" + escaped + "\\s+[^\\n]+", Pattern.DOTALL);
     }
 
     /**
@@ -503,311 +460,192 @@ public class ScriptSecurityService {
     /**
      * 执行所有危险操作规则扫描（每种规则在内容中可出现多次，分别计入列表）
      */
-    private void scanAllRules(String content, List<DangerousOperation> operations, Set<String> seenDedupeKeys,
-            int contentHash) {
-        // ========== 配置化危险命令扫描（与 dangerousCommands 完全对齐）==========
-        // 从 application.yml 的 audit.ssh.dangerous-commands 列表动态生成正则进行匹配
-        // 匹配命令本身及其常见危险用法，如 rm -rf, rmdir -rf, dd of=/dev/sda 等
-        scanDangerousCommandsFromConfig(content, operations, seenDedupeKeys, contentHash);
+    private void scanAllRules(String content, List<DangerousOperation> operations, Set<String> seenDedupeKeys) {
+        for (ShellCommandScanner.Command command : ShellCommandScanner.scan(content)) {
+            scanCommandRules(command, operations, seenDedupeKeys);
+        }
+    }
+
+    private void scanCommandRules(ShellCommandScanner.Command command, List<DangerousOperation> operations,
+            Set<String> seenDedupeKeys) {
+        scanDangerousCommandsFromConfig(command, operations, seenDedupeKeys);
+        Rule rule;
 
         // ========== 数据库类危险操作 ==========
 
         // 【高危】数据库 DROP 操作
-        setRule(PATTERN_DB_DROP.pattern(), TYPE_DB, "drop",
+        rule = new Rule(PATTERN_DB_DROP.pattern(), TYPE_DB, "drop",
                 RISK_HIGH,
                 "检测到数据库 DROP 操作（删除数据库/表/索引等），数据将不可恢复",
                 "请确认是否必须执行，如必须执行请备份数据后操作");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】数据库 TRUNCATE 操作
-        setRule(PATTERN_DB_TRUNCATE.pattern(), TYPE_DB, "truncate",
+        rule = new Rule(PATTERN_DB_TRUNCATE.pattern(), TYPE_DB, "truncate",
                 RISK_HIGH,
                 "检测到 TRUNCATE TABLE 操作，数据将被清空且不可恢复",
                 "请确认是否必须执行，TRUNCATE 无法回滚");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】DELETE 全表删除
-        setRule(PATTERN_DB_DELETE_ALL.pattern(), TYPE_DB, "delete_all",
+        rule = new Rule(PATTERN_DB_DELETE_ALL.pattern(), TYPE_DB, "delete_all",
                 RISK_HIGH,
                 "检测到不带 WHERE 条件的 DELETE 语句，将清空整表数据",
                 "请添加 WHERE 条件或确认是否必须执行全表删除");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】UPDATE 全表更新
-        setRule(PATTERN_DB_UPDATE_ALL.pattern(), TYPE_DB, "update_all",
+        rule = new Rule(PATTERN_DB_UPDATE_ALL.pattern(), TYPE_DB, "update_all",
                 RISK_HIGH,
                 "检测到不带 WHERE 条件的 UPDATE 语句，将更新整表数据",
                 "请添加 WHERE 条件或确认是否必须执行全表更新");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】SQL 命令行执行
-        setRule(PATTERN_DB_EXEC.pattern(), TYPE_DB, "db_exec",
+        rule = new Rule(PATTERN_DB_EXEC.pattern(), TYPE_DB, "db_exec",
                 RISK_HIGH,
                 "检测到数据库命令行直接执行危险 SQL（DROP/TRUNCATE 等），数据面临不可恢复风险",
                 "请使用数据库客户端工具并获得 DBA 授权后执行");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】数据库导出还原管道
-        setRule(PATTERN_DB_PIPE.pattern(), TYPE_DB, "db_pipe",
+        rule = new Rule(PATTERN_DB_PIPE.pattern(), TYPE_DB, "db_pipe",
                 RISK_HIGH,
                 "检测到数据库备份还原管道操作，可能导致当前数据被覆盖",
                 "请确认是否要覆盖当前数据库");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // ========== 文件系统类危险操作 ==========
 
         // 【高危】覆盖系统文件
-        setRule(PATTERN_FILE_OVERWRITE.pattern(), TYPE_FILE, "overwrite_system",
+        rule = new Rule(PATTERN_FILE_OVERWRITE.pattern(), TYPE_FILE, "overwrite_system",
                 RISK_HIGH,
                 "检测到直接覆盖系统配置文件操作（如 /etc/passwd）",
                 "此操作可能导致系统无法登录或服务异常");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】chmod 危险权限
-        setRule(PATTERN_CHMOD_DANGEROUS.pattern(), TYPE_FILE, "chmod_dangerous",
+        rule = new Rule(PATTERN_CHMOD_DANGEROUS.pattern(), TYPE_FILE, "chmod_dangerous",
                 RISK_HIGH,
                 "检测到 chmod 修改系统目录权限操作，可能导致安全风险",
                 "请确认权限修改的必要性");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】chown 危险操作
-        setRule(PATTERN_CHOWN_DANGEROUS.pattern(), TYPE_FILE, "chown_dangerous",
+        rule = new Rule(PATTERN_CHOWN_DANGEROUS.pattern(), TYPE_FILE, "chown_dangerous",
                 RISK_HIGH,
                 "检测到 chown 修改系统目录所有者操作",
                 "请确认所有者修改的必要性");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
 
         // ========== 系统类危险操作 ==========
 
         // 【高危】磁盘破坏
-        setRule(PATTERN_DISK_DESTROY.pattern(), TYPE_SYSTEM, "disk_destroy",
+        rule = new Rule(PATTERN_DISK_DESTROY.pattern(), TYPE_SYSTEM, "disk_destroy",
                 RISK_HIGH,
                 "检测到磁盘/分区格式化或破坏操作，将导致数据永久丢失",
                 "严重警告：此操作不可逆！请绝对确认脚本来源和执行必要性");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】系统关机/重启
-        setRule(PATTERN_SHUTDOWN.pattern(), TYPE_SYSTEM, "shutdown",
+        rule = new Rule(PATTERN_SHUTDOWN.pattern(), TYPE_SYSTEM, "shutdown",
                 RISK_HIGH,
                 "检测到系统关机/重启命令，将中断所有服务",
                 "请确认是否需要关闭/重启服务器");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】systemctl 危险操作
-        setRule(PATTERN_SYSTEMCTL.pattern(), TYPE_SYSTEM, "systemctl",
+        rule = new Rule(PATTERN_SYSTEMCTL.pattern(), TYPE_SYSTEM, "systemctl",
                 RISK_HIGH,
                 "检测到 systemctl 停止/禁用系统服务操作",
                 "请确认是否要停止系统关键服务");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【中危】service 危险操作
-        setRule(PATTERN_SERVICE.pattern(), TYPE_SYSTEM, "service",
+        rule = new Rule(PATTERN_SERVICE.pattern(), TYPE_SYSTEM, "service",
                 RISK_MEDIUM,
                 "检测到 service 命令停止/重启服务操作",
                 "请确认服务停止的影响范围");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【中危】kill 危险信号
-        setRule(PATTERN_KILL_DANGEROUS.pattern(), TYPE_SYSTEM, "kill_dangerous",
+        rule = new Rule(PATTERN_KILL_DANGEROUS.pattern(), TYPE_SYSTEM, "kill_dangerous",
                 RISK_MEDIUM,
-                "检测到强制终止进程操作（kill -9）",
+                "检测到终止进程操作（kill/killall）",
                 "请确认目标进程，避免误杀重要服务进程");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // ========== 管道/远程执行类 ==========
 
         // 【高危】curl/wget 管道到 shell 执行
-        setRule(PATTERN_CURL_PIPE_SH.pattern(), TYPE_NETWORK, "remote_exec",
+        rule = new Rule(PATTERN_CURL_PIPE_SH.pattern(), TYPE_NETWORK, "remote_exec",
                 RISK_HIGH,
                 "检测到从远程下载脚本并直接执行！这是最常见的远程入侵手法",
                 "严重警告：不要执行来源不明的远程脚本！");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】远程下载到系统目录
-        setRule(PATTERN_REMOTE_EXEC.pattern(), TYPE_NETWORK, "remote_download",
+        rule = new Rule(PATTERN_REMOTE_EXEC.pattern(), TYPE_NETWORK, "remote_download",
                 RISK_HIGH,
                 "检测到远程下载文件到系统目录操作",
                 "请确认下载来源的可信性");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【中危】eval/exec 动态执行
-        setRule(PATTERN_EVAL_EXEC.pattern(), TYPE_PIPE, "eval_exec",
+        rule = new Rule(PATTERN_EVAL_EXEC.pattern(), TYPE_PIPE, "eval_exec",
                 RISK_MEDIUM,
                 "检测到 eval/exec 动态命令执行，可能存在命令注入风险",
                 "请确认脚本来源，避免命令注入攻击");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【中危】管道到 shell
-        setRule(PATTERN_PIPE_SHELL.pattern(), TYPE_PIPE, "pipe_shell",
+        rule = new Rule(PATTERN_PIPE_SHELL.pattern(), TYPE_PIPE, "pipe_shell",
                 RISK_MEDIUM,
                 "检测到管道到 shell 执行操作",
                 "请确认管道命令的安全性");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【高危】heredoc 覆盖系统文件
-        setRule(PATTERN_HEREDOC_OVERWRITE.pattern(), TYPE_FILE, "heredoc_overwrite",
+        rule = new Rule(PATTERN_HEREDOC_OVERWRITE.pattern(), TYPE_FILE, "heredoc_overwrite",
                 RISK_HIGH,
                 "检测到 heredoc 重定向覆盖系统文件操作",
                 "请确认重定向目标，避免覆盖系统配置文件");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【中危】tee 管道危险操作
-        setRule(PATTERN_TEE_DANGEROUS.pattern(), TYPE_PIPE, "tee_dangerous",
+        rule = new Rule(PATTERN_TEE_DANGEROUS.pattern(), TYPE_PIPE, "tee_dangerous",
                 RISK_MEDIUM,
                 "检测到 tee 管道重定向到系统目录操作",
                 "请确认重定向目标路径");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // ========== 压缩包类 ==========
 
         // 【中危】tar 危险解压
-        setRule(PATTERN_TAR_DANGEROUS.pattern(), TYPE_ARCHIVE, "tar_dangerous",
+        rule = new Rule(PATTERN_TAR_DANGEROUS.pattern(), TYPE_ARCHIVE, "tar_dangerous",
                 RISK_MEDIUM,
                 "检测到 tar 解压到根目录操作，可能覆盖系统文件",
                 "请确认解压目标路径");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // 【中危】unzip 危险解压
-        setRule(PATTERN_UNZIP_DANGEROUS.pattern(), TYPE_ARCHIVE, "unzip_dangerous",
+        rule = new Rule(PATTERN_UNZIP_DANGEROUS.pattern(), TYPE_ARCHIVE, "unzip_dangerous",
                 RISK_MEDIUM,
                 "检测到 unzip 解压到根目录操作，可能覆盖系统文件",
                 "请确认解压目标路径");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
 
         // ========== SQL 注入检测 ==========
-        setRule(PATTERN_SQL_INJECT.pattern(), TYPE_DB, "sql_inject",
+        rule = new Rule(PATTERN_SQL_INJECT.pattern(), TYPE_DB, "sql_inject",
                 RISK_HIGH,
                 "检测到 SQL 注释注入攻击模式",
                 "请检查脚本中的 SQL 语句是否正确");
-        addAllMatches(operations, seenDedupeKeys, matchRuleAll(content, contentHash));
+        addAllMatches(operations, seenDedupeKeys, matchRuleAll(command, rule));
     }
 
     /**
-     * 检测是否是脚本执行命令，并返回执行类型
-     */
-    private String detectScriptExecType(String command) {
-        if (command.matches("(?i)^sh\\s+.*")) return "sh";
-        if (command.matches("(?i)^bash\\s+.*")) return "bash";
-        if (command.matches("(?i)^zsh\\s+.*")) return "zsh";
-        if (command.matches("(?i)^dash\\s+.*")) return "dash";
-        if (command.matches("(?i)^ksh\\s+.*")) return "ksh";
-        if (command.matches("(?i)^\\.\\s+.*")) return "source";
-        if (command.matches("(?i)^source\\s+.*")) return "source";
-        return "unknown";
-    }
-
-    /**
-     * 提取待扫描的脚本内容
-     * 处理多种Shell脚本执行格式：
-     * - sh -c "script content"
-     * - bash -c 'script content'
-     * - sh script.sh
-     * - ./script.sh
-     * - sh -x script.sh
-     * - mysql -e "SQL" db
-     * - mysqldump ... | mysql ...
-     */
-    private String extractScriptContent(String command, String execType) {
-        StringBuilder content = new StringBuilder();
-
-        // 统一转换为小写用于检测（但保留原始大小写用于内容提取）
-        String lowerCmd = command.toLowerCase();
-
-        // ========== 模式1: sh -c / bash -c "inline script" ==========
-        Pattern inlineScriptPattern = Pattern.compile(
-                "(?i)(sh|bash|zsh|dash|ksh)\\s+(-[a-zA-Z]+\\s+)?-c\\s+([\"'])(.+?)(\\3)"
-        );
-        Matcher m = inlineScriptPattern.matcher(command);
-        if (m.find()) {
-            String scriptContent = m.group(4);
-            content.append(scriptContent).append("\n");
-            // 如果是内联脚本，直接返回内容进行深度扫描
-            return content.toString();
-        }
-
-        // ========== 模式2: sh -c "xxx" args / bash -c 'xxx' args ==========
-        // sh -c 后面的所有内容都视为脚本内容（直到命令结束或遇到可疑的分号隔开的其他命令）
-        Pattern inlineScriptMultiPattern = Pattern.compile(
-                "(?i)(sh|bash|zsh|dash|ksh)\\s+(-[a-zA-Z]+\\s+)?-c\\s+([\"'])(.+)"
-        );
-        Matcher mm = inlineScriptMultiPattern.matcher(command);
-        if (mm.find()) {
-            // 找到 -c " 之后的所有内容，去掉结尾的引号（如果有的话）
-            String scriptContent = mm.group(4);
-            // 去掉末尾可能多余的内容
-            if (scriptContent.length() > 0) {
-                content.append(scriptContent).append("\n");
-                return content.toString();
-            }
-        }
-
-        // ========== 模式3: sh script.sh / ./script.sh ==========
-        // 对于脚本文件，扫描文件名和参数中的危险模式
-        Pattern scriptFilePattern = Pattern.compile(
-                "(?i)^(?:(sh|bash|zsh|dash|ksh|source|\\.))\\s+['\"]?([\\w\\.\\-_/]+?)['\"]?(?:\\s+(.*))?$"
-        );
-        Matcher mf = scriptFilePattern.matcher(command);
-        if (mf.find()) {
-            String scriptFile = mf.group(2);
-            String args = mf.group(3) != null ? mf.group(3) : "";
-            // 将脚本文件名和参数纳入扫描
-            content.append(scriptFile).append("\n");
-            content.append(args).append("\n");
-            return content.toString();
-        }
-
-        // ========== 模式4: mysql -e "SQL" db ==========
-        // 检测数据库命令中的 SQL 内容
-        Pattern dbCmdPattern = Pattern.compile(
-                "(?i)(mysql|psql|sqlplus|mysqldump|pg_dump)\\s+.*?-e\\s+([\"'])(.+?)(\\2)"
-        );
-        Matcher md = dbCmdPattern.matcher(command);
-        if (md.find()) {
-            String sqlContent = md.group(3);
-            content.append(sqlContent).append("\n");
-            return content.toString();
-        }
-
-        // ========== 模式5: mysql < script.sql ==========
-        Pattern dbRedirectPattern = Pattern.compile(
-                "(?i)(mysql|psql|sqlplus)\\s+.*<\\s+([\"']?)(.*?)(\\2)"
-        );
-        Matcher mdr = dbRedirectPattern.matcher(command);
-        if (mdr.find()) {
-            String sqlFile = mdr.group(3);
-            content.append(sqlFile).append("\n");
-            // 同时返回文件路径用于显示
-            return "/* SQL file: " + sqlFile + " */\n" + content.toString();
-        }
-
-        // ========== 模式6: mysqldump ... | mysql ... ==========
-        if (lowerCmd.contains("|") && (lowerCmd.contains("mysqldump") || lowerCmd.contains("pg_dump"))) {
-            content.append(command).append("\n");
-            return content.toString();
-        }
-
-        // ========== 模式7: cat script.sh | sh ==========
-        // 检测 cat xxx | sh 等内容输出管道
-        Pattern catPipePattern = Pattern.compile(
-                "(?i)cat\\s+([\"']?)([\\w\\.\\-_/]+)(\\1)\\s*\\|\\s*(sh|bash|zsh)"
-        );
-        Matcher mcp = catPipePattern.matcher(command);
-        if (mcp.find()) {
-            // 返回脚本文件路径（实际内容需要通过 cat 读取，但这里只能给提示）
-            String scriptFile = mcp.group(2);
-            content.append("/* Reading script from: ").append(scriptFile).append(" */\n");
-            content.append(scriptFile).append("\n");
-            return content.toString();
-        }
-
-        // ========== 模式8: 其他脚本执行形式 ==========
-        // 对于其他无法解析的形式，返回完整命令进行扫描
-        return command;
-    }
-
-    /**
-     * 合并多次匹配结果，按 dedupeKey 去重（同一段内容被二次扫描时由 contentHash 区分）
+     * 按来源命令的位置与规则去重，同一脚本内分别执行的命令保留独立记录。
      */
     private void addAllMatches(List<DangerousOperation> operations, Set<String> seenDedupeKeys,
             List<DangerousOperation> found) {

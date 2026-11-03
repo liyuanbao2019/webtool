@@ -701,7 +701,7 @@
             background-color: #f8f9fa;
             position: sticky;
             top: 0;
-            z-index: 1;
+            z-index: 4;
             padding: 6px 8px;
             color: #495057;
             white-space: nowrap;
@@ -725,8 +725,9 @@
             box-shadow: inset 0 0 0 1px #f0c36d;
         }
 
+        /* 编辑框浮在单元格上方，不改变单元格尺寸，避免整张大表重新计算布局 */
         .result-table td.editing-cell {
-            padding: 2px 4px;
+            position: relative;
             background: #e7f1ff;
             overflow: visible;
         }
@@ -748,13 +749,46 @@
             font-size: calc(var(--base-font-size) - 1px);
         }
 
+        .result-table td.result-row-number {
+            cursor: pointer;
+        }
+
+        .result-table td.result-row-number:hover {
+            color: #0d6efd !important;
+            text-decoration: underline;
+        }
+
+        .row-detail-table th {
+            width: 35%;
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            word-break: break-all;
+        }
+
+        .row-detail-table td {
+            white-space: pre-wrap;
+            word-break: break-all;
+            user-select: text;
+        }
+
+        .row-detail-table tr.row-detail-edited td {
+            background: #fff7cc;
+        }
+
         .result-table td.selected-result-cell {
             background: #dbeafe !important;
             box-shadow: inset 0 0 0 1px #60a5fa;
         }
 
         .result-cell-editor {
-            width: 100%;
+            position: absolute;
+            left: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 2;
+            box-sizing: border-box;
+            width: calc(100% - 4px);
             min-width: 160px;
             height: 26px;
             border: 1px solid #0d6efd;
@@ -1001,7 +1035,7 @@
                                         class="text-center p-3 text-muted small">
                                         {{ t('sql.noData') }}
                                     </div>
-                                    <div v-else class="object-list">
+                                    <div v-else class="object-list" v-memo="[filteredObjects('tables'), filteredObjects('tables').length]">
                                         <div v-for="obj in filteredObjects('tables')" :key="obj.name"
                                             class="object-item" @click="handleObjectClick('tables', obj.name)"
                                             @contextmenu.prevent="showContextMenu($event, obj.name)" :title="obj.name">
@@ -1033,7 +1067,7 @@
                                         class="text-center p-3 text-muted small">
                                         {{ t('sql.noData') }}
                                     </div>
-                                    <div v-else class="object-list">
+                                    <div v-else class="object-list" v-memo="[filteredObjects('views'), filteredObjects('views').length]">
                                         <div v-for="obj in filteredObjects('views')" :key="obj.name" class="object-item"
                                             @click="handleObjectClick('views', obj.name)" :title="obj.name">
                                             <i class="fas fa-eye text-info me-2"></i>{{ obj.name }}
@@ -1064,7 +1098,7 @@
                                         class="text-center p-3 text-muted small">
                                         {{ t('sql.noData') }}
                                     </div>
-                                    <div v-else class="object-list">
+                                    <div v-else class="object-list" v-memo="[filteredObjects('indexes'), filteredObjects('indexes').length]">
                                         <div v-for="obj in filteredObjects('indexes')" :key="obj.name"
                                             class="object-item" @click="handleObjectClick('indexes', obj.name)"
                                             :title="obj.name">
@@ -1096,7 +1130,7 @@
                                         class="text-center p-3 text-muted small">
                                         {{ t('sql.noData') }}
                                     </div>
-                                    <div v-else class="object-list">
+                                    <div v-else class="object-list" v-memo="[filteredObjects('procedures'), filteredObjects('procedures').length]">
                                         <div v-for="obj in filteredObjects('procedures')" :key="obj.name"
                                             class="object-item" @click="handleObjectClick('procedures', obj.name)"
                                             :title="obj.name">
@@ -1128,7 +1162,7 @@
                                         class="text-center p-3 text-muted small">
                                         {{ t('sql.noData') }}
                                     </div>
-                                    <div v-else class="object-list">
+                                    <div v-else class="object-list" v-memo="[filteredObjects('triggers'), filteredObjects('triggers').length]">
                                         <div v-for="obj in filteredObjects('triggers')" :key="obj.name"
                                             class="object-item" @click="handleObjectClick('triggers', obj.name)"
                                             :title="obj.name">
@@ -1160,7 +1194,7 @@
                                         class="text-center p-3 text-muted small">
                                         {{ t('sql.noData') }}
                                     </div>
-                                    <div v-else class="object-list">
+                                    <div v-else class="object-list" v-memo="[filteredObjects('sequences'), filteredObjects('sequences').length]">
                                         <div v-for="obj in filteredObjects('sequences')" :key="obj.name"
                                             class="object-item" @click="handleObjectClick('sequences', obj.name)"
                                             :title="obj.name">
@@ -1328,6 +1362,11 @@
                                 :title="t('sql.copySelection')">
                                 <i class="fas fa-copy me-1"></i>{{ t('sql.copySelection') }} ({{ selectedCellCount }})
                             </button>
+                            <button v-if="selectedCellCount > 0 && !textViewMode"
+                                class="btn btn-outline-primary btn-sm" @click="openRowDetailFromSelection"
+                                :title="t('sql.rowDetailTip')">
+                                <i class="fas fa-list-alt me-1"></i>{{ t('sql.rowDetail') }}
+                            </button>
                         </div>
 
                         <!-- Batch Result Tabs (左侧可滚动) -->
@@ -1445,7 +1484,8 @@
                             </thead>
                             <tbody>
                                 <tr v-for="(row, idx) in paginatedRows" :key="idx">
-                                    <td class="text-muted">{{ (pagination.currentPage - 1) * pagination.pageSize + idx +
+                                    <td class="text-muted result-row-number" @click="openRowDetail(idx)"
+                                        :title="t('sql.rowDetailTip')">{{ (pagination.currentPage - 1) * pagination.pageSize + idx +
                                         1 }}</td>
                                     <td v-for="(col, colIdx) in currentResult.columns" :key="col" :title="row[col]"
                                         :data-result-row="idx" :data-result-col="colIdx"
@@ -1541,6 +1581,68 @@
                             </ul>
                         </nav>
 
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="rowDetail.open && rowDetailRow" class="modal d-block" style="background: rgba(0,0,0,0.5)"
+            role="dialog" aria-modal="true" :aria-label="t('sql.rowDetail')" tabindex="-1" ref="rowDetailModal"
+            @click.self="closeRowDetail" @keydown.esc="closeRowDetail"
+            @keydown.left.exact="onRowDetailArrow($event, -1)" @keydown.right.exact="onRowDetailArrow($event, 1)">
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-list-alt me-2"></i>{{ t('sql.rowDetail') }}
+                            <span class="text-muted small ms-2">#{{ rowDetailRowNumber }}</span>
+                        </h5>
+                        <button class="btn-close" :aria-label="t('sql.close')" @click="closeRowDetail"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                            <input class="form-control form-control-sm" style="max-width: 260px;"
+                                v-model="rowDetail.filter" :placeholder="t('sql.rowDetailFilter')"
+                                :aria-label="t('sql.rowDetailFilter')">
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" id="rowDetailHideEmpty"
+                                    v-model="rowDetail.hideEmpty">
+                                <label class="form-check-label small" for="rowDetailHideEmpty">{{ t('sql.rowDetailHideEmpty') }}</label>
+                            </div>
+                            <div class="btn-group btn-group-sm ms-auto">
+                                <button class="btn" :class="rowDetail.textMode ? 'btn-outline-secondary' : 'btn-secondary'"
+                                    @click="rowDetail.textMode = false"><i class="fas fa-th-list me-1"></i>{{ t('sql.rowDetailForm') }}</button>
+                                <button class="btn" :class="rowDetail.textMode ? 'btn-secondary' : 'btn-outline-secondary'"
+                                    @click="rowDetail.textMode = true"><i class="fas fa-file-alt me-1"></i>{{ t('sql.textView') }}</button>
+                            </div>
+                        </div>
+                        <table v-if="!rowDetail.textMode" class="table table-sm table-bordered row-detail-table mb-0">
+                            <tbody>
+                                <tr v-for="field in rowDetailFields" :key="field.col"
+                                    :class="{ 'row-detail-edited': field.edited }">
+                                    <th>{{ field.col }}</th>
+                                    <td>{{ field.text }}</td>
+                                </tr>
+                                <tr v-if="!rowDetailFields.length">
+                                    <td colspan="2" class="text-muted text-center">{{ t('sql.rowDetailNoField') }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <textarea v-else class="form-control font-monospace" rows="18" readonly :value="rowDetailText"
+                            :style="{ fontSize: 'var(--base-font-size)', resize: 'vertical', whiteSpace: 'pre', overflowX: 'auto' }"
+                            @click="$event.target.select()"></textarea>
+                    </div>
+                    <div class="modal-footer justify-content-between">
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-outline-secondary btn-sm" :disabled="rowDetail.index <= 0"
+                                @click="moveRowDetail(-1)"><i class="fas fa-chevron-left me-1"></i>{{ t('sql.rowDetailPrev') }}</button>
+                            <button class="btn btn-outline-secondary btn-sm" :disabled="rowDetail.index >= paginatedRows.length - 1"
+                                @click="moveRowDetail(1)">{{ t('sql.rowDetailNext') }}<i class="fas fa-chevron-right ms-1"></i></button>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary btn-sm" @click="copyRowDetail"><i class="fas fa-copy me-1"></i>{{ t('sql.rowDetailCopy') }}</button>
+                            <button class="btn btn-light btn-sm" @click="closeRowDetail">{{ t('sql.close') }}</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3133,6 +3235,16 @@
             'sql.clearFilters': 'Clear filters and sorting',
             'sql.copySelection': 'Copy selection',
             'sql.selectionCopied': 'Selected cells copied as tab-separated text',
+            'sql.rowDetail': 'Row detail',
+            'sql.rowDetailTip': 'Show this row as a field / value form',
+            'sql.rowDetailFilter': 'Filter field or value...',
+            'sql.rowDetailHideEmpty': 'Hide empty fields',
+            'sql.rowDetailForm': 'Form',
+            'sql.rowDetailPrev': 'Previous',
+            'sql.rowDetailNext': 'Next',
+            'sql.rowDetailCopy': 'Copy as text',
+            'sql.rowDetailCopied': 'Row detail copied',
+            'sql.rowDetailNoField': 'No matching fields',
             'sql.unknownDatabase': 'Unknown database',
             'sql.langZh': '中文'
         };
@@ -3448,6 +3560,16 @@
             'sql.clearFilters': '清除筛选和排序',
             'sql.copySelection': '复制选区',
             'sql.selectionCopied': '已按 Tab 分隔格式复制选中单元格',
+            'sql.rowDetail': '行详情',
+            'sql.rowDetailTip': '以「字段 / 值」表单形式查看该行',
+            'sql.rowDetailFilter': '筛选字段名或值...',
+            'sql.rowDetailHideEmpty': '隐藏空值字段',
+            'sql.rowDetailForm': '表单',
+            'sql.rowDetailPrev': '上一行',
+            'sql.rowDetailNext': '下一行',
+            'sql.rowDetailCopy': '复制为文本',
+            'sql.rowDetailCopied': '已复制该行详情',
+            'sql.rowDetailNoField': '没有匹配的字段',
             'sql.unknownDatabase': '未知数据库',
             'sql.noDatasource': '未知数据库',
             'sql.langZh': '中文',
@@ -3529,6 +3651,7 @@
                     resultSort: { column: null, direction: null },
                     resultCellSelection: Vue.markRaw({ anchor: null, focus: null, active: false }),
                     selectedCellCountValue: 0,
+                    rowDetail: { open: false, index: 0, filter: '', hideEmpty: false, textMode: false },
                     resultTableVersion: 0,
                     resultSelectionMouseUpHandler: null,
                     // 服务端分页状态
@@ -3828,6 +3951,18 @@
                     }
                     return this.result;
                 },
+                // 侧边栏对象列表的过滤结果（computed 缓存，避免每次重渲染都对上千个对象重复过滤）
+                filteredDbObjectMap() {
+                    const search = (this.objectSearch || '').toLowerCase();
+                    const map = {};
+                    Object.keys(this.dbObjects).forEach(type => {
+                        const list = this.dbObjects[type] || [];
+                        map[type] = search
+                            ? list.filter(obj => String(obj.name || '').toLowerCase().includes(search))
+                            : list;
+                    });
+                    return map;
+                },
                 resultEditMetadata() {
                     return this.currentResult && this.currentResult.editableMetadata
                         ? this.currentResult.editableMetadata
@@ -3957,6 +4092,35 @@
                         }
                     }
                     return this.currentResult && this.currentResult.rows ? this.enhancedResultRows.length : 0;
+                },
+                rowDetailRow() {
+                    if (!this.rowDetail.open) return null;
+                    return this.paginatedRows[this.rowDetail.index] || null;
+                },
+                rowDetailRowNumber() {
+                    if (this.effectiveServerPaging && this.currentResult && this.currentResult.pageSize > 0) {
+                        return (this.currentResult.currentPage - 1) * this.currentResult.pageSize + this.rowDetail.index + 1;
+                    }
+                    return (this.pagination.currentPage - 1) * this.pagination.pageSize + this.rowDetail.index + 1;
+                },
+                rowDetailFields() {
+                    const row = this.rowDetailRow;
+                    if (!row || !this.currentResult || !this.currentResult.columns) return [];
+                    const keyword = String(this.rowDetail.filter || '').trim().toLowerCase();
+                    return this.currentResult.columns.map(col => {
+                        const text = String(this.formatCellValue(this.displayCellValue(row, col)));
+                        return { col, text, edited: this.isEditedCell(row, col) };
+                    }).filter(field => {
+                        if (this.rowDetail.hideEmpty && field.text === '') return false;
+                        if (!keyword) return true;
+                        return String(field.col).toLowerCase().includes(keyword)
+                            || field.text.toLowerCase().includes(keyword);
+                    });
+                },
+                rowDetailText() {
+                    const fields = this.rowDetailFields;
+                    const width = fields.reduce((max, f) => Math.max(max, String(f.col).length), 0);
+                    return fields.map(f => String(f.col).padEnd(width) + ' : ' + f.text).join('\n');
                 },
                 // 文本视图内容（Tab分隔，包含表头）
                 textViewContent() {
@@ -4179,8 +4343,9 @@
             },
             methods: {
                 t: function (key) {
-                    var merged = Object.assign({}, sqlAllTexts[this.locale] || sqlAllTexts['en'], sqlLocaleMessages);
-                    var val = merged[key] || key.split('.').pop();
+                    // 直接按优先级查找，避免每次调用都复制整份词典（模板中 t() 调用很多，复制会拖慢每次重渲染）
+                    var inline = sqlAllTexts[this.locale] || sqlAllTexts['en'];
+                    var val = sqlLocaleMessages[key] || inline[key] || key.split('.').pop();
                     if (arguments.length > 1) {
                         for (var i = 1; i < arguments.length; i++) {
                             val = val.replace('{' + (i - 1) + '}', arguments[i]);
@@ -4418,7 +4583,7 @@
                 async copySqlTemplate() {
                     if (!this.renderedSqlTemplate) return;
                     try {
-                        await navigator.clipboard.writeText(this.renderedSqlTemplate);
+                        await this.writeClipboard(this.renderedSqlTemplate);
                         this.showToast(this.t('sql.copySuccess'), this.t('sql.copiedToClipboard'), 'success');
                     } catch (e) {
                         this.showToast(this.t('sql.copyFailed'), this.t('sql.cannotWriteClipboard'), 'error');
@@ -5024,9 +5189,41 @@
                         this.mysqlOnlineDdlData.loading = false;
                     }
                 },
+                /**
+                 * 写入剪贴板。HTTP + IP 访问时不是安全上下文，navigator.clipboard 为 undefined，
+                 * 需要降级为 textarea + execCommand('copy')。
+                 */
+                async writeClipboard(text) {
+                    const value = text == null ? '' : String(text);
+                    const clipboard = window.isSecureContext && navigator.clipboard;
+                    if (clipboard && typeof clipboard.writeText === 'function') {
+                        try {
+                            await clipboard.writeText(value);
+                            return;
+                        } catch (e) {
+                            // 权限被拒等情况，继续走降级方案
+                        }
+                    }
+                    const active = document.activeElement;
+                    const textarea = document.createElement('textarea');
+                    textarea.value = value;
+                    textarea.setAttribute('readonly', '');
+                    textarea.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+                    document.body.appendChild(textarea);
+                    let copied = false;
+                    try {
+                        textarea.select();
+                        textarea.setSelectionRange(0, value.length);
+                        copied = document.execCommand('copy');
+                    } finally {
+                        document.body.removeChild(textarea);
+                        if (active && typeof active.focus === 'function') active.focus();
+                    }
+                    if (!copied) throw new Error(this.t('sql.cannotWriteClipboard'));
+                },
                 async copyText(text) {
                     try {
-                        await navigator.clipboard.writeText(text || '');
+                        await this.writeClipboard(text);
                         this.showToast(this.t('sql.copySuccess'), this.t('sql.copiedToClipboard'), 'success');
                     } catch (e) {
                         this.showToast(this.t('sql.copyFailed'), this.t('sql.cannotWriteClipboard'), 'error');
@@ -5328,13 +5525,7 @@
                 },
                 // 过滤数据库对象
                 filteredObjects(type) {
-                    if (!this.objectSearch) {
-                        return this.dbObjects[type] || [];
-                    }
-                    const search = this.objectSearch.toLowerCase();
-                    return (this.dbObjects[type] || []).filter(obj =>
-                        obj.name.toLowerCase().includes(search)
-                    );
+                    return this.filteredDbObjectMap[type] || [];
                 },
                 // 懒加载数据库对象
                 async loadDatabaseObjects(type, force = false) {
@@ -5874,7 +6065,7 @@
                     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
                 },
                 formatCellValue(val) {
-                    if (val === null || val === undefined) return '<null>';
+                    if (val === null || val === undefined) return '';
                     if (typeof val === 'object') return JSON.stringify(val);
                     return val;
                 },
@@ -5925,14 +6116,28 @@
                     this.$nextTick(() => this.updateResultCellSelectionDom());
                 },
                 updateResultCellSelectionDom() {
+                    // 只处理已高亮的单元格和当前选区，避免大结果集时遍历全部单元格
                     const table = this.$refs.resultTable;
                     if (!table) return;
-                    const cells = table.querySelectorAll('td[data-result-row][data-result-col]');
-                    cells.forEach(cell => {
-                        const row = Number(cell.dataset.resultRow);
-                        const col = Number(cell.dataset.resultCol);
-                        cell.classList.toggle('selected-result-cell', this.isResultCellSelected(row, col));
+                    table.querySelectorAll('td.selected-result-cell').forEach(cell => {
+                        cell.classList.remove('selected-result-cell');
                     });
+                    const selection = this.resultCellSelection || {};
+                    const body = table.tBodies && table.tBodies[0];
+                    if (!body || !selection.anchor || !selection.focus) return;
+                    const minRow = Math.min(selection.anchor.row, selection.focus.row);
+                    const maxRow = Math.max(selection.anchor.row, selection.focus.row);
+                    const minCol = Math.min(selection.anchor.col, selection.focus.col);
+                    const maxCol = Math.max(selection.anchor.col, selection.focus.col);
+                    for (let r = minRow; r <= maxRow; r++) {
+                        const tr = body.rows[r];
+                        if (!tr) continue;
+                        for (let c = minCol; c <= maxCol; c++) {
+                            // 第 0 列是行号，数据列从 1 开始
+                            const cell = tr.cells[c + 1];
+                            if (cell) cell.classList.add('selected-result-cell');
+                        }
+                    }
                 },
                 isResultCellSelected(row, col) {
                     const selection = this.resultCellSelection || {};
@@ -5961,8 +6166,39 @@
                         }).join('\t'));
                     }
                     try {
-                        await navigator.clipboard.writeText(lines.join('\n'));
+                        await this.writeClipboard(lines.join('\n'));
                         this.showToast(this.t('sql.copySuccess'), this.t('sql.selectionCopied'), 'success');
+                    } catch (e) {
+                        this.showToast(this.t('sql.copyFailed'), e.message, 'error');
+                    }
+                },
+                openRowDetail(index) {
+                    if (!this.paginatedRows[index]) return;
+                    this.rowDetail.index = index;
+                    this.rowDetail.open = true;
+                    this.$nextTick(() => this.$refs.rowDetailModal && this.$refs.rowDetailModal.focus());
+                },
+                openRowDetailFromSelection() {
+                    const anchor = this.resultCellSelection && this.resultCellSelection.anchor;
+                    if (anchor) this.openRowDetail(anchor.row);
+                },
+                closeRowDetail() {
+                    this.rowDetail.open = false;
+                },
+                moveRowDetail(step) {
+                    const next = this.rowDetail.index + step;
+                    if (next >= 0 && next < this.paginatedRows.length) this.rowDetail.index = next;
+                },
+                onRowDetailArrow(event, step) {
+                    const tag = event.target && event.target.tagName;
+                    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+                    event.preventDefault();
+                    this.moveRowDetail(step);
+                },
+                async copyRowDetail() {
+                    try {
+                        await this.writeClipboard(this.rowDetailText);
+                        this.showToast(this.t('sql.copySuccess'), this.t('sql.rowDetailCopied'), 'success');
                     } catch (e) {
                         this.showToast(this.t('sql.copyFailed'), e.message, 'error');
                     }
@@ -6009,7 +6245,7 @@
                         input
                     });
                     cell.classList.add('editing-cell');
-                    if (valueElement) valueElement.style.display = 'none';
+                    if (valueElement) valueElement.style.visibility = 'hidden';
                     cell.appendChild(input);
 
                     input.addEventListener('keydown', keyEvent => {
@@ -6040,7 +6276,7 @@
                     if (editing.input && editing.input.parentNode) {
                         editing.input.parentNode.removeChild(editing.input);
                     }
-                    if (valueElement) valueElement.style.display = '';
+                    if (valueElement) valueElement.style.visibility = '';
                     if (cell) cell.classList.remove('editing-cell');
                     Object.assign(editing, {
                         key: null,
@@ -6074,6 +6310,7 @@
                 },
                 coerceEditedValue(value, originalValue) {
                     if (value === '<null>' || value === '\\N') return null;
+                    if (value === '' && (originalValue === null || originalValue === undefined)) return null;
                     if (typeof originalValue === 'number' && value !== '') {
                         const n = Number(value);
                         return Number.isFinite(n) ? n : value;

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>系统设置 - WebTool</title>
+<link href="/css/bootstrap.min.css" rel="stylesheet"><link href="/css/all.min.css" rel="stylesheet">
+<style>[v-cloak]{display:none}body{background:#f5f7fb}.key{font:12px monospace;overflow-wrap:anywhere}.settings-card{background:white;border-radius:12px;padding:24px;margin-bottom:20px}input{min-width:100px}</style></head>
+<body><div id="settings" class="container-xl py-4" v-cloak>
+<div class="d-flex justify-content-between align-items-center mb-4"><h3><i class="fas fa-cogs text-primary me-2"></i>系统设置</h3><a href="/" class="btn btn-outline-secondary">返回首页</a></div>
+<div class="alert alert-info">启动参数保存后需人工重启服务生效。修改端口后，请使用新地址访问。密码及令牌保持空白表示保留原值。</div>
+<div class="settings-card"><strong>已有专用管理入口</strong><p class="text-muted mt-2 mb-2">服务器清单、数据源和常用网站使用独立持久化配置。下方 YAML 参数是它们的初始默认值；已生成的独立配置优先使用，请到对应入口修改实际数据。</p><a href="/" class="btn btn-sm btn-outline-primary me-2">服务器 / 常用网站管理</a><a href="/sql-tool" class="btn btn-sm btn-outline-primary" target="_blank">数据源管理</a></div>
+<div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div><div v-if="message" class="alert alert-success" role="status">{{ message }}</div>
+<div v-if="loaded" class="settings-card">
+<div class="d-flex gap-2 flex-wrap mb-3"><input class="form-control flex-grow-1" style="width:240px" v-model="search" placeholder="搜索配置键或说明" aria-label="搜索配置"><select class="form-select" style="width:200px" v-model="group" aria-label="配置分类"><option value="">全部分类</option><option v-for="(label,key) in groups" :value="key">{{ label }}</option></select><button class="btn btn-outline-secondary" @click="load" :disabled="busy">重新加载</button></div>
+<p v-if="restartRequired" class="text-warning">有已保存的配置等待重启生效。</p>
+<p class="text-muted small">数组通过 [0]、[1] 等连续下标管理；新增账号使用 auth.users.账号名。删除数组项后需调整后续下标。环境变量、命令行参数仍具有更高优先级。</p>
+<div class="table-responsive"><table class="table align-middle"><thead><tr><th style="width:43%">配置项</th><th>配置值</th><th style="width:60px">操作</th></tr></thead><tbody>
+<tr v-for="field in filtered" :key="field.uid"><td><div class="small fw-bold">{{ describe(field.key) }}</div><input v-if="field.added" v-model.trim="field.key" class="form-control form-control-sm key" placeholder="例如 ssh.max-connections" :disabled="busy" aria-label="新配置键"><div v-else class="key text-muted">{{ field.key }}</div></td><td>
+<input v-if="isSecret(field.key)" type="password" class="form-control form-control-sm" autocomplete="new-password" :value="field.retain ? '' : field.value" @input="editSecret(field,$event.target.value)" :placeholder="field.retain ? '已配置，留空保留；输入新值替换' : '输入新值'" :disabled="busy" :aria-label="field.key">
+<select v-else-if="field.value === 'true' || field.value === 'false' || typeof field.value === 'boolean'" class="form-select form-select-sm" v-model="field.value" :disabled="busy" :aria-label="field.key"><option value="true">启用 / true</option><option value="false">关闭 / false</option></select>
+<input v-else class="form-control form-control-sm" v-model="field.value" :disabled="busy" :aria-label="field.key">
+</td><td><button class="btn btn-sm btn-outline-danger" @click="remove(field)" :disabled="busy" :aria-label="'删除 '+field.key"><i class="fas fa-trash"></i></button></td></tr>
+</tbody></table></div><p v-if="!filtered.length" class="text-muted">没有匹配的配置项</p>
+<div class="d-flex gap-2"><button class="btn btn-outline-primary" @click="add" :disabled="busy">新增配置项</button><button class="btn btn-primary" @click="save" :disabled="busy">{{ busy ? '处理中…' : '保存配置（重启生效）' }}</button></div>
+</div><p class="small text-muted">文件：config/system-settings.json；每次保存会保留上一版 .bak 备份。原始 application.yml 不会被写回。首次保存后，该完整快照作为页面管理的启动配置。</p>
+</div><script src="/js/vue.global.prod.js"></script><script src="/js/axios.min.js"></script><script src="/js/system-settings.js"></script></body></html>

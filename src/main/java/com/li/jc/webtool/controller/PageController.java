@@ -41,6 +41,9 @@ public class PageController {
         return "deploy";
     }
 
+    @GetMapping("/system-settings")
+    public String systemSettings() { return "system-settings"; }
+
     @GetMapping("/presentation")
     public String presentation() {
         return "presentation";

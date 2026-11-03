@@ -1317,10 +1317,30 @@
                     return Object.entries(headers).map(([key, value]) => `${key}: ${value}`).join('\n');
                 },
                 copyResponse() {
-                    const text = this.response.body;
-                    navigator.clipboard.writeText(text).then(() => {
-                        alert(this.t('api.copyFailed'));
-                    });
+                    const text = this.response.body == null ? '' : String(this.response.body);
+                    // HTTP + IP 访问时 navigator.clipboard 不可用，降级为 execCommand
+                    const fallbackCopy = () => {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        textarea.setAttribute('readonly', '');
+                        textarea.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+                        document.body.appendChild(textarea);
+                        try {
+                            textarea.select();
+                            return document.execCommand('copy');
+                        } finally {
+                            document.body.removeChild(textarea);
+                        }
+                    };
+                    const onFallback = () => {
+                        if (!fallbackCopy()) alert(this.t('api.copyFailed'));
+                    };
+                    const clipboard = window.isSecureContext && navigator.clipboard;
+                    if (clipboard && typeof clipboard.writeText === 'function') {
+                        clipboard.writeText(text).catch(onFallback);
+                    } else {
+                        onFallback();
+                    }
                 },
                 saveToHistory() {
                     const historyItem = {
