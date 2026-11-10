@@ -20,6 +20,7 @@
     <script src="/js/axios.min.js"></script>
     <script src="/js/sql-tool-http.js"></script>
     <script src="/js/saved-sql.js"></script>
+    <script src="/js/sql-data-import.js"></script>
     <script src="/js/sql-tab-storage.js"></script>
     <!-- CryptoJS for AES decryption -->
     <script src="/js/crypto-js.min.js"></script>
@@ -1313,6 +1314,9 @@
                             <button class="btn btn-outline-primary btn-sm" @click="openScriptLibrary" :disabled="scriptBusy">
                                 <i class="fas fa-folder-open me-1"></i>{{ t('sql.myScripts') }}
                             </button>
+                            <button class="btn btn-outline-primary btn-sm" @click="openDataImport()" :disabled="selectedDataSourceIdx === null">
+                                <i class="fas fa-file-import me-1"></i>{{ t('sql.importData') }}
+                            </button>
                             <button class="btn btn-outline-primary btn-sm px-3" @click="openSqlTemplateModal">
                                 <i class="fas fa-list-check me-1"></i>
                                 {{ t('sql.template') }}
@@ -1704,6 +1708,461 @@
             </div>
         </div>
 
+        <!-- Data import wizard (logic in /js/sql-data-import.js) -->
+        <div v-if="dataImport.open" class="modal d-block" style="background: rgba(0,0,0,0.5)" role="dialog" aria-modal="true" :aria-label="t('sql.importTitle')">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-file-import me-2"></i>{{ t('sql.importTitle') }}
+                            <small v-if="dataImport.datasourceName" class="text-muted fs-6 ms-2">{{ t('sql.importDatasource') }}: {{ dataImport.datasourceName }}</small>
+                        </h5>
+                        <button class="btn-close" :aria-label="t('sql.close')" @click="closeDataImport"></button>
+                    </div>
+                    <div class="modal-body">
+                        <ul class="nav nav-pills mb-3">
+                            <li class="nav-item" v-for="s in [1, 2, 3]" :key="s">
+                                <button type="button" class="nav-link py-1" :class="{ active: dataImport.step === s }"
+                                    :disabled="(s >= 2 && !dataImport.preview) || (s === 3 && !importMappedCount) || importRunning"
+                                    @click="goImportStep(s)">{{ t(s === 1 ? 'sql.importStepFile' : (s === 2 ? (dataImport.mode === 'CREATE' ? 'sql.importStepTable' : 'sql.importStepMapping') : 'sql.importStepRun')) }}</button>
+                            </li>
+                        </ul>
+                        <div v-if="dataImport.error" class="alert alert-danger py-2" role="alert">{{ dataImport.error }}</div>
+
+                        <!-- Step 1: file and parsing -->
+                        <div v-show="dataImport.step === 1">
+                            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                <label class="btn btn-primary btn-sm mb-0" :class="{ disabled: dataImport.busy || importRunning }">
+                                    <i class="fas fa-upload me-1"></i>{{ dataImport.upload ? t('sql.importReupload') : t('sql.importChooseFile') }}
+                                    <input type="file" class="d-none" accept=".csv,.txt,.tsv,.dat,.del,.unl,.xlsx,.xls,text/plain,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                        :disabled="dataImport.busy || importRunning" @change="uploadImportFile">
+                                </label>
+                                <span v-if="dataImport.busy" class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>{{ t('sql.importUploading') }}</span>
+                                <span v-else-if="dataImport.upload" class="text-break small">
+                                    <i class="fas me-1" :class="dataImport.upload.sourceType === 'EXCEL' ? 'fa-file-excel text-success' : 'fa-file-alt'"></i>{{ dataImport.upload.fileName }}
+                                    <span class="text-muted">({{ importFormatBytes(dataImport.upload.size) }})</span>
+                                </span>
+                            </div>
+                            <p class="small text-muted mb-2">{{ t('sql.importFileHint') }}</p>
+                            <template v-if="dataImport.upload">
+                                <div class="row g-2 mb-2 small">
+                                    <template v-if="dataImport.upload.sourceType === 'EXCEL'">
+                                        <div class="col-md-4">
+                                            <label class="form-label mb-1" for="impSheet">{{ t('sql.importSheet') }}</label>
+                                            <select id="impSheet" class="form-select form-select-sm" :value="dataImport.upload.sheetIndex"
+                                                :disabled="dataImport.busy || importRunning" @change="selectImportSheet($event.target.value)">
+                                                <option v-for="(name, i) in (dataImport.upload.sheets || [])" :key="i" :value="i">{{ name }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label mb-1">{{ t('sql.importSkipLines') }}</label>
+                                            <input type="number" min="0" class="form-control form-control-sm" v-model.number="dataImport.options.skipLines" @input="scheduleImportPreview">
+                                        </div>
+                                        <div class="col-md-5">
+                                            <div class="form-check"><input class="form-check-input" type="checkbox" id="impHeaderX" v-model="dataImport.options.hasHeader" @change="refreshImportPreview"><label class="form-check-label" for="impHeaderX">{{ t('sql.importHasHeader') }}</label></div>
+                                            <div class="form-check"><input class="form-check-input" type="checkbox" id="impTrimX" v-model="dataImport.options.trimValues" @change="refreshImportPreview"><label class="form-check-label" for="impTrimX">{{ t('sql.importTrim') }}</label></div>
+                                        </div>
+                                        <div class="col-12 text-muted">{{ t('sql.importExcelInfo', dataImport.upload.excelRows) }}</div>
+                                    </template>
+                                    <template v-else>
+                                    <div class="col-md-2">
+                                        <label class="form-label mb-1">{{ t('sql.importEncoding') }}</label>
+                                        <select class="form-select form-select-sm" v-model="dataImport.options.encoding" @change="refreshImportPreview">
+                                            <option v-for="enc in (dataImport.upload.encodings || ['UTF-8'])" :key="enc" :value="enc">{{ enc }}</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label mb-1">{{ t('sql.importDelimiter') }}</label>
+                                        <select class="form-select form-select-sm" v-model="dataImport.delimiterPreset" @change="onImportDelimiterChange">
+                                            <option v-for="p in importDelimiterPresets" :key="p.value" :value="p.value">{{ t(p.labelKey) }}</option>
+                                            <option value="__custom">{{ t('sql.importDelimCustom') }}</option>
+                                        </select>
+                                        <input v-if="dataImport.delimiterPreset === '__custom'" class="form-control form-control-sm mt-1"
+                                            v-model="dataImport.customDelimiter" :placeholder="t('sql.importDelimCustomHint')" :title="t('sql.importDelimCustomHint')"
+                                            @input="onImportDelimiterChange">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label mb-1">{{ t('sql.importQuote') }}</label>
+                                        <select class="form-select form-select-sm" v-model="dataImport.options.quote" @change="refreshImportPreview">
+                                            <option value='"'>" (CSV)</option>
+                                            <option value="'">'</option>
+                                            <option value="">{{ t('sql.importQuoteNone') }}</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label mb-1">{{ t('sql.importSkipLines') }}</label>
+                                        <input type="number" min="0" class="form-control form-control-sm" v-model.number="dataImport.options.skipLines" @input="scheduleImportPreview">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="form-check"><input class="form-check-input" type="checkbox" id="impHeader" v-model="dataImport.options.hasHeader" @change="refreshImportPreview"><label class="form-check-label" for="impHeader">{{ t('sql.importHasHeader') }}</label></div>
+                                        <div class="form-check"><input class="form-check-input" type="checkbox" id="impTrim" v-model="dataImport.options.trimValues" @change="refreshImportPreview"><label class="form-check-label" for="impTrim">{{ t('sql.importTrim') }}</label></div>
+                                        <div class="form-check"><input class="form-check-input" type="checkbox" id="impTrailing" v-model="dataImport.options.ignoreTrailingDelimiter" @change="refreshImportPreview"><label class="form-check-label" for="impTrailing">{{ t('sql.importTrailing') }}</label></div>
+                                    </div>
+                                    </template>
+                                </div>
+                                <details class="mb-2">
+                                    <summary class="small">{{ t(dataImport.upload.sourceType === 'EXCEL' ? 'sql.importExcelSample' : 'sql.importRawSample') }}</summary>
+                                    <pre class="small bg-light border rounded p-2 mb-0" style="max-height: 160px; overflow: auto;">{{ (dataImport.upload.sampleLines || []).join('\n') }}</pre>
+                                </details>
+                                <div v-if="dataImport.preview">
+                                    <div v-if="dataImport.preview.parseError" class="alert alert-danger py-2 small">{{ dataImport.preview.parseError }}</div>
+                                    <div v-if="dataImport.preview.mismatchedRows > 0" class="alert alert-warning py-2 small">
+                                        {{ t('sql.importMismatch', dataImport.preview.mismatchedRows, dataImport.preview.scannedRows, dataImport.preview.expectedColumns) }}
+                                    </div>
+                                    <div class="small fw-bold mb-1">
+                                        {{ t('sql.importPreview') }}
+                                        <span class="text-muted fw-normal">{{ t('sql.importPreviewInfo', dataImport.preview.rows.length, importHeaders.length) }}</span>
+                                        <span v-if="dataImport.previewLoading" class="spinner-border spinner-border-sm ms-1"></span>
+                                    </div>
+                                    <div class="table-responsive border rounded" style="max-height: 40vh;">
+                                        <table class="table table-sm table-striped small mb-0">
+                                            <thead class="table-light" style="position: sticky; top: 0;">
+                                                <tr>
+                                                    <th class="text-muted">#</th>
+                                                    <th v-for="(h, i) in importHeaders" :key="i" class="text-nowrap">{{ h }}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="(row, r) in dataImport.preview.rows" :key="r" :class="{ 'table-warning': row.length !== dataImport.preview.expectedColumns }">
+                                                    <td class="text-muted">{{ r + 1 }}</td>
+                                                    <td v-for="(h, i) in importHeaders" :key="i" class="text-nowrap text-truncate" style="max-width: 240px;" :title="row[i]">{{ row[i] }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Step 2: target table (existing table + mapping, or a new table created from the file) -->
+                        <div v-show="dataImport.step === 2">
+                            <div class="row g-2 mb-3 small" role="radiogroup" :aria-label="t('sql.importMode')">
+                                <div class="col-md-6" v-for="opt in [{ value: 'EXISTING', icon: 'fa-table' }, { value: 'CREATE', icon: 'fa-plus-square' }]" :key="opt.value">
+                                    <div class="form-check border rounded p-2 ps-4 h-100" :class="{ 'border-primary': dataImport.mode === opt.value }">
+                                        <input class="form-check-input" type="radio" :id="'impMode' + opt.value" :value="opt.value"
+                                            :checked="dataImport.mode === opt.value" :disabled="importRunning" @change="setImportMode(opt.value)">
+                                        <label class="form-check-label w-100" :for="'impMode' + opt.value">
+                                            <span class="fw-bold"><i class="fas me-1" :class="opt.icon"></i>{{ t(opt.value === 'CREATE' ? 'sql.importModeCreate' : 'sql.importModeExisting') }}</span>
+                                            <div class="text-muted">{{ t(opt.value === 'CREATE' ? 'sql.importModeCreateDesc' : 'sql.importModeExistingDesc') }}</div>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- New table: name, detected columns and the CREATE TABLE preview -->
+                            <template v-if="dataImport.mode === 'CREATE'">
+                                <div class="d-flex flex-wrap gap-2 mb-2 align-items-end">
+                                    <div class="flex-grow-1" style="min-width: 260px;">
+                                        <label class="form-label small mb-1" for="impNewTableName">{{ t('sql.importNewTableName') }}</label>
+                                        <input id="impNewTableName" class="form-control form-control-sm" v-model="dataImport.newTable.name"
+                                            :disabled="importRunning || dataImport.newTable.inferring" @input="scheduleNewTableDdl">
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-secondary" :disabled="importRunning || dataImport.newTable.inferring" @click="inferNewTableColumns(true)">
+                                        <span v-if="dataImport.newTable.inferring" class="spinner-border spinner-border-sm me-1"></span>
+                                        <i v-else class="fas fa-magic me-1"></i>{{ t('sql.importReinfer') }}
+                                    </button>
+                                </div>
+                                <div class="small text-muted mb-2">
+                                    <span v-if="dataImport.newTable.schema" class="me-2">{{ t('sql.importNewTableSchema', dataImport.newTable.schema) }}</span>
+                                    <span v-if="dataImport.newTable.inferring">{{ t('sql.importInferring') }}</span>
+                                    <span v-else-if="dataImport.newTable.columns.length">
+                                        {{ dataImport.newTable.complete ? t('sql.importInferComplete', dataImport.newTable.scannedRows) : t('sql.importInferSampled', dataImport.newTable.scannedRows) }}
+                                        {{ t('sql.importNewColumnHint') }}
+                                    </span>
+                                </div>
+                                <div v-if="dataImport.newTable.tableExists" class="alert alert-warning py-2 small mb-2">{{ t('sql.importNewTableExists', dataImport.newTable.name) }}</div>
+                                <div v-if="dataImport.newTable.ddlError" class="alert alert-danger py-2 small mb-2" role="alert">{{ dataImport.newTable.ddlError }}</div>
+                                <div v-if="dataImport.newTable.columns.length" class="table-responsive border rounded mb-2" style="max-height: 42vh;">
+                                    <table class="table table-sm table-bordered align-middle small mb-0">
+                                        <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                                            <tr>
+                                                <th class="text-center">{{ t('sql.importInclude') }}</th>
+                                                <th>{{ t('sql.importFileColumn') }}</th>
+                                                <th style="min-width: 180px;">{{ t('sql.importColumnName') }}</th>
+                                                <th style="min-width: 130px;">{{ t('sql.importType') }}</th>
+                                                <th style="min-width: 130px;">{{ t('sql.importLength') }}</th>
+                                                <th>{{ t('sql.importSample') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="c in dataImport.newTable.columns" :key="c.sourceIndex" :class="{ 'text-muted': !c.include }">
+                                                <td class="text-center">
+                                                    <input class="form-check-input" type="checkbox" v-model="c.include" :disabled="importRunning"
+                                                        :aria-label="t('sql.importInclude') + ' ' + c.name" @change="scheduleNewTableDdl">
+                                                </td>
+                                                <td class="text-nowrap">#{{ c.sourceIndex + 1 }} {{ c.header || '' }}</td>
+                                                <td>
+                                                    <input class="form-control form-control-sm" v-model="c.name" :disabled="importRunning || !c.include"
+                                                        :aria-label="t('sql.importColumnName')" @input="scheduleNewTableDdl">
+                                                </td>
+                                                <td>
+                                                    <select class="form-select form-select-sm" v-model="c.type" :disabled="importRunning || !c.include"
+                                                        :aria-label="t('sql.importType')" @change="onNewTableTypeChange(c)">
+                                                        <option v-for="type in importColumnTypes" :key="type" :value="type">{{ t('sql.importType_' + type) }}</option>
+                                                    </select>
+                                                </td>
+                                                <td>
+                                                    <input v-if="c.type === 'TEXT'" type="number" min="1" :max="dataImport.newTable.maxTextLength"
+                                                        class="form-control form-control-sm" v-model.number="c.length" :disabled="importRunning || !c.include"
+                                                        :aria-label="t('sql.importLength')" @input="scheduleNewTableDdl">
+                                                    <div v-else-if="c.type === 'DECIMAL'" class="input-group input-group-sm">
+                                                        <input type="number" min="1" max="38" class="form-control" v-model.number="c.precision"
+                                                            :disabled="importRunning || !c.include" :aria-label="t('sql.importLength')" @input="scheduleNewTableDdl">
+                                                        <span class="input-group-text">,</span>
+                                                        <input type="number" min="0" max="38" class="form-control" v-model.number="c.scale"
+                                                            :disabled="importRunning || !c.include" @input="scheduleNewTableDdl">
+                                                    </div>
+                                                    <span v-else class="text-muted">-</span>
+                                                </td>
+                                                <td class="text-break" style="max-width: 220px;">{{ c.sample }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <details v-if="dataImport.newTable.ddl" class="mb-2" open>
+                                    <summary class="small">
+                                        {{ t('sql.importDdlPreview') }}
+                                        <span v-if="dataImport.newTable.ddlLoading" class="spinner-border spinner-border-sm ms-1"></span>
+                                    </summary>
+                                    <pre class="small bg-light border rounded p-2 mb-0" style="max-height: 200px; overflow: auto;">{{ dataImport.newTable.ddl }}</pre>
+                                </details>
+                            </template>
+
+                            <template v-else>
+                            <div class="d-flex flex-wrap gap-2 mb-2 align-items-end">
+                                <div class="flex-grow-1" style="min-width: 260px;">
+                                    <label class="form-label small mb-1">{{ t('sql.importTargetTable') }}</label>
+                                    <input class="form-control form-control-sm" list="importTableList" v-model="dataImport.table"
+                                        :placeholder="t('sql.importTablePlaceholder')" :disabled="importRunning"
+                                        @keyup.enter="loadImportTableColumns" @change="loadImportTableColumns">
+                                    <datalist id="importTableList">
+                                        <option v-for="name in importTableOptions" :key="name" :value="name"></option>
+                                    </datalist>
+                                </div>
+                                <button class="btn btn-sm btn-primary" :disabled="!dataImport.table.trim() || dataImport.tableLoading || importRunning" @click="loadImportTableColumns">
+                                    <span v-if="dataImport.tableLoading" class="spinner-border spinner-border-sm me-1"></span>{{ t('sql.importLoadColumns') }}
+                                </button>
+                                <template v-if="dataImport.tableInfo">
+                                    <button class="btn btn-sm btn-outline-secondary" :disabled="importRunning" @click="importAutoMatch(false)">{{ t('sql.importMatchByName') }}</button>
+                                    <button class="btn btn-sm btn-outline-secondary" :disabled="importRunning" @click="importAutoMatch(true)">{{ t('sql.importMatchByPosition') }}</button>
+                                    <button class="btn btn-sm btn-outline-secondary" :disabled="importRunning" @click="importClearMapping">{{ t('sql.importClearMapping') }}</button>
+                                </template>
+                            </div>
+                            <template v-if="dataImport.tableInfo">
+                                <div v-if="importRequiredUnmapped.length" class="alert alert-warning py-2 small mb-2">{{ t('sql.importRequiredUnmapped', importRequiredUnmapped.join(', ')) }}</div>
+                                <div v-if="importUnusedFields.length" class="small text-muted mb-2">{{ t('sql.importUnusedFields', importUnusedFields.join(', ')) }}</div>
+                                <div class="table-responsive border rounded" style="max-height: 52vh;">
+                                    <table class="table table-sm table-bordered align-middle small mb-0">
+                                        <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                                            <tr>
+                                                <th>{{ t('sql.importColumn') }}</th>
+                                                <th>{{ t('sql.importType') }}</th>
+                                                <th style="min-width: 260px;">{{ t('sql.importSource') }}</th>
+                                                <th>{{ t('sql.importSample') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="m in dataImport.mappings" :key="m.column" :class="{ 'table-warning': importRequiredUnmapped.includes(m.column) }">
+                                                <td>
+                                                    <span class="fw-bold text-break">{{ m.column }}</span>
+                                                    <span v-if="importColumnInfo(m.column)?.primaryKey" class="badge bg-warning text-dark ms-1">PK</span>
+                                                    <span v-if="importColumnInfo(m.column)?.required" class="badge bg-danger ms-1">{{ t('sql.importRequired') }}</span>
+                                                    <span v-if="importColumnInfo(m.column)?.autoIncrement" class="badge bg-secondary ms-1">{{ t('sql.importAuto') }}</span>
+                                                    <div v-if="importColumnInfo(m.column)?.remarks" class="text-muted text-break">{{ importColumnInfo(m.column).remarks }}</div>
+                                                </td>
+                                                <td class="text-nowrap">
+                                                    {{ importColumnInfo(m.column)?.type }}
+                                                    <div v-if="importColumnInfo(m.column)?.defaultValue" class="text-muted" :title="importColumnInfo(m.column).defaultValue">= {{ importColumnInfo(m.column).defaultValue }}</div>
+                                                </td>
+                                                <td>
+                                                    <div v-if="!importColumnInfo(m.column)?.importable" class="text-muted">{{ t('sql.importBinary') }}</div>
+                                                    <template v-else>
+                                                        <select class="form-select form-select-sm" :value="importMappingSelect(m)" :disabled="importRunning"
+                                                            @change="setImportMappingSelect(m, $event.target.value)">
+                                                            <option value="NONE">{{ t('sql.importSkipColumn') }}</option>
+                                                            <option v-for="(h, i) in importHeaders" :key="i" :value="'c' + i">#{{ i + 1 }} {{ h }}</option>
+                                                            <option value="CONSTANT">{{ t('sql.importConstant') }}</option>
+                                                        </select>
+                                                        <input v-if="m.source === 'CONSTANT'" class="form-control form-control-sm mt-1" v-model="m.constantValue"
+                                                            :disabled="importRunning" :placeholder="t('sql.importConstantPlaceholder')">
+                                                    </template>
+                                                </td>
+                                                <td class="text-break" style="max-width: 220px;">{{ importSampleValue(m) }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </template>
+                            </template>
+                        </div>
+
+                        <!-- Step 3: error handling options, run and results -->
+                        <div v-show="dataImport.step === 3">
+                            <div class="row g-3 small">
+                                <div class="col-lg-6">
+                                    <div class="fw-bold mb-1">{{ t('sql.importStrategy') }}</div>
+                                    <div v-for="opt in importStrategies" :key="opt.value" class="form-check border rounded p-2 ps-4 mb-2"
+                                        :class="{ 'border-primary': dataImport.settings.errorStrategy === opt.value }">
+                                        <input class="form-check-input" type="radio" :id="'impStrategy' + opt.value" :value="opt.value"
+                                            v-model="dataImport.settings.errorStrategy"
+                                            :disabled="importRunning || (opt.value === 'ROLLBACK_ALL' && importDbType === 'STARROCKS')">
+                                        <label class="form-check-label w-100" :for="'impStrategy' + opt.value">
+                                            <span class="fw-bold">{{ t(opt.labelKey) }}</span>
+                                            <div class="text-muted">{{ t(opt.descKey) }}</div>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-lg-6">
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <label class="form-label mb-1">{{ t('sql.importBatchSize') }}</label>
+                                            <input type="number" min="1" max="5000" class="form-control form-control-sm" v-model.number="dataImport.settings.batchSize" :disabled="importRunning">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label mb-1">{{ t('sql.importMaxErrors') }}</label>
+                                            <input type="number" min="1" max="100000" class="form-control form-control-sm" v-model.number="dataImport.settings.maxErrors" :disabled="importRunning">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label mb-1">{{ t('sql.importNullMarkers') }}</label>
+                                            <input class="form-control form-control-sm" v-model="dataImport.settings.nullMarkers" :disabled="importRunning">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label mb-1">{{ t('sql.importDateFormat') }}</label>
+                                            <input class="form-control form-control-sm" v-model="dataImport.settings.dateFormat" placeholder="dd/MM/yyyy HH:mm:ss"
+                                                :title="t('sql.importDateFormatHint')" :disabled="importRunning">
+                                        </div>
+                                        <div class="col-12 text-muted">{{ t('sql.importDateFormatHint') }}</div>
+                                        <div class="col-12">
+                                            <div class="form-check"><input class="form-check-input" type="checkbox" id="impEmptyNull" v-model="dataImport.settings.emptyAsNull" :disabled="importRunning"><label class="form-check-label" for="impEmptyNull">{{ t('sql.importEmptyAsNull') }}</label></div>
+                                            <div class="form-check"><input class="form-check-input" type="checkbox" id="impStrict" v-model="dataImport.settings.strictColumnCount" :disabled="importRunning"><label class="form-check-label" for="impStrict">{{ t('sql.importStrictColumns') }}</label></div>
+                                            <div v-if="dataImport.mode === 'CREATE'" class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="impDropOnFailure" v-model="dataImport.settings.dropTableOnFailure" :disabled="importRunning">
+                                                <label class="form-check-label" for="impDropOnFailure">{{ t('sql.importDropOnFailure') }}</label>
+                                                <div class="text-muted">{{ t('sql.importDropOnFailureDesc') }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-if="dataImport.status && dataImport.status.status !== 'IDLE'" class="mt-3">
+                                <div class="alert py-2 mb-2" :class="'alert-' + importStatusClass(dataImport.status.status)">
+                                    <span class="fw-bold">{{ t('sql.importStatus_' + dataImport.status.status) }}</span>
+                                    <span v-if="dataImport.status.message"> — {{ dataImport.status.message }}</span>
+                                </div>
+                                <div class="progress mb-2" style="height: 18px;">
+                                    <div class="progress-bar" :class="{ 'progress-bar-striped progress-bar-animated': importRunning, ['bg-' + importStatusClass(dataImport.status.status)]: !importRunning }"
+                                        :style="{ width: (dataImport.status.percent || 0) + '%' }">{{ dataImport.status.percent || 0 }}%</div>
+                                </div>
+                                <div class="d-flex flex-wrap gap-3 small mb-2">
+                                    <span>{{ t('sql.importProcessed') }}: <b>{{ dataImport.status.processedRows }}</b></span>
+                                    <span v-if="!dataImport.status.validateOnly">{{ t('sql.importWritten') }}: <b>{{ dataImport.status.writtenRows }}</b></span>
+                                    <span v-if="!dataImport.status.validateOnly">{{ t('sql.importCommitted') }}: <b class="text-success">{{ dataImport.status.committedRows }}</b></span>
+                                    <span>{{ t('sql.importErrors') }}: <b :class="{ 'text-danger': dataImport.status.errorCount > 0 }">{{ dataImport.status.errorCount }}</b></span>
+                                    <span>{{ t('sql.importElapsed') }}: <b>{{ importFormatElapsed(dataImport.status.elapsedMs) }}</b></span>
+                                </div>
+                                <div v-if="importSummaryVisible" class="card mb-2">
+                                    <div class="card-header py-1 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                        <span class="fw-bold small"><i class="fas fa-clipboard-list me-1"></i>{{ t('sql.importSummary') }}</span>
+                                        <div class="d-flex gap-2">
+                                            <button class="btn btn-sm btn-outline-secondary" @click="copyImportSummary"><i class="fas fa-copy me-1"></i>{{ t('sql.importCopySummary') }}</button>
+                                            <button v-if="importTableQueryable" class="btn btn-sm btn-outline-primary" :disabled="dataImport.datasourceIndex !== selectedDataSourceIdx" @click="queryImportedTable">
+                                                <i class="fas fa-search me-1"></i>{{ t('sql.importQueryTable') }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="card-body py-2 small">
+                                        <div class="d-flex flex-wrap gap-3 mb-2">
+                                            <span>{{ t('sql.importSummaryTable') }}: <b class="text-break">{{ dataImport.status.table }}</b>
+                                                <span class="badge ms-1" :class="dataImport.status.mode !== 'CREATE' ? 'bg-secondary' : (dataImport.status.tableDropped || !dataImport.status.tableCreated ? 'bg-warning text-dark' : 'bg-success')">
+                                                    {{ dataImport.status.mode !== 'CREATE' ? t('sql.importSummaryExisting') : (dataImport.status.tableDropped ? t('sql.importSummaryDropped') : t('sql.importSummaryNew')) }}
+                                                </span>
+                                            </span>
+                                            <span v-if="dataImport.datasourceName">{{ t('sql.importDatasource') }}: <b>{{ dataImport.datasourceName }}</b></span>
+                                            <span>{{ t('sql.importSummaryRows') }}: <b class="text-success">{{ dataImport.status.committedRows }}</b></span>
+                                        </div>
+                                        <div v-if="dataImport.status.cleanupSql" class="alert alert-warning py-2 mb-2">
+                                            {{ t('sql.importCleanupSql') }}
+                                            <pre class="mb-0 mt-1 user-select-all">{{ dataImport.status.cleanupSql }}</pre>
+                                        </div>
+                                        <div class="fw-bold mb-1">{{ t('sql.importSummaryColumns', dataImport.status.columns.length) }}</div>
+                                        <div class="table-responsive border rounded mb-2" style="max-height: 26vh;">
+                                            <table class="table table-sm small mb-0">
+                                                <thead class="table-light" style="position: sticky; top: 0;">
+                                                    <tr><th>{{ t('sql.importColumn') }}</th><th>{{ t('sql.importType') }}</th><th>{{ t('sql.importSummarySource') }}</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr v-for="c in dataImport.status.columns" :key="c.name">
+                                                        <td class="text-break fw-bold">{{ c.name }}</td>
+                                                        <td class="text-nowrap">{{ c.type }}</td>
+                                                        <td class="text-break text-muted">{{ importSourceLabel(c) }}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <details v-if="dataImport.status.ddl && dataImport.status.tableCreated && !dataImport.status.tableDropped">
+                                            <summary>{{ t('sql.importDdlPreview') }}</summary>
+                                            <pre class="bg-light border rounded p-2 mb-0" style="max-height: 200px; overflow: auto;">{{ dataImport.status.ddl }}</pre>
+                                        </details>
+                                    </div>
+                                </div>
+                                <div v-if="dataImport.status.hasReport || dataImport.status.hasUnimported" class="d-flex flex-wrap gap-2 mb-2">
+                                    <a v-if="dataImport.status.hasReport" class="btn btn-sm btn-outline-danger" :href="importDownloadUrl('report')">
+                                        <i class="fas fa-file-csv me-1"></i>{{ t('sql.importDownloadReport') }}
+                                    </a>
+                                    <a v-if="dataImport.status.hasUnimported" class="btn btn-sm btn-outline-secondary" :href="importDownloadUrl('raw')">
+                                        <i class="fas fa-download me-1"></i>{{ t('sql.importDownloadRaw', dataImport.status.unimportedRows) }}
+                                    </a>
+                                </div>
+                                <div v-if="dataImport.status.errors && dataImport.status.errors.length">
+                                    <div class="small fw-bold mb-1">{{ t('sql.importErrorList') }}</div>
+                                    <div class="table-responsive border rounded" style="max-height: 30vh;">
+                                        <table class="table table-sm small mb-0">
+                                            <thead class="table-light" style="position: sticky; top: 0;">
+                                                <tr><th>{{ t('sql.importLine') }}</th><th>{{ t('sql.importColumn') }}</th><th>{{ t('sql.importReason') }}</th><th>{{ t('sql.importRawData') }}</th></tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="(err, i) in dataImport.status.errors" :key="i">
+                                                    <td class="text-nowrap">{{ err.line > 0 ? err.line : '-' }}</td>
+                                                    <td class="text-nowrap">{{ err.column || '-' }}</td>
+                                                    <td class="text-danger text-break">{{ err.message }}</td>
+                                                    <td class="text-muted text-break" style="max-width: 320px;"><code>{{ err.raw }}</code></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer justify-content-between">
+                        <small class="text-muted">{{ importRunning ? t('sql.importBusyClose') : '' }}</small>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button v-if="dataImport.step > 1" class="btn btn-light" :disabled="importRunning" @click="goImportStep(dataImport.step - 1)">{{ t('sql.importPrev') }}</button>
+                            <button v-if="dataImport.step < 3" class="btn btn-primary"
+                                :disabled="(dataImport.step === 1 && !dataImport.preview) || (dataImport.step === 2 && !importMappedCount)"
+                                @click="goImportStep(dataImport.step + 1)">{{ t('sql.importNext') }}</button>
+                            <template v-if="dataImport.step === 3">
+                                <button v-if="importRunning" class="btn btn-outline-danger" @click="cancelDataImport">
+                                    <i class="fas fa-stop me-1"></i>{{ t('sql.importCancel') }}
+                                </button>
+                                <template v-else>
+                                    <button v-if="dataImport.status && dataImport.status.finished" class="btn btn-outline-primary" @click="resetDataImport">{{ t('sql.importAgain') }}</button>
+                                    <button class="btn btn-outline-secondary" :disabled="dataImport.busy || !importTargetReady" @click="startDataImport(true)">
+                                        <i class="fas fa-check-double me-1"></i>{{ t('sql.importValidate') }}
+                                    </button>
+                                    <button class="btn btn-success" :disabled="dataImport.busy || !importTargetReady" @click="startDataImport(false)">
+                                        <i class="fas fa-play me-1"></i>{{ t('sql.importStart') }}
+                                    </button>
+                                </template>
+                            </template>
+                            <button class="btn btn-light" @click="closeDataImport">{{ t('sql.close') }}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Dangerous SQL Confirmation Modal -->
         <div class="modal fade" id="dangerousSqlModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
             <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"
@@ -1966,6 +2425,10 @@
             <div class="context-menu-item" @click="viewTableStructure">
                 <i class="fas fa-table"></i>
                 <span>{{ t('sql.viewTableStructure') }}</span>
+            </div>
+            <div class="context-menu-item" @click="openDataImport(contextMenu.tableName)">
+                <i class="fas fa-file-import"></i>
+                <span>{{ t('sql.importData') }}</span>
             </div>
         </div>
 
@@ -3599,9 +4062,10 @@
         preloadSqlLocales();
 
         var sqlAllTexts = { 'en': enSqlTexts, 'zh_CN': zhSqlTexts };
+        SqlDataImport.registerTexts(sqlAllTexts);
 
         createApp({
-            mixins: [SavedSqlMixin],
+            mixins: [SavedSqlMixin, SqlDataImport.mixin],
             data() {
                 return {
                     locale: localStorage.getItem('locale') || 'en',

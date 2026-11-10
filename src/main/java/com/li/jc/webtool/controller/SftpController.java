@@ -50,6 +50,9 @@ public class SftpController {
     public static class SftpRequest extends ServerInfo {
         private String path;
         private String webSocketSessionId;
+        /** 通过 su 切换到的用户（用于 root 等不能直接 SSH 登录的用户），为空表示直接用登录用户 */
+        private String suUser;
+        private String suPassword;
     }
 
     @Data
@@ -96,14 +99,20 @@ public class SftpController {
         request.setPassword(info.getPassword());
         request.setPath(path);
         request.setWebSocketSessionId(webSocketSessionId);
+        if (info instanceof SftpRequest) {
+            request.setSuUser(((SftpRequest) info).getSuUser());
+            request.setSuPassword(((SftpRequest) info).getSuPassword());
+        }
         return request;
     }
 
     private <T> T executeWithSftp(ServerInfo info, SftpSessionManager.SftpOperation<T> operation) throws Exception {
-        String webSocketSessionId = info instanceof SftpRequest
-                ? ((SftpRequest) info).getWebSocketSessionId()
-                : null;
-        return sessionManager.execute(info, webSocketSessionId, operation);
+        if (info instanceof SftpRequest) {
+            SftpRequest request = (SftpRequest) info;
+            return sessionManager.execute(info, request.getSuUser(), request.getSuPassword(),
+                    request.getWebSocketSessionId(), operation);
+        }
+        return sessionManager.execute(info, null, operation);
     }
 
     @PostMapping("/list")
@@ -194,8 +203,12 @@ public class SftpController {
             @RequestParam("username") String username,
             @RequestParam("password") String password,
             @RequestParam("path") String path,
-            @RequestParam(value = "webSocketSessionId", required = false) String webSocketSessionId) throws IOException {
+            @RequestParam(value = "webSocketSessionId", required = false) String webSocketSessionId,
+            @RequestParam(value = "suUser", required = false) String suUser,
+            @RequestParam(value = "suPassword", required = false) String suPassword) throws IOException {
         SftpRequest request = new SftpRequest();
+        request.setSuUser(suUser);
+        request.setSuPassword(suPassword);
         request.setHost(host);
         request.setPort(port);
         request.setUsername(username);
@@ -206,7 +219,7 @@ public class SftpController {
     }
 
     @PostMapping("/upload")
-    public String upload(ServerInfo serverInfo, @RequestParam("path") String path,
+    public String upload(SftpRequest serverInfo, @RequestParam("path") String path,
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "webSocketSessionId", required = false) String webSocketSessionId) throws IOException {
         SftpRequest request = buildRequest(serverInfo, path, webSocketSessionId);
@@ -343,8 +356,12 @@ public class SftpController {
             @RequestParam("username") String username,
             @RequestParam("password") String password,
             @RequestParam("path") String path,
-            @RequestParam(value = "webSocketSessionId", required = false) String webSocketSessionId) {
+            @RequestParam(value = "webSocketSessionId", required = false) String webSocketSessionId,
+            @RequestParam(value = "suUser", required = false) String suUser,
+            @RequestParam(value = "suPassword", required = false) String suPassword) {
         SftpRequest request = new SftpRequest();
+        request.setSuUser(suUser);
+        request.setSuPassword(suPassword);
         request.setHost(host);
         request.setPort(port);
         request.setUsername(username);
@@ -407,7 +424,7 @@ public class SftpController {
      */
     @PostMapping("/upload-with-path")
     public ResponseEntity<?> uploadWithPath(
-            ServerInfo serverInfo,
+            SftpRequest serverInfo,
             @RequestParam("path") String path,
             @RequestParam("relativePath") String relativePath,
             @RequestParam("file") MultipartFile file,

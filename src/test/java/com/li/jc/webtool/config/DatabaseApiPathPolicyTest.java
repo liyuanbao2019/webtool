@@ -25,4 +25,13 @@ class DatabaseApiPathPolicyTest {
         assertTrue(DatabaseApiPathPolicy.requiresOriginCheck("/api/database/lock/mysql-slow-sql"));
         assertFalse(DatabaseApiPathPolicy.requiresOriginCheck("/api/database/execute"));
     }
+
+    @Test
+    void protectsDataImportWritesButNotStatusPolling() {
+        assertTrue(DatabaseApiPathPolicy.isRateLimited("/api/database/import/upload"));
+        assertTrue(DatabaseApiPathPolicy.isRateLimited("/api/database/import/start"));
+        assertTrue(DatabaseApiPathPolicy.isRateLimited("/api/database/import/sheet"));
+        assertTrue(DatabaseApiPathPolicy.requiresOriginCheck("/api/database/import/start"));
+        assertFalse(DatabaseApiPathPolicy.isRateLimited("/api/database/import/status"));
+    }
 }

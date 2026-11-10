@@ -19,13 +19,19 @@ final class DatabaseApiPathPolicy {
             "/api/database/result-edits/commit",
             "/api/oracle/result-edits/commit",
             "/api/database/lock/mysql-slow-sql",
-            "/api/database/lock/mysql-transaction-diagnostics");
+            "/api/database/lock/mysql-transaction-diagnostics",
+            "/api/database/import/upload",
+            "/api/database/import/sheet",
+            "/api/database/import/start");
 
     private static final Set<String> FORCED_ORIGIN_CHECK_PATHS = immutableSet(
             "/api/database/result-edits/commit",
             "/api/oracle/result-edits/commit",
             "/api/database/lock/mysql-slow-sql",
-            "/api/database/lock/mysql-transaction-diagnostics");
+            "/api/database/lock/mysql-transaction-diagnostics",
+            "/api/database/import/upload",
+            "/api/database/import/sheet",
+            "/api/database/import/start");
 
     private DatabaseApiPathPolicy() {
     }

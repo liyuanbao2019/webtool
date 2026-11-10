@@ -287,15 +287,36 @@
                             {{ t('terminal.currentSshUser') }} <strong>{{ serverInfo.username }}</strong><br>
                             {{ t('terminal.currentSftpUser') }} <strong>{{ currentSftpUser }}</strong>
                         </div>
+                        <div class="mb-3" v-if="configuredSuUsers.length">
+                            <label class="form-label small fw-bold">{{ t('terminal.configuredSuUsers') }}</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button v-for="name in configuredSuUsers" :key="name" type="button"
+                                    class="btn btn-sm"
+                                    :class="name === currentSftpUser ? 'btn-primary' : 'btn-outline-primary'"
+                                    :disabled="switchingSftpUser || name === currentSftpUser"
+                                    @click="quickSwitchSftpUser(name)">
+                                    <i class="fas fa-user me-1"></i>{{ name }}
+                                </button>
+                            </div>
+                            <div class="form-text small">{{ t('terminal.configuredSuUsersTip') }}</div>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label small fw-bold">{{ t('terminal.newUsername') }}</label>
                             <input type="text" class="form-control" v-model="switchUser.username"
+                                list="sftpSuUserOptions" @input="onSwitchUsernameInput"
                                 :placeholder="t('terminal.enterNewUsername')" @keyup.enter="applySwitchUser">
+                            <datalist id="sftpSuUserOptions">
+                                <option v-for="name in configuredSuUsers" :key="name" :value="name"></option>
+                            </datalist>
                         </div>
                         <div class="mb-3">
                             <label class="form-label small fw-bold">{{ t('terminal.password') }}</label>
                             <input type="password" class="form-control" v-model="switchUser.password"
+                                @input="switchUser.autoFilled = false"
                                 :placeholder="t('terminal.enterPassword')" @keyup.enter="applySwitchUser" ref="passwordInput">
+                            <div class="form-text small text-success" v-if="switchUser.autoFilled && switchUser.password">
+                                <i class="fas fa-check-circle me-1"></i>{{ t('terminal.suPasswordAutoFilled') }}
+                            </div>
                         </div>
                         <div class="form-text small">
                             <i class="fas fa-lightbulb me-1"></i>
@@ -308,8 +329,10 @@
                             <i class="fas fa-undo me-1"></i>{{ t('terminal.restoreAccount') }}
                         </button>
                         <button type="button" class="btn btn-sm btn-light" @click="showSwitchUser = false">{{ t('terminal.cancel') }}</button>
-                        <button type="button" class="btn btn-sm btn-primary" @click="applySwitchUser">
-                            <i class="fas fa-check me-1"></i>{{ t('terminal.confirmSwitch') }}
+                        <button type="button" class="btn btn-sm btn-primary" @click="applySwitchUser"
+                            :disabled="switchingSftpUser">
+                            <span v-if="switchingSftpUser" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fas fa-check me-1"></i>{{ t('terminal.confirmSwitch') }}
                         </button>
                     </div>
                 </div>
@@ -597,6 +620,9 @@
             'terminal.enterNewUsername': 'Enter the username to switch to',
             'terminal.password': 'Password',
             'terminal.enterPassword': 'Enter the password',
+            'terminal.configuredSuUsers': 'Configured users (one click to switch)',
+            'terminal.configuredSuUsersTip': 'Uses the su password saved in this server\'s settings.',
+            'terminal.suPasswordAutoFilled': 'Filled in the password saved for this user in the server settings',
             'terminal.switchTip': 'Note: After switching users, the file browser will use the new user\'s permissions, but the SSH terminal connection will not change.',
             'terminal.restoreAccount': 'Restore Original Account',
             'terminal.cancel': 'Cancel',
@@ -745,6 +771,9 @@
             'terminal.enterNewUsername': '输入要切换到的用户名',
             'terminal.password': '密码',
             'terminal.enterPassword': '输入该用户的密码',
+            'terminal.configuredSuUsers': '已配置的切换用户（点击直接切换）',
+            'terminal.configuredSuUsersTip': '使用服务器配置中保存的 su 密码，无需手动输入。',
+            'terminal.suPasswordAutoFilled': '已自动填入服务器配置中该用户的密码',
             'terminal.switchTip': '提示：切换用户后，文件浏览器将使用新用户的权限访问文件，但SSH终端连接不会改变。',
             'terminal.restoreAccount': '恢复原账号',
             'terminal.cancel': '取消',
@@ -915,8 +944,10 @@
                     currentSftpUser: '',  // 当前SFTP使用的用户名
                     switchUser: {
                         username: '',
-                        password: ''
+                        password: '',
+                        autoFilled: false  // 密码是否来自服务器配置的 su 密码
                     },
+                    switchingSftpUser: false,
                     sftpCredentials: null,  // 当前SFTP使用的凭据
                     isSidebarCollapsed: false,  // 文件浏览器折叠状态
                     // 上传/下载进度跟踪
@@ -1052,6 +1083,14 @@
                 }
             },
             computed: {
+                // 服务器配置里保存了密码的切换用户（不含当前登录用户）
+                configuredSuUsers() {
+                    const map = this.serverInfo && this.serverInfo.suPasswords;
+                    if (!map || typeof map !== 'object') return [];
+                    const loginUser = String(this.serverInfo.username || '').toLowerCase();
+                    return Object.keys(map).filter(name => name && map[name]
+                        && name.toLowerCase() !== loginUser);
+                },
                 isAgentMode() {
                     return this.serverInfo
                         && String(this.serverInfo.connectionMode || '').toLowerCase() === 'agent';
@@ -2269,8 +2308,14 @@
                         username: this.sftpCredentials.username,
                         password: this.sftpCredentials.password,
                         webSocketSessionId: this.webSocketSessionId || '',
+                        ...this.sftpSuFields(),
                         ...extra
                     };
+                },
+                // 通过 su 切换用户时，后端用登录账号连接后再 su 到该用户
+                sftpSuFields() {
+                    const creds = this.sftpCredentials || {};
+                    return creds.suUser ? { suUser: creds.suUser, suPassword: creds.suPassword || '' } : {};
                 },
                 async extractSftpErrorPayload(error) {
                     const data = error && error.response && error.response.data;
@@ -2639,6 +2684,7 @@
                             port: this.sftpCredentials.port,
                             username: this.sftpCredentials.username,
                             password: this.sftpCredentials.password,
+                            ...this.sftpSuFields(),
                             path: path
                         });
                         this.transferProgress.current = 100;
@@ -2679,6 +2725,7 @@
                             port: this.sftpCredentials.port,
                             username: this.sftpCredentials.username,
                             password: this.sftpCredentials.password,
+                            ...this.sftpSuFields(),
                             path: folderPath
                         });
                         this.transferProgress.current = 100;
@@ -2730,6 +2777,7 @@
                         formData.append('username', this.sftpCredentials.username);
                         formData.append('password', this.sftpCredentials.password);
                         formData.append('webSocketSessionId', this.webSocketSessionId || '');
+                        Object.entries(this.sftpSuFields()).forEach(([k, v]) => formData.append(k, v));
 
                         try {
                             await axios.post('/api/sftp/upload', formData, {
@@ -2799,6 +2847,7 @@
                         formData.append('username', this.sftpCredentials.username);
                         formData.append('password', this.sftpCredentials.password);
                         formData.append('webSocketSessionId', this.webSocketSessionId || '');
+                        Object.entries(this.sftpSuFields()).forEach(([k, v]) => formData.append(k, v));
 
                         try {
                             await axios.post('/api/sftp/upload-with-path', formData, {
@@ -2842,6 +2891,7 @@
                 showSwitchUserModal() {
                     this.switchUser.username = '';
                     this.switchUser.password = '';
+                    this.switchUser.autoFilled = false;
                     this.showSwitchUser = true;
                     // 等待DOM更新后聚焦密码输入框
                     this.$nextTick(() => {
@@ -2850,41 +2900,96 @@
                         }
                     });
                 },
+                // 查找服务器配置中某个用户的 su 密码（用户名不区分大小写）
+                findConfiguredSuPassword(username) {
+                    const map = this.serverInfo && this.serverInfo.suPasswords;
+                    if (!map || !username) return '';
+                    const target = String(username).trim().toLowerCase();
+                    const key = Object.keys(map).find(name => name.toLowerCase() === target);
+                    return key ? (map[key] || '') : '';
+                },
+                // 输入用户名时，若该用户有配置密码则自动填入
+                onSwitchUsernameInput() {
+                    const password = this.findConfiguredSuPassword(this.switchUser.username);
+                    if (password && (!this.switchUser.password || this.switchUser.autoFilled)) {
+                        this.switchUser.password = password;
+                        this.switchUser.autoFilled = true;
+                    } else if (!password && this.switchUser.autoFilled) {
+                        this.switchUser.password = '';
+                        this.switchUser.autoFilled = false;
+                    }
+                },
+                // 一键切换到已配置的用户
+                async quickSwitchSftpUser(username) {
+                    this.switchUser.username = username;
+                    this.switchUser.password = this.findConfiguredSuPassword(username);
+                    this.switchUser.autoFilled = true;
+                    await this.applySwitchUser();
+                },
                 // 应用切换用户
                 async applySwitchUser() {
+                    if (this.switchingSftpUser) return;
+                    if (this.switchUser.username && !this.switchUser.password) {
+                        this.onSwitchUsernameInput();
+                    }
                     if (!this.switchUser.username || !this.switchUser.password) {
                         alert(this.t('terminal.enterUsernamePassword'));
                         return;
                     }
 
+                    this.switchingSftpUser = true;
                     try {
-                        // 测试新凭据是否有效
-                        const testCredentials = {
-                            host: this.serverInfo.host,
-                            port: this.serverInfo.port,
-                            username: this.switchUser.username,
-                            password: this.switchUser.password
-                        };
-
-                        // 尝试获取家目录来验证凭据
-                        const res = await axios.post('/api/sftp/home', testCredentials);
-
-                        // 凭据有效，更新SFTP凭据
-                        this.sftpCredentials = testCredentials;
-                        this.currentSftpUser = this.switchUser.username;
-
-                        // 关闭对话框
+                        const username = this.switchUser.username.trim();
+                        const result = await this.connectSftpAs(username, this.switchUser.password);
+                        this.sftpCredentials = result.credentials;
+                        this.currentSftpUser = username;
                         this.showSwitchUser = false;
 
                         // 切换到新用户的家目录
-                        const homeDir = res.data;
-                        this.currentPath = homeDir;
-                        await this.listFiles(homeDir);
-
-                        console.log(`SFTP用户已切换到: ${this.currentSftpUser}`);
+                        this.currentPath = result.homeDir;
+                        await this.listFiles(result.homeDir);
+                        console.log(`SFTP用户已切换到: ${username}` + (result.credentials.suUser ? '（su 方式）' : ''));
                     } catch (e) {
-                        alert('切换用户失败，请检查用户名和密码: ' + ((e.response && e.response.data) || e.message));
+                        alert('切换用户失败: ' + e.message);
+                    } finally {
+                        this.switchingSftpUser = false;
                     }
+                },
+                /**
+                 * 以指定用户访问文件，返回 { credentials, homeDir }。
+                 * 先用登录账号 su 切换（与终端里 su 一致，适用于 root 等禁止 SSH 直接登录的用户），
+                 * 不行再尝试用该用户直接登录。
+                 */
+                async connectSftpAs(username, password) {
+                    const base = { host: this.serverInfo.host, port: this.serverInfo.port };
+                    const errorText = (e) => {
+                        const data = e && e.response && e.response.data;
+                        if (typeof data === 'string' && data) return data;
+                        if (data && typeof data === 'object') return data.message || JSON.stringify(data);
+                        return (e && e.message) || String(e);
+                    };
+                    const attempts = [];
+                    if (username !== this.serverInfo.username) {
+                        attempts.push({ label: 'su', credentials: {
+                            ...base,
+                            username: this.serverInfo.username,
+                            password: this.serverInfo.password,
+                            suUser: username,
+                            suPassword: password
+                        } });
+                    }
+                    attempts.push({ label: '直接登录', credentials: { ...base, username, password } });
+
+                    const errors = [];
+                    for (const attempt of attempts) {
+                        try {
+                            const res = await axios.post('/api/sftp/home', attempt.credentials);
+                            return { credentials: attempt.credentials, homeDir: res.data };
+                        } catch (e) {
+                            errors.push(attempts.length > 1 ? `${attempt.label}: ${errorText(e)}` : errorText(e));
+                        }
+                    }
+                    throw new Error(errors.join('\n'));
                 },
                 // 恢复到原始用户
                 async resetToOriginalUser() {
@@ -2920,22 +3025,14 @@
                     // 对于其他用户,尝试使用相同的密码(通常su后密码相同)
                     // 如果失败,会在控制台提示用户手动切换
                     try {
-                        const testCredentials = {
-                            host: this.serverInfo.host,
-                            port: this.serverInfo.port,
-                            username: newUsername,
-                            password: this.serverInfo.password // 先尝试使用原始密码
-                        };
-
-                        // 尝试获取家目录来验证凭据
-                        const res = await axios.post('/api/sftp/home', testCredentials);
-
-                        // 凭据有效,更新SFTP凭据
-                        this.sftpCredentials = testCredentials;
+                        // 优先使用服务器配置的 su 密码，没有则尝试登录密码
+                        const result = await this.connectSftpAs(newUsername,
+                            this.findConfiguredSuPassword(newUsername) || this.serverInfo.password);
+                        this.sftpCredentials = result.credentials;
                         this.currentSftpUser = newUsername;
 
                         // 切换到新用户的家目录
-                        const homeDir = res.data;
+                        const homeDir = result.homeDir;
                         this.currentPath = homeDir;
                         await this.listFiles(homeDir);
 
