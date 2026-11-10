@@ -465,6 +465,7 @@
   "terminal.saveFailed": "文件保存失败",
   "terminal.uploadSuccess": "上传成功",
   "terminal.uploadFailed": "上传失败",
+  "terminal.cancelUpload": "取消",
   "terminal.downloadFailed": "下载失败",
   "terminal.uploadProgress": "上传进度:",
   "terminal.downloadProgress": "下载进度:",

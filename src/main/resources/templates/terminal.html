@@ -253,7 +253,16 @@
                         style="font-size: 0.75rem;">
                         <span class="text-truncate" style="max-width: 160px;" :title="transferProgress.currentFile">{{
                             transferProgress.currentFile }}</span>
-                        <span>{{ Math.floor(transferProgress.current) }}/{{ transferProgress.total }}</span>
+                        <span v-if="transferProgress.detail">{{ transferProgress.detail }}</span>
+                        <span v-else>{{ Math.floor(transferProgress.current) }}/{{ transferProgress.total }}</span>
+                    </div>
+                    <div v-if="transferProgress.type === 'upload' && (transferProgress.status || transferProgress.cancellable)"
+                        class="d-flex justify-content-between align-items-center small mt-1" style="font-size: 0.75rem;">
+                        <span class="text-truncate"
+                            :class="transferProgress.statusWarning ? 'text-warning' : 'text-muted'"
+                            :title="transferProgress.status">{{ transferProgress.status }}</span>
+                        <button v-if="transferProgress.cancellable" class="btn btn-link btn-sm p-0 text-danger"
+                            style="font-size: 0.75rem;" @click="cancelUpload">{{ t('terminal.cancelUpload') }}</button>
                     </div>
                 </div>
             </div> <!-- ends file-sidebar -->
@@ -679,6 +688,7 @@
             'terminal.saveFailed': 'Failed to save file',
             'terminal.uploadSuccess': 'Upload successful',
             'terminal.uploadFailed': 'Upload failed',
+            'terminal.cancelUpload': 'Cancel',
             'terminal.downloadFailed': 'Download failed',
             'terminal.highRisk': 'High Risk',
             'terminal.mediumRisk': 'Medium Risk',
@@ -830,6 +840,7 @@
             'terminal.saveFailed': '文件保存失败',
             'terminal.uploadSuccess': '上传成功',
             'terminal.uploadFailed': '上传失败',
+            'terminal.cancelUpload': '取消',
             'terminal.downloadFailed': '下载失败',
             'terminal.highRisk': '高危',
             'terminal.mediumRisk': '中危',
@@ -959,6 +970,8 @@
                         currentFile: '',
                         folderName: ''
                     },
+                    uploadCancelRequested: false,
+                    uploadAbortController: null,
                     csrfToken: null, // CSRF Token
                     sessionExpiredRedirecting: false,
                     sessionExpiredRedirectTimer: null,
@@ -2748,136 +2761,270 @@
                 },
                 async handleFileUpload() {
                     if (this.isAgentMode) return;
-                    const files = this.$refs.fileInput.files;
-                    if (!files || files.length === 0) return;
-
-                    // 支持多文件上传
-                    let successCount = 0;
-                    let failedFiles = [];
-
-                    this.transferProgress = {
-                        active: true,
-                        type: 'upload',
-                        current: 0,
-                        total: files.length,
-                        currentFile: '',
-                        folderName: files.length === 1 ? files[0].name : `多文件 (${files.length})`
-                    };
-
-                    for (let i = 0; i < files.length; i++) {
-                        const file = files[i];
-                        this.transferProgress.currentFile = file.name;
-                        this.transferProgress.current = i;
-
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        formData.append('path', this.currentPath);
-                        formData.append('host', this.sftpCredentials.host);
-                        formData.append('port', this.sftpCredentials.port);
-                        formData.append('username', this.sftpCredentials.username);
-                        formData.append('password', this.sftpCredentials.password);
-                        formData.append('webSocketSessionId', this.webSocketSessionId || '');
-                        Object.entries(this.sftpSuFields()).forEach(([k, v]) => formData.append(k, v));
-
-                        try {
-                            await axios.post('/api/sftp/upload', formData, {
-                                headers: {
-                                    'Content-Type': 'multipart/form-data'
-                                },
-                                onUploadProgress: progressEvent => {
-                                    if (progressEvent.total) {
-                                        const percentCompleted = progressEvent.loaded / progressEvent.total;
-                                        this.transferProgress.current = i + percentCompleted;
-                                    }
-                                }
-                            });
-                            this.transferProgress.current = i + 1;
-                            successCount++;
-                        } catch (e) {
-                            this.transferProgress.current = i + 1;
-                            failedFiles.push(file.name);
-                        }
-                    }
-
-                    this.transferProgress.active = false;
-                    this.listFiles();
-                    this.$refs.fileInput.value = '';
-
-                    if (failedFiles.length > 0) {
-                        alert(`上传完成: 成功 ${successCount}/${files.length}\n失败: ${failedFiles.join(', ')}`);
-                    }
+                    const input = this.$refs.fileInput;
+                    const files = Array.from((input && input.files) || []);
+                    if (files.length === 0) return;
+                    await this.uploadFiles(files.map(file => ({ file, relativePath: file.name })),
+                        files.length === 1 ? files[0].name : `多文件 (${files.length})`);
+                    input.value = '';
                 },
                 // 处理文件夹上传
                 async handleFolderUpload() {
                     if (this.isAgentMode) return;
-                    const files = this.$refs.folderInput.files;
-                    if (!files || files.length === 0) return;
-
-                    // 获取文件夹名称（第一个文件的相对路径的第一部分）
-                    const firstFile = files[0];
-                    const relativePath = firstFile.webkitRelativePath;
-                    const folderName = relativePath.split('/')[0];
-
-                    // 初始化进度
+                    const input = this.$refs.folderInput;
+                    const files = Array.from((input && input.files) || []);
+                    if (files.length === 0) return;
+                    const folderName = (files[0].webkitRelativePath || files[0].name).split('/')[0];
+                    await this.uploadFiles(files.map(file => ({ file, relativePath: file.webkitRelativePath || file.name })),
+                        folderName, true);
+                    input.value = '';
+                },
+                /**
+                 * 依次上传文件。大文件走分片上传（失败自动重试、断点续传），小文件仍用一次请求上传，
+                 * 避免文件夹里大量小文件时请求数成倍增加。
+                 */
+                async uploadFiles(items, title, isFolder = false) {
+                    const totalBytes = items.reduce((sum, item) => sum + item.file.size, 0);
+                    let doneBytes = 0;
+                    let successCount = 0;
+                    const failures = [];
+                    this.uploadCancelRequested = false;
                     this.transferProgress = {
                         active: true,
                         type: 'upload',
                         current: 0,
-                        total: files.length,
+                        total: Math.max(totalBytes, 1),
                         currentFile: '',
-                        folderName: folderName
+                        folderName: title,
+                        detail: '',
+                        status: '',
+                        statusWarning: false,
+                        cancellable: true
                     };
-
-                    let successCount = 0;
-                    let failedFiles = [];
-
-                    for (let i = 0; i < files.length; i++) {
-                        const file = files[i];
-                        const fileRelativePath = file.webkitRelativePath;
-
-                        this.transferProgress.current = i;
-                        this.transferProgress.currentFile = fileRelativePath;
-
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        formData.append('path', this.currentPath);
-                        formData.append('relativePath', fileRelativePath);
-                        formData.append('host', this.sftpCredentials.host);
-                        formData.append('port', this.sftpCredentials.port);
-                        formData.append('username', this.sftpCredentials.username);
-                        formData.append('password', this.sftpCredentials.password);
-                        formData.append('webSocketSessionId', this.webSocketSessionId || '');
-                        Object.entries(this.sftpSuFields()).forEach(([k, v]) => formData.append(k, v));
-
+                    const startedAt = Date.now();
+                    for (let i = 0; i < items.length; i++) {
+                        if (this.uploadCancelRequested) break;
+                        const { file, relativePath } = items[i];
+                        const base = doneBytes;
+                        let firstSeen = null;
+                        this.transferProgress.currentFile = relativePath;
+                        const onBytes = bytes => {
+                            if (firstSeen === null) firstSeen = { bytes, at: Date.now() };
+                            const p = this.transferProgress;
+                            p.current = base + bytes;
+                            const elapsed = (Date.now() - firstSeen.at) / 1000;
+                            const speed = elapsed > 1 ? (bytes - firstSeen.bytes) / elapsed : 0;
+                            const parts = [`${this.formatSize(p.current)} / ${this.formatSize(totalBytes)}`];
+                            if (speed > 0) parts.push(`${this.formatSize(speed)}/s`);
+                            if (items.length > 1) parts.push(`${i + 1}/${items.length}`);
+                            p.detail = parts.join(' · ');
+                        };
+                        onBytes(0);
                         try {
-                            await axios.post('/api/sftp/upload-with-path', formData, {
-                                headers: {
-                                    'Content-Type': 'multipart/form-data'
-                                },
-                                onUploadProgress: progressEvent => {
-                                    if (progressEvent.total) {
-                                        const percentCompleted = progressEvent.loaded / progressEvent.total;
-                                        this.transferProgress.current = i + percentCompleted;
-                                    }
-                                }
-                            });
-                            this.transferProgress.current = i + 1;
+                            if (file.size >= this.sftpChunkThreshold()) {
+                                await this.uploadFileChunked(file, relativePath, onBytes);
+                            } else {
+                                await this.uploadSmallFile(file, relativePath, isFolder, onBytes);
+                            }
                             successCount++;
                         } catch (e) {
-                            this.transferProgress.current = i + 1;
-                            console.error('上传失败:', fileRelativePath, e);
-                            failedFiles.push(fileRelativePath);
+                            if (this.uploadCancelRequested) break;
+                            const reason = e && e.uploadReason ? e.uploadReason : await this.formatSftpError(e, '上传失败');
+                            failures.push({ name: relativePath, reason, resumable: !!(e && e.resumable) });
+                            console.error('上传失败:', relativePath, e);
                         }
+                        doneBytes = base + file.size;
+                        this.transferProgress.current = doneBytes;
+                        this.transferProgress.status = '';
+                        this.transferProgress.statusWarning = false;
                     }
-
+                    const cancelled = this.uploadCancelRequested;
+                    this.uploadCancelRequested = false;
+                    this.uploadAbortController = null;
                     this.transferProgress.active = false;
                     this.listFiles();
-                    this.$refs.folderInput.value = '';
 
-                    if (failedFiles.length > 0) {
-                        alert(`文件夹上传完成: 成功 ${successCount}/${files.length}\n失败: ${failedFiles.slice(0, 5).join(', ')}${failedFiles.length > 5 ? '...' : ''}`);
-                    } else {
+                    const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+                    if (cancelled) {
+                        alert(`已取消上传，已完成 ${successCount}/${items.length} 个文件`);
+                    } else if (failures.length > 0) {
+                        const lines = failures.slice(0, 5).map(f => `${f.name}: ${f.reason}`);
+                        if (failures.length > 5) lines.push(`…… 另有 ${failures.length - 5} 个失败`);
+                        const resumeHint = failures.some(f => f.resumable)
+                            ? '\n\n已上传的部分保留在服务器上，重新上传同一文件会从中断处继续。' : '';
+                        alert(`上传完成: 成功 ${successCount}/${items.length}\n失败:\n${lines.join('\n')}${resumeHint}`);
+                    } else if (isFolder) {
                         alert(`文件夹上传完成: ${successCount} 个文件`);
+                    } else if (totalBytes >= this.sftpChunkThreshold()) {
+                        console.log(`上传完成: ${this.formatSize(totalBytes)}，用时 ${seconds}s`);
+                    }
+                },
+                sftpChunkThreshold() {
+                    return 8 * 1024 * 1024;
+                },
+                sftpUploadPayload(relativePath, file) {
+                    const creds = this.sftpCredentials || {};
+                    return {
+                        host: creds.host,
+                        port: creds.port,
+                        username: creds.username,
+                        password: creds.password,
+                        webSocketSessionId: this.webSocketSessionId || '',
+                        ...this.sftpSuFields(),
+                        path: this.currentPath,
+                        relativePath,
+                        size: file.size,
+                        lastModified: file.lastModified || 0
+                    };
+                },
+                async uploadSmallFile(file, relativePath, isFolder, onBytes) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('path', this.currentPath);
+                    if (isFolder) formData.append('relativePath', relativePath);
+                    const creds = this.sftpCredentials || {};
+                    formData.append('host', creds.host);
+                    formData.append('port', creds.port);
+                    formData.append('username', creds.username);
+                    formData.append('password', creds.password);
+                    formData.append('webSocketSessionId', this.webSocketSessionId || '');
+                    Object.entries(this.sftpSuFields()).forEach(([k, v]) => formData.append(k, v));
+                    const controller = new AbortController();
+                    this.uploadAbortController = controller;
+                    await axios.post(isFolder ? '/api/sftp/upload-with-path' : '/api/sftp/upload', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                        signal: controller.signal,
+                        onUploadProgress: e => onBytes(Math.min(e.loaded || 0, file.size))
+                    });
+                    onBytes(file.size);
+                },
+                /**
+                 * 分片上传一个文件：init 取得续传位置 → 按顺序上传分片 → complete 改名为目标文件。
+                 * 网络中断、服务器 5xx 时等待后重试当前分片；服务器重启导致任务丢失时重新 init，从已写入的位置继续。
+                 */
+                async uploadFileChunked(file, relativePath, onBytes) {
+                    const MAX_RETRIES = 8;
+                    const payload = this.sftpUploadPayload(relativePath, file);
+                    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+                    const statusOf = e => (e && e.response ? e.response.status : 0);
+                    const dataOf = e => (e && e.response && e.response.data && typeof e.response.data === 'object') ? e.response.data : {};
+                    // 4xx（参数错误、权限、磁盘空间不足 507 等）重试无用；无响应、5xx、CSRF 令牌过期可以重试
+                    const retryable = e => {
+                        const status = statusOf(e);
+                        return status === 0 || status === 403 || status === 408 || status === 429
+                            || (status >= 500 && status !== 501 && status !== 507);
+                    };
+                    let failures = 0;
+                    const waitBeforeRetry = async (e, what) => {
+                        failures++;
+                        if (failures > MAX_RETRIES || !retryable(e)) throw e;
+                        const delay = Math.min(30, 2 ** (failures - 1));
+                        this.transferProgress.statusWarning = true;
+                        this.transferProgress.status = `${what}失败，${delay} 秒后重试（${failures}/${MAX_RETRIES}）`;
+                        await sleep(delay * 1000);
+                        if (this.uploadCancelRequested) throw new Error('cancelled');
+                        await this.getCsrfToken(); // 令牌可能已过期；连接被重置时拿不到 403，只能主动刷新
+                    };
+                    const begin = async () => {
+                        for (;;) {
+                            try {
+                                return (await axios.post('/api/sftp/chunk-upload/init', payload)).data;
+                            } catch (e) {
+                                await waitBeforeRetry(e, '准备上传');
+                            }
+                        }
+                    };
+
+                    let session = await begin();
+                    if (session.completed) {
+                        onBytes(file.size);
+                        return;
+                    }
+                    let offset = session.offset || 0;
+                    let restarts = 0;
+                    if (session.resumed) {
+                        this.transferProgress.status = `从 ${this.formatSize(offset)} 处继续上传`;
+                    }
+                    onBytes(offset);
+                    try {
+                        while (offset < file.size) {
+                            if (this.uploadCancelRequested) throw new Error('cancelled');
+                            const start = offset;
+                            const end = Math.min(file.size, start + session.chunkSize);
+                            const controller = new AbortController();
+                            this.uploadAbortController = controller;
+                            try {
+                                const res = await axios.post('/api/sftp/chunk-upload/chunk', file.slice(start, end), {
+                                    params: { uploadId: session.uploadId, offset: start },
+                                    headers: { 'Content-Type': 'application/octet-stream' },
+                                    signal: controller.signal,
+                                    timeout: 0,
+                                    onUploadProgress: e => onBytes(start + Math.min(e.loaded || 0, end - start))
+                                });
+                                offset = res.data.received;
+                                failures = 0;
+                                if (this.transferProgress.statusWarning) {
+                                    this.transferProgress.status = '';
+                                    this.transferProgress.statusWarning = false;
+                                }
+                                onBytes(offset);
+                            } catch (e) {
+                                if (this.uploadCancelRequested) throw e;
+                                const status = statusOf(e);
+                                const data = dataOf(e);
+                                if (status === 409 && typeof data.expectedOffset === 'number') {
+                                    // 上一次请求其实已写入但响应丢失，按服务器记录的位置继续
+                                    if (++failures > MAX_RETRIES) throw e;
+                                    offset = data.expectedOffset;
+                                    onBytes(offset);
+                                    continue;
+                                }
+                                if ((status === 404 || status === 410) && restarts < 3) {
+                                    // 服务器重启或任务过期：重新登记，服务器会按临时文件已写入的位置续传
+                                    restarts++;
+                                    session = await begin();
+                                    if (session.completed) break;
+                                    offset = session.offset || 0;
+                                    onBytes(offset);
+                                    continue;
+                                }
+                                await waitBeforeRetry(e, `第 ${Math.floor(start / session.chunkSize) + 1} 段`);
+                            }
+                        }
+                        if (session.completed) {
+                            onBytes(file.size);
+                            return;
+                        }
+                        this.transferProgress.status = '正在校验并保存文件…';
+                        this.transferProgress.cancellable = false;
+                        for (;;) {
+                            try {
+                                await axios.post('/api/sftp/chunk-upload/complete', { uploadId: session.uploadId });
+                                break;
+                            } catch (e) {
+                                await waitBeforeRetry(e, '保存文件');
+                            }
+                        }
+                        onBytes(file.size);
+                    } catch (e) {
+                        if (this.uploadCancelRequested) {
+                            axios.post('/api/sftp/chunk-upload/abort', { uploadId: session.uploadId }).catch(() => {});
+                        } else if (e && typeof e === 'object') {
+                            // 失败时保留服务器上的临时文件，下次上传同一文件可续传
+                            e.resumable = offset > 0 && statusOf(e) !== 410;
+                        }
+                        throw e;
+                    } finally {
+                        this.transferProgress.cancellable = true;
+                    }
+                },
+                cancelUpload() {
+                    if (!this.transferProgress.active || this.transferProgress.type !== 'upload') return;
+                    if (!confirm('确定取消上传？未完成的文件会被删除。')) return;
+                    this.uploadCancelRequested = true;
+                    this.transferProgress.status = '正在取消…';
+                    if (this.uploadAbortController) {
+                        this.uploadAbortController.abort();
                     }
                 },
                 formatSize(bytes) {

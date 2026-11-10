@@ -17,10 +17,15 @@ import org.springframework.web.socket.WebSocketSession;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import java.io.Closeable;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Reuses authenticated SSH sessions and prefers an existing terminal session for SFTP operations. */
 @Slf4j
@@ -29,7 +34,7 @@ import java.util.concurrent.ConcurrentMap;
 public class SftpSessionManager {
 
     private static final long SFTP_TIMEOUT = 30000L;
-    private static final long SESSION_IDLE_TIMEOUT = 5 * 60 * 1000L;
+    static final long SESSION_IDLE_TIMEOUT = 5 * 60 * 1000L;
     private static final long CLEANUP_INTERVAL = 60 * 1000L;
 
     private final ServerConfig serverConfig;
@@ -80,9 +85,20 @@ public class SftpSessionManager {
      */
     public <T> T execute(ServerInfo info, String suUser, String suPassword, String webSocketSessionId,
                          SftpOperation<T> operation) throws Exception {
+        return execute(info, suUser, suPassword, webSocketSessionId, true, operation);
+    }
+
+    /**
+     * @param retryOnFailure 失败时是否换一个新连接把整个操作再执行一次。操作会消费一次性的输入
+     *                       （例如上传的请求体）时必须传 false，否则重试会写入残缺的数据；
+     *                       已断开的连接仍会被丢弃，由调用方决定是否重试。
+     */
+    public <T> T execute(ServerInfo info, String suUser, String suPassword, String webSocketSessionId,
+                         boolean retryOnFailure, SftpOperation<T> operation) throws Exception {
         assertSftpAllowed();
+        int attempts = retryOnFailure ? 2 : 1;
         if (isSuMode(info, suUser)) {
-            return executeAsSuUser(info, suUser.trim(), suPassword, operation);
+            return executeAsSuUser(info, suUser.trim(), suPassword, attempts, operation);
         }
         try {
             WebSocketSession webSocketSession = terminalSession(webSocketSessionId);
@@ -95,13 +111,19 @@ public class SftpSessionManager {
         }
 
         Exception lastException = null;
-        for (int attempt = 0; attempt < 2; attempt++) {
-            ClientSession session = getOrCreateSession(info);
-            try (SftpClient sftp = SftpClientFactory.instance().createSftpClient(session)) {
+        for (int attempt = 0; attempt < attempts; attempt++) {
+            PooledSession pooled = acquireSession(info);
+            try (SftpClient sftp = SftpClientFactory.instance().createSftpClient(pooled.session)) {
                 return operation.apply(sftp);
             } catch (Exception e) {
+                // 连接仍然可用说明是业务错误（文件不存在、权限不足等），直接抛出，不重复执行
+                if (pooled.session.isOpen()) {
+                    throw e;
+                }
                 lastException = e;
-                invalidate(info);
+                invalidate(info, pooled);
+            } finally {
+                pooled.release();
             }
         }
         throw lastException;
@@ -111,66 +133,75 @@ public class SftpSessionManager {
         return suUser != null && !suUser.trim().isEmpty() && !suUser.trim().equals(info.getUsername());
     }
 
-    private <T> T executeAsSuUser(ServerInfo info, String suUser, String suPassword,
+    private <T> T executeAsSuUser(ServerInfo info, String suUser, String suPassword, int attempts,
                                   SftpOperation<T> operation) throws Exception {
         Exception lastException = null;
-        for (int attempt = 0; attempt < 2; attempt++) {
-            SftpClient sftp = getOrCreateSuClient(info, suUser, suPassword);
+        for (int attempt = 0; attempt < attempts; attempt++) {
+            PooledSuClient pooled = acquireSuClient(info, suUser, suPassword);
             try {
-                return operation.apply(sftp);
+                return operation.apply(pooled.client);
             } catch (Exception e) {
                 // 业务错误（如文件不存在）直接抛出；连接已断开时重建一次
-                if (sftp.isOpen()) {
+                if (pooled.client.isOpen()) {
                     throw e;
                 }
                 lastException = e;
-                invalidateSuClient(info, suUser, suPassword);
+                invalidateSuClient(info, suUser, suPassword, pooled);
+            } finally {
+                pooled.release();
             }
         }
         throw lastException;
     }
 
-    private SftpClient getOrCreateSuClient(ServerInfo info, String suUser, String suPassword) throws Exception {
+    private PooledSuClient acquireSuClient(ServerInfo info, String suUser, String suPassword) throws Exception {
         cleanupExpiredSessionsIfNeeded();
         String key = suClientKey(info, suUser, suPassword);
         PooledSuClient pooled = suClientPool.get(key);
-        if (pooled != null && pooled.client.isOpen()) {
-            pooled.lastAccessAt = System.currentTimeMillis();
-            return pooled.client;
+        if (pooled != null && pooled.client.isOpen() && pooled.tryAcquire()) {
+            return pooled;
         }
         synchronized (suClientPool) {
             pooled = suClientPool.get(key);
-            if (pooled != null && pooled.client.isOpen()) {
-                pooled.lastAccessAt = System.currentTimeMillis();
-                return pooled.client;
+            if (pooled != null && pooled.client.isOpen() && pooled.tryAcquire()) {
+                return pooled;
             }
             if (pooled != null) {
                 suClientPool.remove(key, pooled);
-                closeQuietly(pooled.client);
+                pooled.closeWhenIdle(!pooled.client.isOpen(), this::closeQuietly);
             }
-            ClientSession session = getOrCreateSession(info);
+            PooledSession base = acquireSession(info);
             SftpClient client;
             try {
-                client = SuSftpClient.open(session, suUser, suPassword, Duration.ofMillis(SFTP_TIMEOUT));
+                client = SuSftpClient.open(base.session, suUser, suPassword, Duration.ofMillis(SFTP_TIMEOUT));
             } catch (Exception e) {
-                if (session.isOpen()) {
+                if (base.session.isOpen()) {
+                    base.release();
                     throw e; // su 本身失败（密码错误等），不必重连
                 }
-                invalidate(info);
-                client = SuSftpClient.open(getOrCreateSession(info), suUser, suPassword,
-                        Duration.ofMillis(SFTP_TIMEOUT));
+                invalidate(info, base);
+                base.release();
+                base = acquireSession(info);
+                try {
+                    client = SuSftpClient.open(base.session, suUser, suPassword, Duration.ofMillis(SFTP_TIMEOUT));
+                } catch (Exception retryError) {
+                    base.release();
+                    throw retryError;
+                }
             }
-            suClientPool.put(key, new PooledSuClient(client, System.currentTimeMillis()));
+            base.release();
+            PooledSuClient created = new PooledSuClient(client, base.session);
+            created.tryAcquire();
+            suClientPool.put(key, created);
             log.info("SFTP switched by su: host={}, loginUser={}, suUser={}",
                     info.getHost(), info.getUsername(), suUser);
-            return client;
+            return created;
         }
     }
 
-    private void invalidateSuClient(ServerInfo info, String suUser, String suPassword) {
-        PooledSuClient removed = suClientPool.remove(suClientKey(info, suUser, suPassword));
-        if (removed != null) {
-            closeQuietly(removed.client);
+    private void invalidateSuClient(ServerInfo info, String suUser, String suPassword, PooledSuClient expected) {
+        if (suClientPool.remove(suClientKey(info, suUser, suPassword), expected)) {
+            expected.closeWhenIdle(!expected.client.isOpen(), this::closeQuietly);
         }
     }
 
@@ -186,53 +217,80 @@ public class SftpSessionManager {
         return session != null && session.isOpen() ? session : null;
     }
 
-    private ClientSession getOrCreateSession(ServerInfo info) throws Exception {
+    /** 取出池中的连接并标记为使用中，用完必须调用 {@link Lease#release()}。 */
+    private PooledSession acquireSession(ServerInfo info) throws Exception {
         cleanupExpiredSessionsIfNeeded();
         String key = sessionKey(info);
         PooledSession pooled = sessionPool.get(key);
-        if (isOpen(pooled)) {
-            pooled.lastAccessAt = System.currentTimeMillis();
-            return pooled.session;
+        if (isOpen(pooled) && pooled.tryAcquire()) {
+            return pooled;
         }
         synchronized (sessionPool) {
             pooled = sessionPool.get(key);
-            if (isOpen(pooled)) {
-                pooled.lastAccessAt = System.currentTimeMillis();
-                return pooled.session;
+            if (isOpen(pooled) && pooled.tryAcquire()) {
+                return pooled;
             }
             ClientSession session = sshClient.connect(info.getUsername(), info.getHost(), info.getPort())
                     .verify(SFTP_TIMEOUT).getSession();
-            session.addPasswordIdentity(info.getPassword());
-            session.auth().verify(SFTP_TIMEOUT);
-            sessionPool.put(key, new PooledSession(session, System.currentTimeMillis()));
-            return session;
+            try {
+                session.addPasswordIdentity(info.getPassword());
+                session.auth().verify(SFTP_TIMEOUT);
+            } catch (Exception e) {
+                closeQuietly(session);
+                throw e;
+            }
+            PooledSession created = new PooledSession(session);
+            created.tryAcquire();
+            PooledSession previous = sessionPool.put(key, created);
+            if (previous != null) {
+                previous.closeWhenIdle(!isOpen(previous), this::closeQuietly);
+            }
+            return created;
         }
     }
 
+    /**
+     * 关闭空闲超过 5 分钟的连接。正在传输的连接不算空闲：以前只看“最近一次取用的时间”，
+     * 一次传输超过 5 分钟后，任何其他 SFTP 请求触发清理都会把正在传输的连接关掉。
+     */
     private void cleanupExpiredSessionsIfNeeded() {
         long now = System.currentTimeMillis();
         if (now - lastCleanupAt < CLEANUP_INTERVAL) {
             return;
         }
         lastCleanupAt = now;
+        cleanupExpired(now);
+    }
+
+    void cleanupExpired(long now) {
         suClientPool.forEach((key, pooled) -> {
-            if ((now - pooled.lastAccessAt > SESSION_IDLE_TIMEOUT || !pooled.client.isOpen())
-                    && suClientPool.remove(key, pooled)) {
+            boolean dead = !pooled.client.isOpen();
+            if ((dead || pooled.isIdleSince(now)) && pooled.retire(dead) && suClientPool.remove(key, pooled)) {
                 closeQuietly(pooled.client);
             }
         });
+        Set<ClientSession> usedBySu = Collections.newSetFromMap(new IdentityHashMap<>());
+        suClientPool.values().forEach(pooled -> usedBySu.add(pooled.session));
         sessionPool.forEach((key, pooled) -> {
-            if (now - pooled.lastAccessAt > SESSION_IDLE_TIMEOUT && sessionPool.remove(key, pooled)) {
+            if (usedBySu.contains(pooled.session)) {
+                return;
+            }
+            boolean dead = !isOpen(pooled);
+            if ((dead || pooled.isIdleSince(now)) && pooled.retire(dead) && sessionPool.remove(key, pooled)) {
                 closeQuietly(pooled.session);
             }
         });
     }
 
-    private void invalidate(ServerInfo info) {
-        PooledSession removed = sessionPool.remove(sessionKey(info));
-        if (removed != null) {
-            closeQuietly(removed.session);
+    private void invalidate(ServerInfo info, PooledSession expected) {
+        if (sessionPool.remove(sessionKey(info), expected)) {
+            // 其他请求可能还在这个连接上传输：已断开的直接关闭，否则等最后一个使用者释放后再关
+            expected.closeWhenIdle(!isOpen(expected), this::closeQuietly);
         }
+    }
+
+    int pooledSessionCount() {
+        return sessionPool.size();
     }
 
     public void assertSftpAllowed() {
@@ -251,7 +309,7 @@ public class SftpSessionManager {
         return pooled != null && pooled.session != null && pooled.session.isOpen();
     }
 
-    private void closeQuietly(java.io.Closeable closeable) {
+    private void closeQuietly(Closeable closeable) {
         if (closeable == null) {
             return;
         }
@@ -261,23 +319,89 @@ public class SftpSessionManager {
         }
     }
 
-    private static final class PooledSuClient {
-        private final SftpClient client;
-        private volatile long lastAccessAt;
+    /**
+     * 借用计数：active &gt; 0 表示正被请求使用，-1 表示已退役不再借出。
+     * 被要求关闭时如果仍在使用，就等最后一个使用者释放时再关闭。
+     */
+    abstract static class Lease {
+        private final AtomicInteger active = new AtomicInteger();
+        private volatile long lastAccessAt = System.currentTimeMillis();
+        private volatile java.util.function.Consumer<Closeable> pendingClose;
 
-        private PooledSuClient(SftpClient client, long lastAccessAt) {
+        final boolean tryAcquire() {
+            while (true) {
+                int current = active.get();
+                if (current < 0) {
+                    return false;
+                }
+                if (active.compareAndSet(current, current + 1)) {
+                    lastAccessAt = System.currentTimeMillis();
+                    return true;
+                }
+            }
+        }
+
+        final void release() {
+            lastAccessAt = System.currentTimeMillis();
+            int left = active.updateAndGet(current -> current > 0 ? current - 1 : current);
+            java.util.function.Consumer<Closeable> closer = pendingClose;
+            if (left == 0 && closer != null && active.compareAndSet(0, -1)) {
+                closer.accept(resource());
+            }
+        }
+
+        final boolean isIdleSince(long now) {
+            return active.get() == 0 && now - lastAccessAt > SESSION_IDLE_TIMEOUT;
+        }
+
+        /** 空闲时（或 force 时）标记为退役，之后不再借出。 */
+        final boolean retire(boolean force) {
+            if (active.compareAndSet(0, -1)) {
+                return true;
+            }
+            if (force) {
+                active.set(-1);
+                return true;
+            }
+            return false;
+        }
+
+        final void closeWhenIdle(boolean force, java.util.function.Consumer<Closeable> closer) {
+            pendingClose = closer;
+            if (retire(force)) {
+                closer.accept(resource());
+            }
+        }
+
+        abstract Closeable resource();
+    }
+
+    private static final class PooledSuClient extends Lease {
+        private final SftpClient client;
+        /** su 客户端所在的 SSH 连接；客户端还在池里时这个连接不能被清理。 */
+        private final ClientSession session;
+
+        private PooledSuClient(SftpClient client, ClientSession session) {
             this.client = client;
-            this.lastAccessAt = lastAccessAt;
+            this.session = session;
+        }
+
+        @Override
+        Closeable resource() {
+            return client;
         }
     }
 
-    private static final class PooledSession {
+    private static final class PooledSession extends Lease {
         private final ClientSession session;
-        private volatile long lastAccessAt;
 
-        private PooledSession(ClientSession session, long lastAccessAt) {
+        private PooledSession(ClientSession session) {
             this.session = session;
-            this.lastAccessAt = lastAccessAt;
+        }
+
+        @Override
+        Closeable resource() {
+            return session;
         }
     }
 }

@@ -299,6 +299,29 @@
             transform: translateY(-1px);
         }
 
+        /* 管理入口放在最右侧，只显示图标，避免挤在标题和网站之间 */
+        .quick-links-manage {
+            margin-left: auto;
+            flex-shrink: 0;
+            width: 2rem;
+            height: 2rem;
+            border: 1px solid transparent;
+            border-radius: .5rem;
+            background: transparent;
+            color: #94a3b8;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all .2s ease;
+        }
+
+        .quick-links-manage:hover,
+        .quick-links-manage:focus-visible {
+            color: #475569;
+            background: #f1f5f9;
+            border-color: #e2e8f0;
+        }
+
         .view-switch {
             display: flex;
             background: #f1f5f9;
@@ -743,9 +766,6 @@
                 <div class="quick-links-title">
                     <i class="fas fa-star text-warning"></i>
                     {{ t('index.commonWebsites') }}
-                    <button class="btn btn-sm btn-outline-secondary ms-2" @click="openWebsiteManager">
-                        <i class="fas fa-cog me-1"></i>{{ t('websites.manage') }}
-                    </button>
                 </div>
                 <div class="quick-links-list" v-if="commonWebsites.length">
                     <a v-for="site in commonWebsites" :key="site.name + site.url" class="quick-link-item" href="#"
@@ -754,7 +774,11 @@
                         <span>{{ site.name }}</span>
                     </a>
                 </div>
-                <span v-else class="small text-muted">{{ t('websites.empty') }}</span>
+                <span v-else class="small text-muted quick-links-list">{{ t('websites.empty') }}</span>
+                <button type="button" class="quick-links-manage" @click="openWebsiteManager"
+                    :title="t('websites.manage')" :aria-label="t('websites.manage')">
+                    <i class="fas fa-cog"></i>
+                </button>
             </section>
 
             <!-- Grid View -->

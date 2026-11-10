@@ -467,6 +467,7 @@
   "terminal.saveFailed": "Failed to save file",
   "terminal.uploadSuccess": "Upload successful",
   "terminal.uploadFailed": "Upload failed",
+  "terminal.cancelUpload": "Cancel",
   "terminal.downloadFailed": "Download failed",
   "terminal.uploadProgress": "Upload progress:",
   "terminal.downloadProgress": "Download progress:",

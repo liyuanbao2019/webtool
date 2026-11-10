@@ -12,6 +12,7 @@
     <!-- Vue 3 & Axios -->
     <script src="/js/vue.global.prod.js"></script>
     <script src="/js/axios.min.js"></script>
+    <script src="/js/saved-api.js"></script>
     <!-- Custom CSS -->
     <link href="/css/style.css" rel="stylesheet">
     <style>
@@ -166,6 +167,152 @@
             overflow: auto;
             white-space: pre-wrap;
             word-break: break-all;
+        }
+
+        .api-workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 20px;
+            align-items: start;
+        }
+
+        .api-workspace.with-library {
+            grid-template-columns: 300px minmax(0, 1fr);
+        }
+
+        .api-library {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            padding: 16px 12px;
+            position: sticky;
+            top: 12px;
+            max-height: calc(100vh - 24px);
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .api-library-tree {
+            overflow-y: auto;
+            margin: 0 -4px;
+            padding: 0 4px;
+        }
+
+        .api-tree-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 6px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            min-width: 0;
+        }
+
+        .api-tree-row:hover {
+            background: #f3f4f6;
+        }
+
+        .api-tree-row.active {
+            background: rgba(102, 126, 234, 0.12);
+        }
+
+        .api-tree-row .api-tree-name {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .api-tree-row .api-tree-actions {
+            display: none;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+
+        .api-tree-row:hover .api-tree-actions,
+        .api-tree-row:focus-within .api-tree-actions {
+            display: flex;
+        }
+
+        .api-tree-actions button {
+            border: none;
+            background: none;
+            color: #6b7280;
+            padding: 0 4px;
+            font-size: 12px;
+        }
+
+        .api-tree-actions button:hover {
+            color: var(--primary-color);
+        }
+
+        .api-tree-actions button.danger:hover {
+            color: var(--error-color);
+        }
+
+        .api-tree-row .method-badge {
+            margin-right: 0;
+            padding: 1px 5px;
+            font-size: 10px;
+            min-width: 44px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .api-save-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+
+        .api-save-title {
+            flex: 1;
+            min-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 14px;
+        }
+
+        .api-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1050;
+            padding: 16px;
+        }
+
+        .api-modal {
+            background: white;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 480px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        @media (max-width: 991px) {
+            .api-workspace.with-library {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .api-library {
+                position: static;
+                max-height: 50vh;
+            }
+
+            .api-tree-row .api-tree-actions {
+                display: flex;
+            }
         }
 
         .history-item {
@@ -511,9 +658,81 @@
         </div>
 
         <!-- API Request Tab -->
-        <div v-show="mainTab === 'request'">
+        <div v-show="mainTab === 'request'" class="api-workspace" :class="{ 'with-library': apiLibOpen }">
+            <!-- Saved API library -->
+            <aside class="api-library" v-if="apiLibOpen">
+                <div class="d-flex align-items-center mb-2">
+                    <h6 class="mb-0 fw-bold flex-grow-1"><i class="fas fa-folder-open text-primary me-2"></i>{{ libT('myApis') }}</h6>
+                    <button class="btn btn-sm btn-link text-secondary p-1" @click="createApiFolder(null)" :title="libT('newFolder')" :disabled="apiLibBusy">
+                        <i class="fas fa-folder-plus"></i>
+                    </button>
+                    <button class="btn btn-sm btn-link text-secondary p-1" @click="loadApiLibrary" :title="libT('refresh')" :disabled="apiLibBusy">
+                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': apiLibBusy }"></i>
+                    </button>
+                </div>
+                <input type="search" class="form-control form-control-sm mb-2" v-model="apiLibSearch" :placeholder="libT('search')">
+                <div v-if="apiLibError" class="alert alert-danger py-1 px-2 small mb-2">{{ apiLibError }}</div>
+                <div class="api-library-tree">
+                    <div v-if="apiLibLoaded && apiLib.requests.length === 0 && apiLib.folders.length === 0" class="text-muted small p-2">{{ libT('empty') }}</div>
+                    <div v-else-if="apiLibLoaded && apiLibRows.length === 0" class="text-muted small p-2">{{ libT('noMatch') }}</div>
+                    <template v-for="row in apiLibRows" :key="row.type + row.id">
+                        <div v-if="row.type === 'folder'" class="api-tree-row" :style="{ paddingLeft: (6 + row.depth * 16) + 'px' }"
+                            @click="toggleApiFolder(row.id)" :title="row.item.name">
+                            <i class="fas fa-fw text-secondary small" :class="row.collapsed ? 'fa-caret-right' : 'fa-caret-down'"></i>
+                            <i class="fas fa-fw" :class="row.collapsed ? 'fa-folder text-warning' : 'fa-folder-open text-warning'"></i>
+                            <span class="api-tree-name">{{ row.item.name }}</span>
+                            <span class="text-muted small flex-shrink-0" :title="libT('count', row.count)">{{ row.count }}</span>
+                            <span class="api-tree-actions" @click.stop>
+                                <button @click="createApiFolder(row.id)" :title="libT('newSubfolder')"><i class="fas fa-folder-plus"></i></button>
+                                <button @click="renameApiItem(row)" :title="libT('rename')"><i class="fas fa-pen"></i></button>
+                                <button @click="beginMoveApiItem(row)" :title="libT('move')"><i class="fas fa-share"></i></button>
+                                <button class="danger" @click="deleteApiItem(row)" :title="libT('remove')"><i class="fas fa-trash"></i></button>
+                            </span>
+                        </div>
+                        <div v-else class="api-tree-row" :class="{ active: savedApi && savedApi.id === row.id }"
+                            :style="{ paddingLeft: (22 + row.depth * 16) + 'px' }" @click="openSavedApi(row.item)"
+                            :title="row.item.method + ' ' + row.item.url + (row.item.description ? '\n' + row.item.description : '')">
+                            <span class="method-badge" :class="'method-' + String(row.item.method).toLowerCase()">{{ row.item.method }}</span>
+                            <span class="api-tree-name">{{ row.item.name }}</span>
+                            <span class="api-tree-actions" @click.stop>
+                                <button @click="renameApiItem(row)" :title="libT('rename')"><i class="fas fa-pen"></i></button>
+                                <button @click="beginMoveApiItem(row)" :title="libT('move')"><i class="fas fa-share"></i></button>
+                                <button @click="copyApiRequest(row)" :title="libT('copy')"><i class="fas fa-copy"></i></button>
+                                <button class="danger" @click="deleteApiItem(row)" :title="libT('remove')"><i class="fas fa-trash"></i></button>
+                            </span>
+                        </div>
+                    </template>
+                </div>
+            </aside>
+
+            <div class="api-main" style="min-width: 0;">
             <!-- Request Panel -->
         <div class="request-panel">
+            <div class="api-save-bar">
+                <button class="btn btn-sm btn-outline-secondary" @click="toggleApiLibrary" :title="libT('toggle')">
+                    <i class="fas" :class="apiLibOpen ? 'fa-angle-double-left' : 'fa-folder-open'"></i>
+                    <span v-if="!apiLibOpen" class="ms-1">{{ libT('myApis') }}</span>
+                </button>
+                <div class="api-save-title" :title="savedApi ? (savedApiFolderPath ? savedApiFolderPath + ' / ' : '') + savedApi.name : ''">
+                    <template v-if="savedApi">
+                        <i class="fas fa-bookmark text-primary me-1"></i>
+                        <span v-if="savedApiFolderPath" class="text-muted">{{ savedApiFolderPath }} / </span>
+                        <span class="fw-semibold">{{ savedApi.name }}</span>
+                        <span v-if="apiRequestDirty" class="badge bg-warning text-dark ms-2">{{ libT('modified') }}</span>
+                    </template>
+                    <span v-else class="text-muted">{{ libT('unsaved') }}</span>
+                    <span v-if="apiLibNotice" class="text-success small ms-2"><i class="fas fa-check me-1"></i>{{ apiLibNotice }}</span>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary" @click="newApiRequest">
+                    <i class="fas fa-plus me-1"></i>{{ libT('newRequest') }}
+                </button>
+                <button class="btn btn-sm btn-primary" @click="beginSaveApi(false)" :disabled="apiLibBusy" :title="libT('shortcut')">
+                    <i class="fas fa-save me-1"></i>{{ libT('save') }}
+                </button>
+                <button v-if="savedApi" class="btn btn-sm btn-outline-primary" @click="beginSaveApi(true)" :disabled="apiLibBusy">
+                    {{ libT('saveAs') }}
+                </button>
+            </div>
             <div class="input-group mb-3">
                 <select class="form-select method-selector" v-model="request.method">
                     <option value="GET">GET</option>
@@ -635,6 +854,52 @@
                 <span class="text-truncate d-inline-block" style="max-width: 80%;">{{ item.url }}</span>
             </div>
         </div>
+            </div>
+        </div>
+
+        <!-- Saved API dialogs -->
+        <div v-if="apiSaveDialog.open" class="api-modal-backdrop" @click.self="apiSaveDialog.open = false">
+            <form class="api-modal" @submit.prevent="submitApiSave">
+                <h5 class="fw-bold mb-3">{{ apiSaveDialog.asCopy ? libT('saveAsTitle') : libT('saveTitle') }}</h5>
+                <div class="mb-2 small text-muted text-truncate">
+                    <span class="method-badge" :class="'method-' + request.method.toLowerCase()">{{ request.method }}</span>{{ request.url }}
+                </div>
+                <label class="form-label small mb-1">{{ libT('name') }}</label>
+                <input class="form-control mb-3" v-model="apiSaveDialog.name" maxlength="100" required autofocus>
+                <label class="form-label small mb-1">{{ libT('folder') }}</label>
+                <div class="input-group mb-3">
+                    <select class="form-select" v-model="apiSaveDialog.folderId">
+                        <option value="">{{ libT('noFolder') }}</option>
+                        <option v-for="option in apiFolderOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
+                    </select>
+                    <button type="button" class="btn btn-outline-secondary" @click="createApiFolder(apiSaveDialog.folderId || null, true)"
+                        :title="libT('newFolder')" :disabled="apiLibBusy"><i class="fas fa-folder-plus"></i></button>
+                </div>
+                <label class="form-label small mb-1">{{ libT('description') }}</label>
+                <textarea class="form-control mb-2" rows="2" maxlength="500" v-model="apiSaveDialog.description"></textarea>
+                <div class="small text-muted mb-3"><i class="fas fa-info-circle me-1"></i>{{ libT('sensitive') }}</div>
+                <div v-if="apiSaveDialog.error" class="alert alert-danger py-2 small">{{ apiSaveDialog.error }}</div>
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary" @click="apiSaveDialog.open = false">{{ libT('cancel') }}</button>
+                    <button type="submit" class="btn btn-primary" :disabled="apiLibBusy || !apiSaveDialog.name.trim()">
+                        <i class="fas fa-save me-1"></i>{{ libT('save') }}
+                    </button>
+                </div>
+            </form>
+        </div>
+        <div v-if="apiMoveDialog.open" class="api-modal-backdrop" @click.self="apiMoveDialog.open = false">
+            <form class="api-modal" @submit.prevent="submitApiMove">
+                <h5 class="fw-bold mb-3 text-truncate">{{ libT('moveTitle', apiMoveDialog.item ? apiMoveDialog.item.name : '') }}</h5>
+                <select class="form-select mb-3" v-model="apiMoveDialog.folderId">
+                    <option value="">{{ libT('noFolder') }}</option>
+                    <option v-for="option in apiMoveOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
+                </select>
+                <div v-if="apiMoveDialog.error" class="alert alert-danger py-2 small">{{ apiMoveDialog.error }}</div>
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary" @click="apiMoveDialog.open = false">{{ libT('cancel') }}</button>
+                    <button type="submit" class="btn btn-primary" :disabled="apiLibBusy">{{ libT('move') }}</button>
+                </div>
+            </form>
         </div>
 
         <!-- Pressure Test Tab -->
@@ -1093,6 +1358,7 @@
         var apiAllTexts = { 'en': enApiTexts, 'zh_CN': zhApiTexts };
 
         createApp({
+            mixins: [SavedApiLibrary.mixin],
             data() {
                 return {
                     locale: localStorage.getItem('locale') || 'en',
