@@ -284,6 +284,68 @@ class DataImportJobTest {
         return job;
     }
 
+    private DataImportJob runCreateWithKey(String dbType, String tableName, String content,
+            DataImportRequest.PrimaryKey key) throws Exception {
+        NewTableDdl.Plan plan = NewTableDdl.forConnection(conn, dbType).build(tableName, Arrays.asList(
+                NewTableDdlTest.col(0, firstColumn(content), "TEXT", 10, null, null),
+                NewTableDdlTest.col(1, "name", "TEXT", 5, null, null)), key);
+        DataImportRequest.Start request = new DataImportRequest.Start();
+        request.setMode(DataImportRequest.Start.MODE_CREATE);
+        request.setErrorStrategy(DataImportRequest.Start.STRATEGY_SKIP_ROW);
+        request.getOptions().setDelimiter("|");
+        request.setMappings(plan.mappings());
+        Path file = Files.write(tempDir.resolve("k-" + UUID.randomUUID() + ".txt"), content.getBytes(StandardCharsets.UTF_8));
+        ImportErrorSink sink = new ImportErrorSink(tempDir.resolve(file.getFileName() + ".errors.csv"),
+                tempDir.resolve(file.getFileName() + ".raw"), StandardCharsets.UTF_8);
+        DataImportJob job = new DataImportJob(file, StandardCharsets.UTF_8, request, plan.plannedTable(), dbType, sink,
+                30, plan);
+        job.run(conn);
+        return job;
+    }
+
+    private static String firstColumn(String content) {
+        return content.substring(0, content.indexOf('|'));
+    }
+
+    private String primaryKeyOf(String table) throws SQLException {
+        try (ResultSet rs = conn.getMetaData().getPrimaryKeys(null, null, table)) {
+            return rs.next() ? rs.getString("COLUMN_NAME") : null;
+        }
+    }
+
+    @Test
+    void createdTableGetsGeneratedPrimaryKeyByDefault() throws Exception {
+        // the file has its own "id" column, so the generated key is named row_id
+        DataImportJob job = runCreateWithKey("POSTGRESQL", "with_key", "id|name\nA1|甲\nA2|乙\n", null);
+
+        assertEquals(DataImportJob.Status.SUCCESS, job.getStatus(), job.getMessage());
+        assertEquals("row_id", primaryKeyOf("with_key"));
+        try (Statement statement = conn.createStatement();
+             ResultSet rs = statement.executeQuery("SELECT \"row_id\", \"id\" FROM \"with_key\" ORDER BY 1")) {
+            assertTrue(rs.next());
+            assertEquals(1, rs.getLong(1));
+            assertEquals("A1", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getLong(1));
+        }
+    }
+
+    @Test
+    void fileColumnCanBeThePrimaryKey() throws Exception {
+        DataImportRequest.PrimaryKey key = new DataImportRequest.PrimaryKey();
+        key.setMode(DataImportRequest.PrimaryKey.MODE_COLUMN);
+        key.setSourceIndex(0);
+        DataImportJob job = runCreateWithKey("POSTGRESQL", "keyed_by_code", "code|name\nA1|甲\nA1|重复\n|空\nA2|乙\n", key);
+
+        assertEquals("code", primaryKeyOf("keyed_by_code"));
+        assertEquals(2, job.getErrorCount(), job.getMessage());
+        try (Statement statement = conn.createStatement();
+             ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM \"keyed_by_code\"")) {
+            rs.next();
+            assertEquals(2, rs.getInt(1));
+        }
+    }
+
     @Test
     void failedCreateNeverDropsAnExistingTable() throws Exception {
         try (Statement statement = conn.createStatement()) {

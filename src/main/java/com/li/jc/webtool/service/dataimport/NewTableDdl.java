@@ -8,6 +8,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -28,21 +29,32 @@ public final class NewTableDdl {
     static final int[] TEXT_TIERS = {50, 100, 200, 500, 1000, 2000, 4000};
     static final int MAX_DECIMAL_PRECISION = 38;
     static final int MAX_COLUMNS = 1000;
+    /** InnoDB index keys are at most 3072 bytes: 768 utf8mb4 characters. */
+    static final int MYSQL_MAX_KEY_CHARS = 768;
+    static final String DEFAULT_KEY_NAME = "id";
     /** Letters (Chinese included), digits, _, $ and #. */
     private static final Pattern IDENTIFIER = Pattern.compile("[\\p{L}\\p{N}_$#]+");
 
     private final String dialect;
     private final String quoteString;
     private final int maxNameLength;
+    /** Whether the database can generate key values (Oracle only since 12c). */
+    private final boolean identitySupported;
 
     public NewTableDdl(String dbType, String quoteString, int maxNameLength) {
+        this(dbType, quoteString, maxNameLength, true);
+    }
+
+    public NewTableDdl(String dbType, String quoteString, int maxNameLength, boolean identitySupported) {
         this.dialect = dialect(dbType);
         this.quoteString = quoteString;
         this.maxNameLength = maxNameLength > 0 ? maxNameLength : defaultNameLength(dialect);
+        this.identitySupported = identitySupported;
     }
 
     public static NewTableDdl forConnection(Connection conn, String dbType) throws SQLException {
-        return new NewTableDdl(dbType, conn.getMetaData().getIdentifierQuoteString(), maxIdentifierLength(conn, dbType));
+        return new NewTableDdl(dbType, conn.getMetaData().getIdentifierQuoteString(), maxIdentifierLength(conn, dbType),
+                identitySupported(conn, dbType));
     }
 
     /** ORACLE, DM, MYSQL, STARROCKS or POSTGRESQL (also used for unknown types: plain ANSI types). */
@@ -112,6 +124,53 @@ public final class NewTableDdl {
         }
     }
 
+    static boolean identitySupported(Connection conn, String dbType) {
+        if (!"ORACLE".equals(dialect(dbType))) {
+            return true;
+        }
+        try {
+            DatabaseMetaData meta = conn.getMetaData();
+            String product = meta.getDatabaseProductName();
+            return product == null || !product.toLowerCase(Locale.ROOT).contains("oracle")
+                    || meta.getDatabaseMajorVersion() >= 12;
+        } catch (SQLException | RuntimeException | AbstractMethodError e) {
+            return true;
+        }
+    }
+
+    /** StarRocks tables are keyed by their first column (DUPLICATE KEY) and get no primary key. */
+    public boolean supportsPrimaryKey() {
+        return !"STARROCKS".equals(dialect);
+    }
+
+    /** Whether an auto-increment key column can be added. */
+    public boolean supportsAutoKey() {
+        return supportsPrimaryKey() && identitySupported;
+    }
+
+    /** "id", or another free name when the file already has an id column. */
+    public String suggestKeyName(Collection<String> columnNames) {
+        Set<String> used = new HashSet<>();
+        for (String name : columnNames) {
+            if (name != null) {
+                used.add(canonicalName(name).toLowerCase(Locale.ROOT));
+            }
+        }
+        String[] candidates = {DEFAULT_KEY_NAME, "row_id", "pk_id", "import_row_id"};
+        for (String candidate : candidates) {
+            String name = canonicalName(candidate);
+            if (!used.contains(name.toLowerCase(Locale.ROOT))) {
+                return name;
+            }
+        }
+        for (int n = 2; ; n++) {
+            String name = canonicalName(DEFAULT_KEY_NAME + "_" + n);
+            if (!used.contains(name.toLowerCase(Locale.ROOT))) {
+                return name;
+            }
+        }
+    }
+
     private static int positive(int value) {
         return value > 0 ? value : Integer.MAX_VALUE;
     }
@@ -174,8 +233,20 @@ public final class NewTableDdl {
         }
     }
 
-    /** Validates the definition and renders CREATE TABLE / DROP TABLE for it. */
+    /** Validates the definition and renders CREATE TABLE / DROP TABLE for it, without a primary key. */
     public Plan build(String tableName, List<DataImportRequest.NewColumn> columns) {
+        DataImportRequest.PrimaryKey none = new DataImportRequest.PrimaryKey();
+        none.setMode(DataImportRequest.PrimaryKey.MODE_NONE);
+        return build(tableName, columns, none);
+    }
+
+    /**
+     * Validates the definition and renders CREATE TABLE / DROP TABLE for it.
+     *
+     * @param primaryKey null means the default: an auto-increment key column
+     */
+    public Plan build(String tableName, List<DataImportRequest.NewColumn> columns,
+            DataImportRequest.PrimaryKey primaryKey) {
         String table = canonicalName(tableName);
         validateName(table, "表名");
         List<DataImportRequest.NewColumn> normalized = new ArrayList<>();
@@ -199,15 +270,40 @@ public final class NewTableDdl {
             }
         }
 
+        String keyMode = keyMode(primaryKey);
+        String autoKey = null;
+        DataImportRequest.NewColumn keyColumn = null;
+        if (DataImportRequest.PrimaryKey.MODE_AUTO.equals(keyMode)) {
+            autoKey = autoKeyName(primaryKey, seen);
+        } else if (DataImportRequest.PrimaryKey.MODE_COLUMN.equals(keyMode)) {
+            keyColumn = keyColumn(primaryKey, normalized);
+        }
+
         StringBuilder ddl = new StringBuilder("CREATE TABLE ").append(quote(table)).append(" (");
+        String separator = "\n  ";
+        if (autoKey != null) {
+            ddl.append(separator).append(quote(autoKey)).append(' ').append(autoKeyType());
+            separator = ",\n  ";
+        }
         List<ImportColumn> importColumns = new ArrayList<>();
         List<String> sqlTypes = new ArrayList<>();
         for (int i = 0; i < normalized.size(); i++) {
             DataImportRequest.NewColumn column = normalized.get(i);
             String sqlType = sqlType(column, i == 0);
             sqlTypes.add(sqlType);
-            ddl.append(i == 0 ? "\n  " : ",\n  ").append(quote(column.getName())).append(' ').append(sqlType);
-            importColumns.add(importColumn(column, sqlType));
+            ddl.append(separator).append(quote(column.getName())).append(' ').append(sqlType);
+            separator = ",\n  ";
+            ImportColumn importColumn = importColumn(column, sqlType);
+            if (column == keyColumn) {
+                ddl.append(" NOT NULL");
+                importColumn.setNullable(false);
+                importColumn.setPrimaryKey(true);
+            }
+            importColumns.add(importColumn);
+        }
+        String keyName = autoKey != null ? autoKey : keyColumn != null ? keyColumn.getName() : null;
+        if (keyName != null) {
+            ddl.append(",\n  PRIMARY KEY (").append(quote(keyName)).append(')');
         }
         ddl.append("\n)");
         if ("STARROCKS".equals(dialect)) {
@@ -217,7 +313,80 @@ public final class NewTableDdl {
             ddl.append(" DEFAULT CHARSET=utf8mb4");
         }
         return new Plan(table, quote(table), ddl.toString(), "DROP TABLE " + quote(table), normalized, sqlTypes,
-                importColumns);
+                importColumns, keyName, autoKey != null);
+    }
+
+    private String keyMode(DataImportRequest.PrimaryKey primaryKey) {
+        if (!supportsPrimaryKey()) {
+            return DataImportRequest.PrimaryKey.MODE_NONE;
+        }
+        String mode = primaryKey == null || primaryKey.getMode() == null || primaryKey.getMode().trim().isEmpty()
+                ? DataImportRequest.PrimaryKey.MODE_AUTO : primaryKey.getMode().trim().toUpperCase(Locale.ROOT);
+        switch (mode) {
+            case DataImportRequest.PrimaryKey.MODE_AUTO:
+            case DataImportRequest.PrimaryKey.MODE_COLUMN:
+            case DataImportRequest.PrimaryKey.MODE_NONE:
+                return mode;
+            default:
+                throw new IllegalArgumentException("主键设置无效: " + primaryKey.getMode());
+        }
+    }
+
+    private String autoKeyName(DataImportRequest.PrimaryKey primaryKey, Set<String> usedLowerCase) {
+        if (!identitySupported) {
+            throw new IllegalArgumentException("该数据库版本（Oracle 12c 以下）不支持自增列，"
+                    + "请选择用文件中的某个字段作主键，或不加主键");
+        }
+        if (primaryKey == null || primaryKey.getName() == null || primaryKey.getName().trim().isEmpty()) {
+            List<String> names = new ArrayList<>();
+            for (String used : usedLowerCase) {
+                names.add(used);
+            }
+            return suggestKeyName(names);
+        }
+        String name = canonicalName(primaryKey.getName());
+        validateName(name, "主键字段名");
+        if (usedLowerCase.contains(name.toLowerCase(Locale.ROOT))) {
+            throw new IllegalArgumentException("自增主键字段名“" + name + "”与文件中的字段重复，请换一个名称");
+        }
+        return name;
+    }
+
+    private DataImportRequest.NewColumn keyColumn(DataImportRequest.PrimaryKey primaryKey,
+            List<DataImportRequest.NewColumn> columns) {
+        Integer sourceIndex = primaryKey.getSourceIndex();
+        DataImportRequest.NewColumn key = null;
+        for (DataImportRequest.NewColumn column : columns) {
+            if (sourceIndex != null && sourceIndex.equals(column.getSourceIndex())) {
+                key = column;
+                break;
+            }
+        }
+        if (key == null) {
+            throw new IllegalArgumentException("请选择作为主键的字段（该字段需勾选导入）");
+        }
+        Kind kind = Kind.valueOf(key.getType());
+        if (kind == Kind.LONG_TEXT) {
+            throw new IllegalArgumentException("长文本字段 " + key.getName() + " 不能作为主键，请改为文本并设置长度");
+        }
+        if (kind == Kind.TEXT && isMysqlFamily() && key.getLength() > MYSQL_MAX_KEY_CHARS) {
+            throw new IllegalArgumentException("主键字段 " + key.getName() + " 的长度不能超过 " + MYSQL_MAX_KEY_CHARS);
+        }
+        return key;
+    }
+
+    /** Key column type whose values the database generates. */
+    String autoKeyType() {
+        switch (dialect) {
+            case "ORACLE":
+                return "NUMBER(19) GENERATED BY DEFAULT AS IDENTITY";
+            case "DM":
+                return "BIGINT IDENTITY(1,1)";
+            case "MYSQL":
+                return "BIGINT NOT NULL AUTO_INCREMENT";
+            default:
+                return "BIGSERIAL";
+        }
     }
 
     private DataImportRequest.NewColumn normalize(DataImportRequest.NewColumn source) {
@@ -388,9 +557,12 @@ public final class NewTableDdl {
         private final List<DataImportRequest.NewColumn> columns;
         private final List<String> sqlTypes;
         private final List<ImportColumn> importColumns;
+        private final String primaryKey;
+        private final boolean autoKey;
 
         Plan(String tableName, String sqlName, String createSql, String dropSql,
-                List<DataImportRequest.NewColumn> columns, List<String> sqlTypes, List<ImportColumn> importColumns) {
+                List<DataImportRequest.NewColumn> columns, List<String> sqlTypes, List<ImportColumn> importColumns,
+                String primaryKey, boolean autoKey) {
             this.tableName = tableName;
             this.sqlName = sqlName;
             this.createSql = createSql;
@@ -398,6 +570,18 @@ public final class NewTableDdl {
             this.columns = Collections.unmodifiableList(columns);
             this.sqlTypes = Collections.unmodifiableList(sqlTypes);
             this.importColumns = Collections.unmodifiableList(importColumns);
+            this.primaryKey = primaryKey;
+            this.autoKey = autoKey;
+        }
+
+        /** Primary key column name, null when the table has none. */
+        public String getPrimaryKey() {
+            return primaryKey;
+        }
+
+        /** Whether the key column is generated by the database (not filled from the file). */
+        public boolean isAutoKey() {
+            return autoKey;
         }
 
         public String getTableName() {

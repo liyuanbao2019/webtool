@@ -21,6 +21,8 @@ public final class DataImportRequest {
         /** Quote character; empty string means plain text without quoting. */
         private String quote = "\"";
         private boolean hasHeader = true;
+        /** Records forming the header (merged multi-row headings are combined into one name per column). */
+        private int headerRows = 1;
         /** Physical lines to skip before the header / first data row. */
         private int skipLines;
         private boolean trimValues = true;
@@ -64,6 +66,25 @@ public final class DataImportRequest {
         private Integer scale;
     }
 
+    /**
+     * Primary key of a table created by the import. Clustered MySQL (PXC / Galera, MGR) rejects writes to
+     * tables without one, so an auto-increment key column is added unless the user chooses otherwise.
+     */
+    @Data
+    public static class PrimaryKey {
+        /** Database generated key column {@link #name}, not filled from the file. */
+        public static final String MODE_AUTO = "AUTO";
+        /** The new column filled from file field {@link #sourceIndex} becomes the key. */
+        public static final String MODE_COLUMN = "COLUMN";
+        public static final String MODE_NONE = "NONE";
+
+        private String mode = MODE_AUTO;
+        /** AUTO: column name, default "id". */
+        private String name;
+        /** COLUMN: 0-based file field index of the key column. */
+        private Integer sourceIndex;
+    }
+
     /** Suggest column names and types for a new table from the file content. */
     @Data
     public static class InferColumns {
@@ -80,6 +101,7 @@ public final class DataImportRequest {
         private Integer datasourceIndex;
         private String tableName;
         private List<NewColumn> columns = new ArrayList<>();
+        private PrimaryKey primaryKey = new PrimaryKey();
     }
 
     @Data
@@ -97,6 +119,8 @@ public final class DataImportRequest {
         private String tableName;
         /** CREATE mode: the columns of the new table; the mappings are derived from them. */
         private List<NewColumn> newColumns = new ArrayList<>();
+        /** CREATE mode: primary key of the new table. */
+        private PrimaryKey primaryKey = new PrimaryKey();
         /** CREATE mode: drop the new table again when the import ends without any committed row. */
         private boolean dropTableOnFailure = true;
         private ParseOptions options = new ParseOptions();

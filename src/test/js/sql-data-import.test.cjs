@@ -250,6 +250,61 @@ test('new table mode detects columns, previews DDL and starts a CREATE import', 
     assert.match(text, /CREATE TABLE `客户`/);
 });
 
+test('new table adds an auto-increment primary key by default and can use a file column instead', async () => {
+    const calls = [];
+    let inferData = {
+        tableName: 'orders', schema: 'app', dbType: 'MYSQL', scannedRows: 1, complete: true, maxTextLength: 16383,
+        primaryKeySupported: true, autoKeySupported: true, primaryKeyName: 'row_id',
+        columns: [
+            { sourceIndex: 0, header: 'id', name: 'id', type: 'TEXT', length: 20, sample: 'A1' },
+            { sourceIndex: 1, header: 'memo', name: 'memo', type: 'LONG_TEXT', sample: 'x' }
+        ]
+    };
+    const axios = {
+        post: async (url, body) => {
+            calls.push({ url, body: JSON.parse(JSON.stringify(body)) });
+            if (url.endsWith('/upload')) {
+                return { data: { importId: 'imp3', fileName: 'orders.csv', size: 10, encoding: 'UTF-8', delimiter: ',', quote: '"', sampleLines: [] } };
+            }
+            if (url.endsWith('/preview')) {
+                return { data: { headers: ['id', 'memo'], rows: [['A1', 'x']], expectedColumns: 2, scannedRows: 1, mismatchedRows: 0 } };
+            }
+            if (url.endsWith('/infer-columns')) return { data: inferData };
+            if (url.endsWith('/create-ddl')) return { data: { ddl: 'CREATE TABLE `orders` (...)', tableExists: false } };
+            return { data: {} };
+        },
+        get: async () => ({ data: {} })
+    };
+    const { state, api } = setup(axios);
+    state.openDataImport();
+    await state.uploadImportFile({ target: { files: [{ name: 'orders.csv' }], value: '' } });
+    state.goImportStep(2);
+    await state.setImportMode('CREATE');
+    await new Promise(resolve => setImmediate(resolve));
+
+    const nt = state.dataImport.newTable;
+    // the file already has "id", so the suggested free name is used
+    assert.deepEqual(JSON.parse(JSON.stringify(nt.primaryKey)), { mode: 'AUTO', name: 'row_id', sourceIndex: null });
+    const ddlCall = calls.filter(c => c.url.endsWith('/create-ddl')).pop();
+    assert.deepEqual(ddlCall.body.primaryKey, { mode: 'AUTO', name: 'row_id', sourceIndex: null });
+
+    // switching to a file column picks the first included column that can be a key
+    nt.primaryKey.mode = 'COLUMN';
+    state.onNewTableKeyModeChange();
+    assert.equal(nt.primaryKey.sourceIndex, 0);
+    assert.equal(state.isNewTableKey(nt.columns[0]), true);
+    assert.equal(state.isNewTableKey(nt.columns[1]), false);
+    assert.deepEqual(JSON.parse(JSON.stringify(api.buildStartPayload(state.dataImport, 0, false).primaryKey)),
+        { mode: 'COLUMN', name: null, sourceIndex: 0 });
+
+    // Oracle before 12c has no identity columns: default to no key; StarRocks gets no key at all
+    nt.primaryKey.mode = 'AUTO';
+    state.applyNewTableKeyDefaults({ primaryKeySupported: true, autoKeySupported: false, primaryKeyName: 'ID' });
+    assert.equal(nt.primaryKey.mode, 'NONE');
+    state.applyNewTableKeyDefaults({ primaryKeySupported: false, autoKeySupported: false });
+    assert.equal(api.buildStartPayload(state.dataImport, 0, false).primaryKey.mode, 'NONE');
+});
+
 test('summary text reports a dropped table and the manual cleanup statement', () => {
     const { api } = setup({});
     const t = (k, ...a) => [k, ...a].join('|');
@@ -294,4 +349,39 @@ test('Excel uploads use fixed CSV settings and can switch worksheets', async () 
 
     await state.selectImportSheet(1); // same sheet: no request
     assert.equal(calls.filter(c => c.url.endsWith('/sheet')).length, 1);
+});
+
+test('a detected merged header is applied once, unless the user set the header rows', async () => {
+    const previews = [];
+    const axios = {
+        post: async (url, body) => {
+            if (url.endsWith('/upload')) return { data: { importId: 'h1', fileName: 'a.xlsx', size: 9, sourceType: 'EXCEL', sheets: ['s'], sheetIndex: 0 } };
+            if (url.endsWith('/preview')) {
+                previews.push(body.options.headerRows);
+                const rows = body.options.headerRows;
+                return { data: { headers: rows === 2 ? ['a', 'x', 'y'] : ['a', '分组'], rows: [], expectedColumns: rows === 2 ? 3 : 2,
+                    scannedRows: 0, mismatchedRows: 0, detectedHeaderRows: 2 } };
+            }
+            return { data: {} };
+        },
+        get: async () => ({ data: {} })
+    };
+    const { state } = setup(axios);
+    state.openDataImport();
+    await state.uploadImportFile({ target: { files: [{ name: 'a.xlsx' }], value: '' } });
+    assert.deepEqual(previews, [1, 2]);
+    assert.equal(state.dataImport.options.headerRows, 2);
+    assert.equal(state.dataImport.headerRowsDetected, true);
+    assert.deepEqual(Array.from(state.importHeaders), ['a', 'x', 'y']);
+
+    state.dataImport.options.headerRows = 1;
+    state.onImportHeaderRowsInput();
+    await state.refreshImportPreview();
+    assert.deepEqual(previews, [1, 2, 1]);
+    assert.equal(state.dataImport.options.headerRows, 1);
+    assert.equal(state.dataImport.headerRowsDetected, false);
+
+    state.dataImport.options.headerRows = '';
+    await state.refreshImportPreview();
+    assert.equal(previews[previews.length - 1], 1); // empty input is sent as 1
 });

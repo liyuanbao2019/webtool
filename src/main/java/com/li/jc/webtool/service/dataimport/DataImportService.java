@@ -26,6 +26,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -225,14 +226,28 @@ public class DataImportService {
         int maxColumns = 0;
         try (DelimitedTextParser parser = openParser(upload, charset, options)) {
             parser.skipLines(Math.max(0, options.getSkipLines()));
+            List<DelimitedTextParser.Record> lead = new ArrayList<>();
             if (options.isHasHeader()) {
-                DelimitedTextParser.Record header = parser.next();
-                if (header != null) {
-                    headers = new ArrayList<>(header.getFields());
+                // read a few records ahead to recognise merged multi-row headers
+                int headerRows = ImportHeader.clampRows(options.getHeaderRows());
+                int ahead = Math.max(headerRows, ImportHeader.MAX_DETECTED_ROWS + 1);
+                DelimitedTextParser.Record next;
+                while (lead.size() < ahead && (next = parser.next()) != null) {
+                    lead.add(next);
                 }
+                result.put("detectedHeaderRows", ImportHeader.detectRows(
+                        lead.stream().map(DelimitedTextParser.Record::getFields).collect(Collectors.toList())));
+                int used = Math.min(headerRows, lead.size());
+                ImportHeader header = ImportHeader.of(lead.subList(0, used));
+                if (header != null) {
+                    headers = new ArrayList<>(header.getNames());
+                }
+                lead = new ArrayList<>(lead.subList(used, lead.size()));
             }
+            Iterator<DelimitedTextParser.Record> pending = lead.iterator();
             DelimitedTextParser.Record record;
-            while (scanned < PREVIEW_SCAN_ROWS && (record = parser.next()) != null) {
+            while (scanned < PREVIEW_SCAN_ROWS
+                    && (record = pending.hasNext() ? pending.next() : parser.next()) != null) {
                 scanned++;
                 int size = record.getFields().size();
                 columnCounts.merge(size, 1, Integer::sum);
@@ -323,9 +338,9 @@ public class DataImportService {
             try (DelimitedTextParser parser = openParser(upload, charset, options)) {
                 parser.skipLines(Math.max(0, options.getSkipLines()));
                 if (options.isHasHeader()) {
-                    DelimitedTextParser.Record header = parser.next();
+                    ImportHeader header = ImportHeader.read(parser, options.getHeaderRows());
                     if (header != null) {
-                        headers.addAll(header.getFields());
+                        headers.addAll(header.getNames());
                     }
                 }
                 DelimitedTextParser.Record record = null;
@@ -361,6 +376,11 @@ public class DataImportService {
             result.put("maxTextLength", ddl.maxTextLength());
             result.put("maxNameLength", ddl.getMaxNameLength());
             result.put("nameLengthInBytes", ddl.lengthInBytes());
+            List<String> columnNames = new ArrayList<>();
+            suggestions.forEach(suggestion -> columnNames.add(suggestion.getColumn().getName()));
+            result.put("primaryKeySupported", ddl.supportsPrimaryKey());
+            result.put("autoKeySupported", ddl.supportsAutoKey());
+            result.put("primaryKeyName", ddl.suggestKeyName(columnNames));
             List<Map<String, Object>> columns = new ArrayList<>();
             for (NewTableColumnInferrer.Suggestion suggestion : suggestions) {
                 DataImportRequest.NewColumn column = suggestion.getColumn();
@@ -388,11 +408,12 @@ public class DataImportService {
         String dbType = connectionManager.getDatabaseType(datasourceIndex);
         try (Connection conn = connectionManager.getConnection(datasourceIndex)) {
             NewTableDdl.Plan plan = NewTableDdl.forConnection(conn, dbType).build(request.getTableName(),
-                    request.getColumns());
+                    request.getColumns(), request.getPrimaryKey());
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("tableName", plan.getTableName());
             result.put("schema", ImportTableResolver.currentSchema(conn, dbType));
             result.put("ddl", plan.getCreateSql());
+            result.put("primaryKey", plan.getPrimaryKey());
             result.put("tableExists", ImportTableResolver.existsInCurrentSchema(conn, dbType, plan.getTableName()));
             List<String> names = new ArrayList<>();
             plan.getColumns().forEach(column -> names.add(column.getName()));
@@ -435,7 +456,7 @@ public class DataImportService {
             try (Connection conn = connectionManager.getConnection(datasourceIndex)) {
                 if (createTable) {
                     newTable = NewTableDdl.forConnection(conn, dbType).build(request.getTableName(),
-                            request.getNewColumns());
+                            request.getNewColumns(), request.getPrimaryKey());
                     if (ImportTableResolver.existsInCurrentSchema(conn, dbType, newTable.getTableName())) {
                         throw new IllegalArgumentException("表 " + newTable.getTableName()
                                 + " 已存在。请换一个表名，或选择“导入到已有表”");

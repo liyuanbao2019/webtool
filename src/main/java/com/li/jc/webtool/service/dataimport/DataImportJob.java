@@ -342,12 +342,12 @@ public class DataImportJob {
         parser.skipLines(Math.max(0, options.getSkipLines()));
         int expectedColumns = -1;
         if (options.isHasHeader()) {
-            DelimitedTextParser.Record header = parser.next();
+            ImportHeader header = ImportHeader.read(parser, options.getHeaderRows());
             if (header == null) {
                 return;
             }
-            expectedColumns = header.getFields().size();
-            headerNames = new ArrayList<>(header.getFields());
+            expectedColumns = header.getNames().size();
+            headerNames = new ArrayList<>(header.getNames());
             errors.writeRawHeader(header.getRaw());
         }
 

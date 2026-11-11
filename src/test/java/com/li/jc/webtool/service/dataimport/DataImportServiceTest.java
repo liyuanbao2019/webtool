@@ -271,6 +271,74 @@ class DataImportServiceTest {
     }
 
     @Test
+    void excelMergedTwoRowHeaderIsDetectedAndCombined() throws Exception {
+        Path book;
+        try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("分摊");
+            String[] top = {"月份", "部门", "姓名", "分摊比例"};
+            String[] sub = {"资产运营", "算网运营", "其他"};
+            org.apache.poi.ss.usermodel.Row first = sheet.createRow(0);
+            org.apache.poi.ss.usermodel.Row second = sheet.createRow(1);
+            for (int c = 0; c < top.length; c++) {
+                first.createCell(c).setCellValue(top[c]);
+            }
+            for (int c = 0; c < 3; c++) {
+                sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 1, c, c));
+            }
+            sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 3, 5));
+            for (int c = 0; c < sub.length; c++) {
+                second.createCell(3 + c).setCellValue(sub[c]);
+            }
+            second.createCell(6).setCellValue("备注");
+            Object[][] data = {{6, "西北中心", "韩兴辉", 1, null, null}, {6, "西北中心", "王鹏业", null, 0.33, 0.67}};
+            for (int r = 0; r < data.length; r++) {
+                org.apache.poi.ss.usermodel.Row row = sheet.createRow(2 + r);
+                for (int c = 0; c < data[r].length; c++) {
+                    Object value = data[r][c];
+                    if (value instanceof Number) {
+                        row.createCell(c).setCellValue(((Number) value).doubleValue());
+                    } else if (value != null) {
+                        row.createCell(c).setCellValue((String) value);
+                    }
+                }
+            }
+            book = tempDir.resolve("分摊.xlsx");
+            try (java.io.OutputStream out = Files.newOutputStream(book)) {
+                workbook.write(out);
+            }
+        }
+        String importId = (String) service.upload(new MockMultipartFile("file", "分摊.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Files.readAllBytes(book)),
+                "s1", "alice").get("importId");
+
+        DataImportRequest.Preview preview = new DataImportRequest.Preview();
+        preview.setImportId(importId);
+        Map<String, Object> single = service.preview(preview, "s1");
+        assertEquals(2, single.get("detectedHeaderRows"));
+        assertEquals(4, single.get("expectedColumns"));
+
+        preview.getOptions().setHeaderRows(2);
+        Map<String, Object> merged = service.preview(preview, "s1");
+        assertEquals(Arrays.asList("月份", "部门", "姓名", "资产运营", "算网运营", "其他", "备注"), merged.get("headers"));
+        assertEquals(0, merged.get("mismatchedRows"));
+        assertEquals(2, merged.get("scannedRows"));
+        assertEquals(Arrays.asList("6", "西北中心", "王鹏业", "", "0.33", "0.67", ""),
+                ((List<?>) merged.get("rows")).get(1));
+
+        DataImportRequest.Start start = new DataImportRequest.Start();
+        start.setImportId(importId);
+        start.setDatasourceIndex(0);
+        start.setTableName("customer");
+        start.setValidateOnly(true);
+        start.getOptions().setHeaderRows(2);
+        start.setMappings(Arrays.asList(mapping("ID", 0), mapping("NAME", 2)));
+        service.start(start, "s1", "alice");
+        Map<String, Object> status = awaitFinished(importId);
+        assertEquals(0L, status.get("errorCount"), String.valueOf(status.get("errors")));
+        assertEquals(2L, status.get("processedRows"));
+    }
+
+    @Test
     void textUploadsCannotSwitchSheets() throws Exception {
         String importId = (String) service.upload(new MockMultipartFile("file", "a.csv", "text/csv",
                 "id\n1\n".getBytes(StandardCharsets.UTF_8)), "s1", "alice").get("importId");

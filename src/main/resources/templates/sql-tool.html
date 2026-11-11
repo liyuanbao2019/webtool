@@ -578,6 +578,89 @@
             line-height: 1.4;
         }
 
+        /* SQL 编辑器可选配色（dracula 来自 dracula.min.css） */
+        .cm-s-sql-dark.CodeMirror, .cm-s-sql-dark .CodeMirror-gutters { background: #1e1e1e; color: #ffffff; border: none; }
+        .cm-s-sql-dark .CodeMirror-linenumber { color: #858585; }
+        .cm-s-sql-dark .CodeMirror-cursor { border-left: 1px solid #ffffff; }
+        .cm-s-sql-dark div.CodeMirror-selected, .cm-s-sql-dark.CodeMirror-focused div.CodeMirror-selected { background: #264f78; }
+        .cm-s-sql-dark span.cm-keyword { color: #569cd6; }
+        .cm-s-sql-dark span.cm-string, .cm-s-sql-dark span.cm-string-2 { color: #ce9178; }
+        .cm-s-sql-dark span.cm-number, .cm-s-sql-dark span.cm-atom { color: #b5cea8; }
+        .cm-s-sql-dark span.cm-comment { color: #6a9955; }
+        .cm-s-sql-dark span.cm-operator { color: #d4d4d4; }
+        .cm-s-sql-dark span.cm-builtin, .cm-s-sql-dark span.cm-type, .cm-s-sql-dark span.cm-variable-3 { color: #4ec9b0; }
+        .cm-s-sql-dark span.cm-variable-2 { color: #9cdcfe; }
+
+        .cm-s-sql-light.CodeMirror, .cm-s-sql-light .CodeMirror-gutters { background: #ffffff; color: #111111; }
+        .cm-s-sql-light .CodeMirror-gutters { border-right: 1px solid #e5e7eb; background: #f8f9fa; }
+        .cm-s-sql-light .CodeMirror-linenumber { color: #9ca3af; }
+        .cm-s-sql-light .CodeMirror-cursor { border-left: 1px solid #111111; }
+        .cm-s-sql-light div.CodeMirror-selected, .cm-s-sql-light.CodeMirror-focused div.CodeMirror-selected { background: #add6ff; }
+        .cm-s-sql-light span.cm-keyword { color: #0000ff; }
+        .cm-s-sql-light span.cm-string, .cm-s-sql-light span.cm-string-2 { color: #a31515; }
+        .cm-s-sql-light span.cm-number, .cm-s-sql-light span.cm-atom { color: #098658; }
+        .cm-s-sql-light span.cm-comment { color: #008000; }
+        .cm-s-sql-light span.cm-operator { color: #333333; }
+        .cm-s-sql-light span.cm-builtin, .cm-s-sql-light span.cm-type, .cm-s-sql-light span.cm-variable-3 { color: #267f99; }
+        .cm-s-sql-light span.cm-variable-2 { color: #001080; }
+
+        .cm-s-sql-green.CodeMirror, .cm-s-sql-green .CodeMirror-gutters { background: #000000; color: #33ff33; border: none; }
+        .cm-s-sql-green .CodeMirror-linenumber { color: #1f8f1f; }
+        .cm-s-sql-green .CodeMirror-cursor { border-left: 1px solid #33ff33; }
+        .cm-s-sql-green div.CodeMirror-selected, .cm-s-sql-green.CodeMirror-focused div.CodeMirror-selected { background: #0f4d0f; }
+        .cm-s-sql-green span.cm-keyword { color: #66ff66; font-weight: bold; }
+        .cm-s-sql-green span.cm-string, .cm-s-sql-green span.cm-string-2 { color: #b3ffb3; }
+        .cm-s-sql-green span.cm-number, .cm-s-sql-green span.cm-atom { color: #99ff99; }
+        .cm-s-sql-green span.cm-comment { color: #1f8f1f; font-style: italic; }
+        .cm-s-sql-green span.cm-builtin, .cm-s-sql-green span.cm-type, .cm-s-sql-green span.cm-variable-3 { color: #80ff80; }
+
+        .cm-s-sql-amber.CodeMirror, .cm-s-sql-amber .CodeMirror-gutters { background: #000000; color: #ffbf00; border: none; }
+        .cm-s-sql-amber .CodeMirror-linenumber { color: #996f00; }
+        .cm-s-sql-amber .CodeMirror-cursor { border-left: 1px solid #ffbf00; }
+        .cm-s-sql-amber div.CodeMirror-selected, .cm-s-sql-amber.CodeMirror-focused div.CodeMirror-selected { background: #4d3900; }
+        .cm-s-sql-amber span.cm-keyword { color: #ffd24d; font-weight: bold; }
+        .cm-s-sql-amber span.cm-string, .cm-s-sql-amber span.cm-string-2 { color: #ffe199; }
+        .cm-s-sql-amber span.cm-number, .cm-s-sql-amber span.cm-atom { color: #ffcc66; }
+        .cm-s-sql-amber span.cm-comment { color: #996f00; font-style: italic; }
+        .cm-s-sql-amber span.cm-builtin, .cm-s-sql-amber span.cm-type, .cm-s-sql-amber span.cm-variable-3 { color: #ffd980; }
+
+        .cm-s-sql-nord.CodeMirror, .cm-s-sql-nord .CodeMirror-gutters { background: #2e3440; color: #d8dee9; border: none; }
+        .cm-s-sql-nord .CodeMirror-linenumber { color: #4c566a; }
+        .cm-s-sql-nord .CodeMirror-cursor { border-left: 1px solid #d8dee9; }
+        .cm-s-sql-nord div.CodeMirror-selected, .cm-s-sql-nord.CodeMirror-focused div.CodeMirror-selected { background: #434c5e; }
+        .cm-s-sql-nord span.cm-keyword { color: #81a1c1; }
+        .cm-s-sql-nord span.cm-string, .cm-s-sql-nord span.cm-string-2 { color: #a3be8c; }
+        .cm-s-sql-nord span.cm-number, .cm-s-sql-nord span.cm-atom { color: #b48ead; }
+        .cm-s-sql-nord span.cm-comment { color: #616e88; }
+        .cm-s-sql-nord span.cm-operator { color: #81a1c1; }
+        .cm-s-sql-nord span.cm-builtin, .cm-s-sql-nord span.cm-type, .cm-s-sql-nord span.cm-variable-3 { color: #8fbcbb; }
+        .cm-s-sql-nord span.cm-variable-2 { color: #88c0d0; }
+
+        .cm-s-sql-solarized-dark.CodeMirror, .cm-s-sql-solarized-dark .CodeMirror-gutters { background: #002b36; color: #93a1a1; border: none; }
+        .cm-s-sql-solarized-dark .CodeMirror-linenumber { color: #586e75; }
+        .cm-s-sql-solarized-dark .CodeMirror-cursor { border-left: 1px solid #93a1a1; }
+        .cm-s-sql-solarized-dark div.CodeMirror-selected, .cm-s-sql-solarized-dark.CodeMirror-focused div.CodeMirror-selected { background: #073642; }
+        .cm-s-sql-solarized-dark span.cm-keyword { color: #859900; }
+        .cm-s-sql-solarized-dark span.cm-string, .cm-s-sql-solarized-dark span.cm-string-2 { color: #2aa198; }
+        .cm-s-sql-solarized-dark span.cm-number, .cm-s-sql-solarized-dark span.cm-atom { color: #d33682; }
+        .cm-s-sql-solarized-dark span.cm-comment { color: #586e75; font-style: italic; }
+        .cm-s-sql-solarized-dark span.cm-operator { color: #6c71c4; }
+        .cm-s-sql-solarized-dark span.cm-builtin, .cm-s-sql-solarized-dark span.cm-type, .cm-s-sql-solarized-dark span.cm-variable-3 { color: #b58900; }
+        .cm-s-sql-solarized-dark span.cm-variable-2 { color: #268bd2; }
+
+        .cm-s-sql-solarized-light.CodeMirror, .cm-s-sql-solarized-light .CodeMirror-gutters { background: #fdf6e3; color: #586e75; }
+        .cm-s-sql-solarized-light .CodeMirror-gutters { border-right: 1px solid #eee8d5; background: #eee8d5; }
+        .cm-s-sql-solarized-light .CodeMirror-linenumber { color: #93a1a1; }
+        .cm-s-sql-solarized-light .CodeMirror-cursor { border-left: 1px solid #586e75; }
+        .cm-s-sql-solarized-light div.CodeMirror-selected, .cm-s-sql-solarized-light.CodeMirror-focused div.CodeMirror-selected { background: #eee8d5; }
+        .cm-s-sql-solarized-light span.cm-keyword { color: #859900; }
+        .cm-s-sql-solarized-light span.cm-string, .cm-s-sql-solarized-light span.cm-string-2 { color: #2aa198; }
+        .cm-s-sql-solarized-light span.cm-number, .cm-s-sql-solarized-light span.cm-atom { color: #d33682; }
+        .cm-s-sql-solarized-light span.cm-comment { color: #93a1a1; font-style: italic; }
+        .cm-s-sql-solarized-light span.cm-operator { color: #6c71c4; }
+        .cm-s-sql-solarized-light span.cm-builtin, .cm-s-sql-solarized-light span.cm-type, .cm-s-sql-solarized-light span.cm-variable-3 { color: #b58900; }
+        .cm-s-sql-solarized-light span.cm-variable-2 { color: #268bd2; }
+
         .toolbar {
             padding: 4px 10px;
             background: #f8f9fa;
@@ -967,6 +1050,12 @@
                         }}</span>
                     <button class="btn btn-outline-secondary" @click="baseFontSize = Math.min(24, baseFontSize + 1)"
                         :title="t('sql.zoomIn')">A+</button>
+                    <select class="form-select form-select-sm ms-2" style="width: 130px;" v-model="editorTheme"
+                        :title="t('sql.editorTheme')">
+                        <option v-for="option in editorThemeOptions" :key="option.id" :value="option.id">
+                            {{ option.name }}
+                        </option>
+                    </select>
                 </div>
 
                 <div class="input-group" style="width: 260px;">
@@ -1760,6 +1849,11 @@
                                         </div>
                                         <div class="col-md-5">
                                             <div class="form-check"><input class="form-check-input" type="checkbox" id="impHeaderX" v-model="dataImport.options.hasHeader" @change="refreshImportPreview"><label class="form-check-label" for="impHeaderX">{{ t('sql.importHasHeader') }}</label></div>
+                                            <div class="d-flex align-items-center gap-2 my-1" :title="t('sql.importHeaderRowsHint')">
+                                                <label class="mb-0" for="impHeaderRowsX">{{ t('sql.importHeaderRows') }}</label>
+                                                <input id="impHeaderRowsX" type="number" min="1" max="10" class="form-control form-control-sm" style="width: 64px;"
+                                                    v-model.number="dataImport.options.headerRows" :disabled="!dataImport.options.hasHeader" @input="onImportHeaderRowsInput">
+                                            </div>
                                             <div class="form-check"><input class="form-check-input" type="checkbox" id="impTrimX" v-model="dataImport.options.trimValues" @change="refreshImportPreview"><label class="form-check-label" for="impTrimX">{{ t('sql.importTrim') }}</label></div>
                                         </div>
                                         <div class="col-12 text-muted">{{ t('sql.importExcelInfo', dataImport.upload.excelRows) }}</div>
@@ -1795,6 +1889,11 @@
                                     </div>
                                     <div class="col-md-3">
                                         <div class="form-check"><input class="form-check-input" type="checkbox" id="impHeader" v-model="dataImport.options.hasHeader" @change="refreshImportPreview"><label class="form-check-label" for="impHeader">{{ t('sql.importHasHeader') }}</label></div>
+                                        <div class="d-flex align-items-center gap-2 my-1" :title="t('sql.importHeaderRowsHint')">
+                                            <label class="mb-0" for="impHeaderRows">{{ t('sql.importHeaderRows') }}</label>
+                                            <input id="impHeaderRows" type="number" min="1" max="10" class="form-control form-control-sm" style="width: 64px;"
+                                                v-model.number="dataImport.options.headerRows" :disabled="!dataImport.options.hasHeader" @input="onImportHeaderRowsInput">
+                                        </div>
                                         <div class="form-check"><input class="form-check-input" type="checkbox" id="impTrim" v-model="dataImport.options.trimValues" @change="refreshImportPreview"><label class="form-check-label" for="impTrim">{{ t('sql.importTrim') }}</label></div>
                                         <div class="form-check"><input class="form-check-input" type="checkbox" id="impTrailing" v-model="dataImport.options.ignoreTrailingDelimiter" @change="refreshImportPreview"><label class="form-check-label" for="impTrailing">{{ t('sql.importTrailing') }}</label></div>
                                     </div>
@@ -1806,6 +1905,9 @@
                                 </details>
                                 <div v-if="dataImport.preview">
                                     <div v-if="dataImport.preview.parseError" class="alert alert-danger py-2 small">{{ dataImport.preview.parseError }}</div>
+                                    <div v-if="dataImport.headerRowsDetected && dataImport.options.hasHeader" class="alert alert-info py-2 small">
+                                        <i class="fas fa-layer-group me-1"></i>{{ t('sql.importHeaderRowsDetected', dataImport.options.headerRows) }}
+                                    </div>
                                     <div v-if="dataImport.preview.mismatchedRows > 0" class="alert alert-warning py-2 small">
                                         {{ t('sql.importMismatch', dataImport.preview.mismatchedRows, dataImport.preview.scannedRows, dataImport.preview.expectedColumns) }}
                                     </div>
@@ -1870,6 +1972,32 @@
                                         {{ t('sql.importNewColumnHint') }}
                                     </span>
                                 </div>
+                                <div v-if="dataImport.newTable.columns.length && dataImport.newTable.primaryKeySupported" class="border rounded px-2 py-2 mb-2">
+                                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                                        <label class="small fw-semibold mb-0" for="impPkMode"><i class="fas fa-key text-warning me-1"></i>{{ t('sql.importPrimaryKey') }}</label>
+                                        <select id="impPkMode" class="form-select form-select-sm" style="width: auto;" v-model="dataImport.newTable.primaryKey.mode"
+                                            :disabled="importRunning" @change="onNewTableKeyModeChange">
+                                            <option value="AUTO" :disabled="!dataImport.newTable.autoKeySupported">{{ t('sql.importPkAuto') }}</option>
+                                            <option value="COLUMN">{{ t('sql.importPkColumn') }}</option>
+                                            <option value="NONE">{{ t('sql.importPkNone') }}</option>
+                                        </select>
+                                        <input v-if="dataImport.newTable.primaryKey.mode === 'AUTO'" class="form-control form-control-sm" style="width: 180px;"
+                                            v-model="dataImport.newTable.primaryKey.name" :disabled="importRunning"
+                                            :placeholder="t('sql.importPkName')" :aria-label="t('sql.importPkName')" @input="scheduleNewTableDdl">
+                                        <select v-else-if="dataImport.newTable.primaryKey.mode === 'COLUMN'" class="form-select form-select-sm" style="width: auto; min-width: 180px;"
+                                            v-model="dataImport.newTable.primaryKey.sourceIndex" :disabled="importRunning"
+                                            :aria-label="t('sql.importPkPick')" @change="scheduleNewTableDdl">
+                                            <option :value="null" disabled>{{ t('sql.importPkPick') }}</option>
+                                            <option v-for="c in dataImport.newTable.columns.filter(x => x.include && x.type !== 'LONG_TEXT')" :key="c.sourceIndex" :value="c.sourceIndex">{{ c.name }}</option>
+                                        </select>
+                                    </div>
+                                    <div class="small text-muted mt-1">
+                                        <template v-if="dataImport.newTable.primaryKey.mode === 'AUTO'">{{ t('sql.importPkHintAuto') }}</template>
+                                        <template v-else-if="dataImport.newTable.primaryKey.mode === 'COLUMN'">{{ t('sql.importPkHintColumn') }}</template>
+                                        <template v-else-if="!dataImport.newTable.autoKeySupported">{{ t('sql.importPkNoAuto') }}</template>
+                                        <span v-else-if="dataImport.newTable.dbType === 'MYSQL'" class="text-warning-emphasis">{{ t('sql.importPkHintNone') }}</span>
+                                    </div>
+                                </div>
                                 <div v-if="dataImport.newTable.tableExists" class="alert alert-warning py-2 small mb-2">{{ t('sql.importNewTableExists', dataImport.newTable.name) }}</div>
                                 <div v-if="dataImport.newTable.ddlError" class="alert alert-danger py-2 small mb-2" role="alert">{{ dataImport.newTable.ddlError }}</div>
                                 <div v-if="dataImport.newTable.columns.length" class="table-responsive border rounded mb-2" style="max-height: 42vh;">
@@ -1890,7 +2018,10 @@
                                                     <input class="form-check-input" type="checkbox" v-model="c.include" :disabled="importRunning"
                                                         :aria-label="t('sql.importInclude') + ' ' + c.name" @change="scheduleNewTableDdl">
                                                 </td>
-                                                <td class="text-nowrap">#{{ c.sourceIndex + 1 }} {{ c.header || '' }}</td>
+                                                <td class="text-nowrap">
+                                                    #{{ c.sourceIndex + 1 }} {{ c.header || '' }}
+                                                    <i v-if="isNewTableKey(c)" class="fas fa-key text-warning ms-1" :title="t('sql.importPrimaryKey')"></i>
+                                                </td>
                                                 <td>
                                                     <input class="form-control form-control-sm" v-model="c.name" :disabled="importRunning || !c.include"
                                                         :aria-label="t('sql.importColumnName')" @input="scheduleNewTableDdl">
@@ -3452,6 +3583,15 @@
             'sql.noDatasource': 'Unknown database',
             'sql.zoomOut': 'Zoom out',
             'sql.zoomIn': 'Zoom in',
+            'sql.editorTheme': 'Editor color theme',
+            'sql.themeDracula': 'Dracula',
+            'sql.themeDark': 'White on Black',
+            'sql.themeLight': 'Black on White',
+            'sql.themeGreenOnBlack': 'Green on Black',
+            'sql.themeAmberOnBlack': 'Amber on Black',
+            'sql.themeNord': 'Nord',
+            'sql.themeSolarizedDark': 'Solarized Dark',
+            'sql.themeSolarizedLight': 'Solarized Light',
             'sql.hasContent': '(has content)',
             'sql.closeTab': 'Close',
             'sql.newTab': 'New tab',
@@ -3789,6 +3929,15 @@
             'sql.noDatasource': '未知数据库',
             'sql.zoomOut': '缩小字体',
             'sql.zoomIn': '放大字体',
+            'sql.editorTheme': '编辑器配色',
+            'sql.themeDracula': 'Dracula',
+            'sql.themeDark': '黑底白字',
+            'sql.themeLight': '白底黑字',
+            'sql.themeGreenOnBlack': '黑底绿字',
+            'sql.themeAmberOnBlack': '黑底琥珀',
+            'sql.themeNord': 'Nord',
+            'sql.themeSolarizedDark': 'Solarized Dark',
+            'sql.themeSolarizedLight': 'Solarized Light',
             'sql.hasContent': '（有内容）',
             'sql.closeTab': '关闭',
             'sql.newTab': '新建标签页',
@@ -4064,6 +4213,18 @@
         var sqlAllTexts = { 'en': enSqlTexts, 'zh_CN': zhSqlTexts };
         SqlDataImport.registerTexts(sqlAllTexts);
 
+        // SQL 编辑器可选配色，id 即 CodeMirror theme 名（对应 .cm-s-<id> 样式）
+        const SQL_EDITOR_THEMES = [
+            { id: 'dracula', labelKey: 'sql.themeDracula' },
+            { id: 'sql-dark', labelKey: 'sql.themeDark' },
+            { id: 'sql-light', labelKey: 'sql.themeLight' },
+            { id: 'sql-green', labelKey: 'sql.themeGreenOnBlack' },
+            { id: 'sql-amber', labelKey: 'sql.themeAmberOnBlack' },
+            { id: 'sql-nord', labelKey: 'sql.themeNord' },
+            { id: 'sql-solarized-dark', labelKey: 'sql.themeSolarizedDark' },
+            { id: 'sql-solarized-light', labelKey: 'sql.themeSolarizedLight' }
+        ];
+
         createApp({
             mixins: [SavedSqlMixin, SqlDataImport.mixin],
             data() {
@@ -4104,6 +4265,10 @@
                     history: [],
                     showSidebar: true,
                     baseFontSize: parseInt(localStorage.getItem('sqlToolFontSize') || 13),
+                    editorTheme: (() => {
+                        const saved = localStorage.getItem('sqlToolEditorTheme');
+                        return SQL_EDITOR_THEMES.some(item => item.id === saved) ? saved : 'dracula';
+                    })(),
                     csrfToken: null,  // CSRF Token
                     pagination: {
                         currentPage: 1,
@@ -4651,6 +4816,9 @@
                     }
                     return sql;
                 },
+                editorThemeOptions() {
+                    return SQL_EDITOR_THEMES.map(item => ({ id: item.id, name: this.t(item.labelKey) }));
+                },
                 filteredServers() { return []; }, // placeholder if reused, otherwise ignored
                 memoryUsageRate() { return '0%'; }
             },
@@ -4661,6 +4829,10 @@
                     setTimeout(() => {
                         if (this.editor) this.editor.refresh();
                     }, 50);
+                },
+                editorTheme(val) {
+                    localStorage.setItem('sqlToolEditorTheme', val);
+                    if (this.editor) this.editor.setOption('theme', val);
                 },
                 sql(newVal) {
                     if (this.editor && newVal !== this.editor.getValue()) {
@@ -4750,7 +4922,7 @@
                     if (this.$refs.sqlEditor) {
                         this.editor = CodeMirror.fromTextArea(this.$refs.sqlEditor, {
                             mode: 'text/x-sql',
-                            theme: 'dracula',
+                            theme: this.editorTheme,
                             lineNumbers: true,
                             indentWithTabs: true,
                             smartIndent: true,
